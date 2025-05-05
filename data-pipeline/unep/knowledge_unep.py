@@ -2,9 +2,10 @@ import requests
 import os
 import time
 
+from utils.rag_util import rag_login, rag_create_knowledge_base
+
 BASE_LIST_API = "https://globalplasticshub.org/api/resources"
 BASE_DETAIL_API = "https://globalplasticshub.org/api/detail"
-# RAG_WEB_UI_ENDPOINT = "http://localhost:81/api/documents/upload"
 SAVE_DIR = "./downloads/unep"
 
 
@@ -59,7 +60,7 @@ def download_pdf(url, save_dir, title_hint="document"):
         return None
 
 
-def main(max_pdfs, kb_description):
+def main(max_pdfs: int, kb_id: int):
     os.makedirs(SAVE_DIR, exist_ok=True)
     offset = 0
     limit = 20
@@ -84,9 +85,9 @@ def main(max_pdfs, kb_description):
                     break
                 pdf_path = download_pdf(link, SAVE_DIR, title_hint=title)
                 if pdf_path:
-                    # PUSH FILE TO RAG HERE
+                    # TODO :: PUSH FILE TO RAG HERE
                     total_pdfs += 1
-                    print(f"Processed PDF #{total_pdfs}")
+                    print(f"Processed PDF #{total_pdfs} KB_ID: {kb_id}")
 
         offset += limit
         time.sleep(0.5)
@@ -96,4 +97,12 @@ def main(max_pdfs, kb_description):
 
 if __name__ == "__main__":
     max_docs, description = ask_user_input()
-    main(max_docs, description)
+
+    access_token = rag_login()
+    if access_token:
+        kb_id = rag_create_knowledge_base(
+            token=access_token, title="UNEP Library", description=description
+        )
+        main(max_pdfs=max_docs, kb_id=kb_id)
+    else:
+        print("\n❌ Auth failed to RAG WEB UI")

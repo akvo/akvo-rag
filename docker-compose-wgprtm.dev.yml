@@ -122,12 +122,18 @@ services:
     build:
       context: ./data-pipeline
       dockerfile: Dockerfile
+    depends_on:
+      - backend
+    environment:
+      - RAG_USERNAME=${RAG_USERNAME}
+      - RAG_PASSWORD=${RAG_PASSWORD}
     volumes:
       - ./data-pipeline:/app
       - data_pipeline_volume:/app/downloads
     tty: true
     command: ["tail", "-f", "/dev/null"]
-
+    networks:
+      - app_network
 
 volumes:
   mysql_data:
