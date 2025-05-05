@@ -5,7 +5,7 @@ import time
 BASE_LIST_API = "https://globalplasticshub.org/api/resources"
 BASE_DETAIL_API = "https://globalplasticshub.org/api/detail"
 # RAG_WEB_UI_ENDPOINT = "http://localhost:81/api/documents/upload"
-SAVE_DIR = ".downloads/unep"
+SAVE_DIR = "./downloads/unep"
 
 
 def ask_user_input():
