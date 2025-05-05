@@ -118,10 +118,22 @@ services:
     networks:
       - app_network
 
+  data-pipeline:
+    build:
+      context: ./data-pipeline
+      dockerfile: Dockerfile
+    volumes:
+      - ./data-pipeline:/app
+      - data_pipeline_volume:/app/downloads
+    tty: true
+    command: ["tail", "-f", "/dev/null"]
+
+
 volumes:
   mysql_data:
   chroma_data:
   minio_data:
+  data_pipeline_volume:
 
 networks:
   app_network:
