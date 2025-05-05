@@ -1,0 +1,128 @@
+name: Deploy to Test Cluster
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: test
+  cancel-in-progress: false
+
+jobs:
+  build-push:
+    name: Build and Push to Registry
+    runs-on: ubuntu-latest
+    environment: Test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: src
+
+      - name: Checkout Akvo composite actions
+        uses: actions/checkout@v4
+        with:
+          repository: akvo/composite-actions
+          token: ${{ secrets.GH_PAT }}
+          path: composite-actions
+          ref: 0.0.9
+
+      - name: Docker Build Nginx
+        uses: ./composite-actions/.github/actions/docker-build
+        with:
+          app-name: "akvo-rag"
+          service-name: "nginx"
+          dockerfile-location: "nginx"
+          cluster-name: "test"
+
+      - name: Docker Build Frontend
+        uses: ./composite-actions/.github/actions/docker-build
+        with:
+          app-name: "akvo-rag"
+          service-name: "frontend"
+          dockerfile-location: "frontend"
+          cluster-name: "test"
+
+      - name: Docker Build Backend
+        uses: ./composite-actions/.github/actions/docker-build
+        with:
+          app-name: "akvo-rag"
+          service-name: "backend"
+          dockerfile-location: "backend"
+          cluster-name: "test"
+
+      - name: Docker Push Nginx
+        uses: ./composite-actions/.github/actions/docker-push
+        with:
+          app-name: "akvo-rag"
+          service-name: "nginx"
+          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
+          cluster-name: "test"
+
+      - name: Docker Push Frontend
+        uses: ./composite-actions/.github/actions/docker-push
+        with:
+          app-name: "akvo-rag"
+          service-name: "frontend"
+          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
+          cluster-name: "test"
+
+      - name: Docker Push Backend
+        uses: ./composite-actions/.github/actions/docker-push
+        with:
+          app-name: "akvo-rag"
+          service-name: "backend"
+          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
+          cluster-name: "test"
+
+
+  rollout:
+    name: Rollout to the server
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: Test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: src
+
+      - name: Checkout Akvo composite actions
+        uses: actions/checkout@v4
+        with:
+          repository: akvo/composite-actions
+          token: ${{ secrets.GH_PAT }}
+          path: composite-actions
+          ref: 0.0.9
+
+      - name: Rollout Nginx
+        uses: ./composite-actions/.github/actions/k8s-rollout
+        with:
+          app-name: "akvo-rag"
+          deployment-name: "nginx-deployment"
+          container-name: "nginx"
+          cluster-name: "test"
+          namespace-name: "akvo-rag-namespace"
+          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+
+
+      - name: Rollout Frontend
+        uses: ./composite-actions/.github/actions/k8s-rollout
+        with:
+          app-name: "akvo-rag"
+          deployment-name: "frontend-deployment"
+          container-name: "frontend"
+          cluster-name: "test"
+          namespace-name: "akvo-rag-namespace"
+          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+
+      - name: Rollout Backend
+        uses: ./composite-actions/.github/actions/k8s-rollout
+        with:
+          app-name: "akvo-rag"
+          deployment-name: "backend-deployment"
+          container-name: "backend"
+          cluster-name: "test"
+          namespace-name: "akvo-rag-namespace"
+          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
