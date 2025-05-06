@@ -45,7 +45,7 @@ def rag_create_knowledge_base(token: str, title: str, description: str):
 
 
 def rag_upload_documents(token: str, kb_id: int, file_paths: list):
-    url = f"{RAG_URL}{kb_id}/documents/upload"
+    url = f"{RAG_URL}knowledge-base/{kb_id}/documents/upload"
     headers = {"Authorization": token}
 
     files = [(
@@ -66,7 +66,7 @@ def rag_upload_documents(token: str, kb_id: int, file_paths: list):
 
 
 def rag_process_documents(token: str, kb_id: int, upload_results: list):
-    url = f"{RAG_URL}{kb_id}/documents/process"
+    url = f"{RAG_URL}knowledge-base/{kb_id}/documents/process"
     headers = {
         "Authorization": token,
         "Content-Type": "application/json"

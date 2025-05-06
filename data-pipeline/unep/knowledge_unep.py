@@ -2,7 +2,10 @@ import requests
 import os
 import time
 
-from utils.rag_util import rag_login, rag_create_knowledge_base
+from utils.rag_util import (
+    rag_login, rag_create_knowledge_base,
+    rag_upload_documents, rag_process_documents
+)
 
 BASE_LIST_API = "https://globalplasticshub.org/api/resources"
 BASE_DETAIL_API = "https://globalplasticshub.org/api/detail"
@@ -60,7 +63,18 @@ def download_pdf(url, save_dir, title_hint="document"):
         return None
 
 
-def main(max_pdfs: int, kb_id: int):
+def chunk_files(file_list, chunk_size):
+    for i in range(0, len(file_list), chunk_size):
+        yield file_list[i:i + chunk_size]
+
+
+def get_pdf_files_from_directory(directory: str):
+    return [os.path.join(directory, f)
+            for f in os.listdir(directory)
+            if f.lower().endswith(".pdf")]
+
+
+def main(max_pdfs: int, kb_id: int, token: str):
     os.makedirs(SAVE_DIR, exist_ok=True)
     offset = 0
     limit = 20
@@ -68,7 +82,7 @@ def main(max_pdfs: int, kb_id: int):
 
     while total_pdfs < max_pdfs:
         url = f"{BASE_LIST_API}?incBadges=true&limit={limit}&offset={offset}"
-        url = f"{url}&orderBy=created&descending=true"
+        url += "&orderBy=created&descending=true"
         print(f"\nFetching: {url}")
         r = requests.get(url)
         r.raise_for_status()
@@ -85,14 +99,27 @@ def main(max_pdfs: int, kb_id: int):
                     break
                 pdf_path = download_pdf(link, SAVE_DIR, title_hint=title)
                 if pdf_path:
-                    # TODO :: PUSH FILE TO RAG HERE
                     total_pdfs += 1
-                    print(f"Processed PDF #{total_pdfs} KB_ID: {kb_id}")
 
         offset += limit
         time.sleep(0.5)
 
-    print(f"\n✅ Imported {total_pdfs} PDF document(s) to the Knowledge Base.")
+    print(f"\n✅ Downloaded {total_pdfs} PDFs.")
+
+    # Upload per 10 documents
+    print("\n📤 Starting upload in chunks...")
+    pdf_files = get_pdf_files_from_directory(SAVE_DIR)
+    chunk_size = 10
+
+    for idx, file_chunk in enumerate(chunk_files(pdf_files, chunk_size), 1):
+        print(f"\n📦 Uploading chunk {idx} with {len(file_chunk)} documents...")
+        upload_results = rag_upload_documents(token, kb_id, file_chunk)
+
+        if upload_results:
+            print("⚙️ Processing uploaded documents...")
+            rag_process_documents(token, kb_id, upload_results)
+        else:
+            print("❌ Skipping processing due to failed upload.")
 
 
 if __name__ == "__main__":
@@ -103,6 +130,9 @@ if __name__ == "__main__":
         kb_id = rag_create_knowledge_base(
             token=access_token, title="UNEP Library", description=description
         )
-        main(max_pdfs=max_docs, kb_id=kb_id)
+        if kb_id:
+            main(max_pdfs=max_docs, kb_id=kb_id, token=access_token)
+        else:
+            print("❌ Failed to create knowledge base.")
     else:
-        print("\n❌ Auth failed to RAG WEB UI")
+        print("❌ Auth failed to RAG Web UI")
