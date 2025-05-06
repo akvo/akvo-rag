@@ -96,7 +96,8 @@ services:
       - app_network
 
   chromadb:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:0.6.3
+    platform: linux/amd64
     ports:
       - "8001:8000"
     volumes:
