@@ -108,9 +108,10 @@ def save_pdfs_to_csv(pdf_records, csv_path=CSV_PATH):
     print(f"📁 Saved {len(df)} PDF URLs to {csv_path}")
 
 
-def read_pdfs_from_csv(csv_path=CSV_PATH):
+def read_pdfs_from_csv(csv_path=CSV_PATH, limit=None):
     df = pd.read_csv(csv_path)
-    # returns List[Tuple[title, url]]
+    if limit is not None:
+        df = df.head(limit)
     return list(df.itertuples(index=False, name=None))
 
 
@@ -153,12 +154,14 @@ def get_pdf_files_from_directory(directory: str):
             if f.lower().endswith(".pdf")]
 
 
-def download_pdfs_from_csv(csv_path=CSV_PATH, save_dir=SAVE_DIR):
+def download_pdfs_from_csv(
+    csv_path=CSV_PATH, save_dir=SAVE_DIR, max_files=None
+):
     os.makedirs(save_dir, exist_ok=True)
-    pdf_records = read_pdfs_from_csv(csv_path)
+    pdf_records = read_pdfs_from_csv(csv_path, limit=max_files)
     downloaded_files = []
 
-    for title, url in pdf_records:
+    for title, url, offset in pdf_records:
         filepath = download_pdf(url, save_dir, title_hint=title)
         if filepath:
             downloaded_files.append(filepath)
@@ -196,7 +199,7 @@ def main():
             print("🛑 Done. No need to fetch more.")
             return
 
-        pdf_files = download_pdfs_from_csv()
+        pdf_files = download_pdfs_from_csv(max_files=max_docs)
 
         if mode == 2:
             print("🛑 Done. Files downloaded to local dir.")
@@ -214,7 +217,7 @@ def main():
             print("❌ Failed to create knowledge base.")
             return
 
-        upload_and_process_pdfs(pdf_files, access_token, kb_id)
+        upload_and_process_pdfs(pdf_files[:max_docs], access_token, kb_id)
         print("\n✅ Process uploaded documents success.")
         return
 
@@ -225,7 +228,7 @@ def main():
         print("🛑 Done. URLs saved to CSV only.")
         return
 
-    pdf_files = download_pdfs_from_csv()
+    pdf_files = download_pdfs_from_csv(max_files=max_docs)
 
     if mode == 2:
         print("🛑 Done. Files downloaded to local dir.")
@@ -243,7 +246,7 @@ def main():
         print("❌ Failed to create knowledge base.")
         return
 
-    upload_and_process_pdfs(pdf_files, access_token, kb_id)
+    upload_and_process_pdfs(pdf_files[:max_docs], access_token, kb_id)
     print("\n✅ Process uploaded documents success.")
 
 
