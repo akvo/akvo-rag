@@ -2,7 +2,7 @@ services:
   nginx-dev:
     image: nginx:alpine
     ports:
-      - "80:80"
+      - "${NGINX_PORT}:80"
     volumes:
       - ./nginx.dev.conf:/etc/nginx/nginx.conf:ro
     depends_on:
@@ -28,7 +28,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT}:8000"
     env_file:
       - .env
     environment:
@@ -63,7 +63,7 @@ services:
       - WATCHPACK_POLLING=true
       - CHOKIDAR_USEPOLLING=true
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost/api
+      - NEXT_PUBLIC_API_URL=http://localhost:${NGINX_PORT}/api
     ports:
       - "3000:3000"
     volumes:
@@ -89,14 +89,15 @@ services:
       - MYSQL_PASSWORD=ragwebui
       - TZ=Asia/Shanghai
     ports:
-      - "3306:3306"
+      - "${DB_PORT}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
       - app_network
 
   chromadb:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:${CHROMADB_IMAGE_VERSION}
+    platform: linux/amd64
     ports:
       - "8001:8000"
     volumes:
