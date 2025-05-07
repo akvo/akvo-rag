@@ -70,7 +70,7 @@ def fetch_pdf_attachments(resource):
 def collect_pdf_urls(max_pdfs):
     print("\n🔍 Collecting PDF URLs...")
     pdf_records = []
-    offset = 0
+    offset = get_last_offset_from_csv()
     limit = 20
     total_pdfs = 0
 
@@ -91,7 +91,7 @@ def collect_pdf_urls(max_pdfs):
             for link in pdf_links:
                 if total_pdfs >= max_pdfs:
                     break
-                pdf_records.append((title, link))
+                pdf_records.append((title, link, offset))
                 total_pdfs += 1
 
         offset += limit
@@ -103,7 +103,7 @@ def collect_pdf_urls(max_pdfs):
 
 def save_pdfs_to_csv(pdf_records, csv_path=CSV_PATH):
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-    df = pd.DataFrame(pdf_records, columns=["title", "url"])
+    df = pd.DataFrame(pdf_records, columns=["title", "url", "offset"])
     df.to_csv(csv_path, index=False)
     print(f"📁 Saved {len(df)} PDF URLs to {csv_path}")
 
@@ -112,6 +112,17 @@ def read_pdfs_from_csv(csv_path=CSV_PATH):
     df = pd.read_csv(csv_path)
     # returns List[Tuple[title, url]]
     return list(df.itertuples(index=False, name=None))
+
+
+def get_last_offset_from_csv(csv_path=CSV_PATH, limit=20):
+    if not os.path.exists(csv_path):
+        return 0
+    try:
+        df = pd.read_csv(csv_path)
+        last_offset = int(df['offset'].max())
+        return last_offset + limit
+    except Exception:
+        return 0
 
 
 def download_pdf(url, save_dir, title_hint="document"):
@@ -173,8 +184,42 @@ def main():
     mode = ask_user_mode()
     max_docs, description = ask_user_input()
 
-    pdf_records = collect_pdf_urls(max_docs)
-    save_pdfs_to_csv(pdf_records)
+    existing_df = (
+        pd.read_csv(CSV_PATH) if os.path.exists(CSV_PATH) else pd.DataFrame()
+    )
+    existing_count = len(existing_df)
+    remaining_to_fetch = max_docs - existing_count
+
+    if remaining_to_fetch <= 0:
+        print(f"📄 CSV already contains {existing_count} PDFs.")
+        if mode == 1:
+            print("🛑 Done. No need to fetch more.")
+            return
+
+        pdf_files = download_pdfs_from_csv()
+
+        if mode == 2:
+            print("🛑 Done. Files downloaded to local dir.")
+            return
+
+        access_token = rag_login()
+        if not access_token:
+            print("❌ Auth failed to RAG Web UI")
+            return
+
+        kb_id = rag_create_knowledge_base(
+            token=access_token, title="UNEP Library", description=description
+        )
+        if not kb_id:
+            print("❌ Failed to create knowledge base.")
+            return
+
+        upload_and_process_pdfs(pdf_files, access_token, kb_id)
+        print("\n✅ Process uploaded documents success.")
+        return
+
+    pdf_records = collect_pdf_urls(remaining_to_fetch)
+    save_pdfs_to_csv(existing_df.values.tolist() + pdf_records)
 
     if mode == 1:
         print("🛑 Done. URLs saved to CSV only.")
@@ -199,7 +244,7 @@ def main():
         return
 
     upload_and_process_pdfs(pdf_files, access_token, kb_id)
-    print("\n✅ Uploaded documents processed.")
+    print("\n✅ Process uploaded documents success.")
 
 
 if __name__ == "__main__":
