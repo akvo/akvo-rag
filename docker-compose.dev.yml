@@ -130,7 +130,6 @@ services:
       - RAG_PASSWORD=${RAG_PASSWORD}
     volumes:
       - ./script:/app
-      - script_data:/app/downloads
     tty: true
     command: ["tail", "-f", "/dev/null"]
     networks:
@@ -140,7 +139,6 @@ volumes:
   mysql_data:
   chroma_data:
   minio_data:
-  script_data:
 
 networks:
   app_network:
