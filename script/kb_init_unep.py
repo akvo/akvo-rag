@@ -130,6 +130,11 @@ def download_pdf(url, save_dir, title_hint="document"):
     filename = title_hint.replace(" ", "_").replace("/", "_")
     filename += "_" + os.path.basename(url)
     filepath = os.path.join(save_dir, filename)
+
+    if os.path.exists(filepath):
+        print(f"✅ Skipped (already exists): {filepath}")
+        return filepath
+
     try:
         r = requests.get(url, stream=True)
         r.raise_for_status()
