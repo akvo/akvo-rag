@@ -18,7 +18,7 @@ from app.services.chat_service import generate_response
 
 router = APIRouter()
 
-@router.post("", response_model=ChatResponse)
+@router.post("/", response_model=ChatResponse)
 def create_chat(
     *,
     db: Session = Depends(get_db),
@@ -39,19 +39,19 @@ def create_chat(
             status_code=400,
             detail="One or more knowledge bases not found"
         )
-    
+
     chat = Chat(
         title=chat_in.title,
         user_id=current_user.id,
     )
     chat.knowledge_bases = knowledge_bases
-    
+
     db.add(chat)
     db.commit()
     db.refresh(chat)
     return chat
 
-@router.get("", response_model=List[ChatResponse])
+@router.get("/", response_model=List[ChatResponse])
 def get_chats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -105,12 +105,12 @@ async def create_message(
     )
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
-    
+
     # Get the last user message
     last_message = messages["messages"][-1]
     if last_message["role"] != "user":
         raise HTTPException(status_code=400, detail="Last message must be from user")
-    
+
     # Get knowledge base IDs
     knowledge_base_ids = [kb.id for kb in chat.knowledge_bases]
 
@@ -149,7 +149,7 @@ def delete_chat(
     )
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
-    
+
     db.delete(chat)
     db.commit()
     return {"status": "success"}
