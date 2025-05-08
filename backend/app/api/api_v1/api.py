@@ -1,8 +1,9 @@
 from fastapi import APIRouter
-from app.api.api_v1 import auth, knowledge_base
+from app.api.api_v1 import knowledge_base
 
 from app.api.api_v1.extended import (
-    extend_api_keys as api_keys, extend_chat as chat
+    extend_api_keys as api_keys, extend_chat as chat,
+    extend_auth as auth
 )
 
 api_router = APIRouter()
