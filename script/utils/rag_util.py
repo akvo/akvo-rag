@@ -41,7 +41,9 @@ def rag_register_user(is_super_user: bool = False):
     }
     headers = {"Content-Type": "application/json"}
     status, result = request_post(
-        "auth/register", payload, headers, use_json=True, return_status=True
+        "auth/extend-register",
+        payload, headers,
+        use_json=True, return_status=True
     )
     if status == 200 and result:
         print("✅ User registered successfully.")

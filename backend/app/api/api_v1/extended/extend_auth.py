@@ -1,6 +1,5 @@
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from requests.exceptions import RequestException
 
@@ -10,15 +9,19 @@ from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse
 
 from app.api.api_v1 import auth
+import logging
 
 router = APIRouter()
 router.include_router(auth.router)
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+logger = logging.getLogger(__name__)
 
 
 # Support set user as super user
-@router.post("/register", response_model=UserResponse)
-def register(*, db: Session = Depends(get_db), user_in: UserCreate) -> Any:
+@router.post("/extend-register", response_model=UserResponse)
+def extend_register(
+    *, db: Session = Depends(get_db), user_in: UserCreate
+) -> Any:
     """
     Register a new user.
     """
