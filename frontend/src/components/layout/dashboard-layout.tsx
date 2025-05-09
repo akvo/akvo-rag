@@ -115,18 +115,18 @@ export default function DashboardLayout({
             {!userLoading && user ? (
               <div className="flex items-center space-x-4 mb-4">
                 <div className="shrink-0">
-                  <InitialAvatar username={user.username} />
+                  <InitialAvatar username={user?.username} />
                 </div>
                 <div className="flex flex-col">
                   <span className="text-sm font-semibold text-foreground">
-                    {user.username}
+                    {user?.username}
                   </span>
-                  {user.email && (
+                  {user?.email && (
                     <span className="text-xs text-muted-foreground truncate max-w-[150px]">
                       {user.email}
                     </span>
                   )}
-                  {user.is_superuser ? (
+                  {user?.is_superuser ? (
                     <span className="text-[11px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded w-fit mt-1">
                       Super User
                     </span>

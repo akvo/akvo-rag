@@ -129,7 +129,7 @@ export default function KnowledgeBasePage() {
 
                 <div className="flex space-x-2">
                   <Link
-                    href={`/dashboard/knowledge/${kb.id}?kb_owner=${kb.user_id === user.id ? 1 : 0}`}
+                    href={`/dashboard/knowledge/${kb.id}?kb_owner=${kb.user_id === user?.id ? 1 : 0}`}
                     className="inline-flex items-center justify-center rounded-md bg-secondary w-8 h-8"
                   >
                     <Settings className="h-4 w-4" />
@@ -142,7 +142,7 @@ export default function KnowledgeBasePage() {
                   </Link>
                   {
                     // allow delete only for same user / kb owner
-                    kb.user_id === user.id ? (
+                    kb.user_id === user?.id ? (
                       <button
                         onClick={() => handleDelete(kb.id)}
                         className="inline-flex items-center justify-center rounded-md bg-destructive/10 hover:bg-destructive/20 w-8 h-8"
