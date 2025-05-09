@@ -126,6 +126,7 @@ services:
     depends_on:
       - backend
     environment:
+      - RAG_EMAIL=${RAG_EMAIL}
       - RAG_USERNAME=${RAG_USERNAME}
       - RAG_PASSWORD=${RAG_PASSWORD}
     volumes:

@@ -11,7 +11,7 @@ from app.api.api_v1.auth import get_current_user
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.get("", response_model=List[schemas.APIKey])
+@router.get("/", response_model=List[schemas.APIKey])
 def read_api_keys(
     db: Session = Depends(get_db),
     skip: int = 0,
@@ -26,7 +26,7 @@ def read_api_keys(
     )
     return api_keys
 
-@router.post("", response_model=schemas.APIKey)
+@router.post("/", response_model=schemas.APIKey)
 def create_api_key(
     *,
     db: Session = Depends(get_db),
@@ -58,7 +58,7 @@ def update_api_key(
         raise HTTPException(status_code=404, detail="API key not found")
     if api_key.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
-    
+
     api_key = APIKeyService.update_api_key(db=db, api_key=api_key, update_data=api_key_in)
     logger.info(f"API key updated: {api_key.key} for user {current_user.id}")
     return api_key
@@ -78,7 +78,7 @@ def delete_api_key(
         raise HTTPException(status_code=404, detail="API key not found")
     if api_key.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
-    
+
     APIKeyService.delete_api_key(db=db, api_key=api_key)
     logger.info(f"API key deleted: {api_key.key} for user {current_user.id}")
     return api_key

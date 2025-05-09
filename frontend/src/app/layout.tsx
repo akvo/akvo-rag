@@ -4,6 +4,7 @@ import "./globals.css";
 import "highlight.js/styles/github.css";
 // 如果使用 App Router
 import { Toaster } from "@/components/ui/toaster";
+import { UserProvider } from "@/contexts/userContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,8 +21,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        {children}
-        <Toaster />
+        <UserProvider>
+          {children}
+          <Toaster />
+        </UserProvider>
       </body>
     </html>
   );
