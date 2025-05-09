@@ -7,6 +7,7 @@ import { ArrowRight, Plus, Settings, Trash2, Search } from "lucide-react";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/ui/use-toast";
+import { useUser } from "@/contexts/userContext";
 
 interface KnowledgeBase {
   id: number;
@@ -33,6 +34,7 @@ export default function KnowledgeBasePage() {
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { user } = useUser();
 
   useEffect(() => {
     fetchKnowledgeBases();
@@ -119,7 +121,7 @@ export default function KnowledgeBasePage() {
 
                 <div className="flex space-x-2">
                   <Link
-                    href={`/dashboard/knowledge/${kb.id}`}
+                    href={`/dashboard/knowledge/${kb.id}?kb_owner=${kb.user_id === user.id ? 1 : 0}`}
                     className="inline-flex items-center justify-center rounded-md bg-secondary w-8 h-8"
                   >
                     <Settings className="h-4 w-4" />
@@ -130,12 +132,17 @@ export default function KnowledgeBasePage() {
                   >
                     <Search className="h-4 w-4" />
                   </Link>
-                  <button
-                    onClick={() => handleDelete(kb.id)}
-                    className="inline-flex items-center justify-center rounded-md bg-destructive/10 hover:bg-destructive/20 w-8 h-8"
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </button>
+                  {
+                    // allow delete only for same user / kb owner
+                    kb.user_id === user.id ? (
+                      <button
+                        onClick={() => handleDelete(kb.id)}
+                        className="inline-flex items-center justify-center rounded-md bg-destructive/10 hover:bg-destructive/20 w-8 h-8"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </button>
+                    ) : null
+                  }
                 </div>
               </div>
 
