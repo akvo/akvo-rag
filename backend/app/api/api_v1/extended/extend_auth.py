@@ -62,7 +62,7 @@ def register(
         ) from e
 
 
-@router.post("/me", response_model=UserResponse)
+@router.get("/me", response_model=UserResponse)
 def user_me(current_user: User = Depends(get_current_user)) -> Any:
     """
     Get user profile.

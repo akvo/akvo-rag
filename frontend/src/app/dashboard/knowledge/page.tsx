@@ -14,6 +14,8 @@ interface KnowledgeBase {
   description: string;
   documents: Document[];
   created_at: string;
+  user_id: number;
+  is_superuser: boolean;
 }
 interface Document {
   id: number;

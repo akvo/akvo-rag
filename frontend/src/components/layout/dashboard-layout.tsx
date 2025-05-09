@@ -5,6 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Book, MessageSquare, LogOut, Menu, User } from "lucide-react";
 import Breadcrumb from "@/components/ui/breadcrumb";
+import { useUser } from "@/contexts/userContext";
+import { InitialAvatar } from "../ui/avatar";
+import { api } from "@/lib/api";
 
 export default function DashboardLayout({
   children,
@@ -14,6 +17,7 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { user, loading: userLoading, setUser } = useUser();
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -22,8 +26,18 @@ export default function DashboardLayout({
     }
   }, [router]);
 
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token && !user) {
+      api.get("/api/auth/me").then(data => {
+        setUser(data);
+      })
+    }
+  }, [user])
+
   const handleLogout = () => {
     localStorage.removeItem("token");
+    setUser(null);
     router.push("/login");
   };
 
@@ -97,12 +111,37 @@ export default function DashboardLayout({
             })}
           </nav>
           {/* User profile and logout */}
-          <div className="border-t p-4 space-y-4">
+          <div className="border-t p-4">
+            {!userLoading && user ? (
+              <div className="flex items-center space-x-4 mb-4">
+                <div className="shrink-0">
+                  <InitialAvatar username={user.username} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold text-foreground">
+                    {user.username}
+                  </span>
+                  {user.email && (
+                    <span className="text-xs text-muted-foreground truncate max-w-[150px]">
+                      {user.email}
+                    </span>
+                  )}
+                  {user.is_superuser ? (
+                    <span className="text-[11px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded w-fit mt-1">
+                      Super User
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <div className="animate-pulse h-10 w-full bg-muted rounded-md mb-4" />
+            )}
+
             <button
               onClick={handleLogout}
-              className="flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors duration-200"
+              className="w-full flex items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium text-white bg-destructive hover:bg-destructive/90 transition-colors duration-200"
             >
-              <LogOut className="mr-3 h-4 w-4" />
+              <LogOut className="h-4 w-4" />
               Sign out
             </button>
           </div>
