@@ -41,7 +41,7 @@ def rag_register_user(is_super_user: bool = False):
     }
     headers = {"Content-Type": "application/json"}
     status, result = request_post(
-        "auth/extend-register",
+        "auth/register",
         payload, headers,
         use_json=True, return_status=True
     )

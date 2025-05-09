@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 # Support set user as super user
-@router.post("/extend-register", response_model=UserResponse)
-def extend_register(
+@router.post("/register", response_model=UserResponse)
+def register(
     *, db: Session = Depends(get_db), user_in: UserCreate
 ) -> Any:
     """
