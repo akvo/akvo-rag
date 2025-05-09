@@ -1,4 +1,4 @@
-from typing import List, Any
+from typing import List, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 import logging
@@ -20,7 +20,11 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.get("", response_model=List[KnowledgeBaseResponse])
+class ExtendKnowledgeBaseResponse(KnowledgeBaseResponse):
+    is_superuser: Optional[bool] = False
+
+
+@router.get("", response_model=List[ExtendKnowledgeBaseResponse])
 def get_knowledge_bases(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -33,7 +37,8 @@ def get_knowledge_bases(
     """
     super_user_ids = get_super_user_ids(db=db)
     knowledge_bases = (
-        db.query(KnowledgeBase)
+        db.query(KnowledgeBase, User.is_superuser)
+        .join(User, KnowledgeBase.user_id == User.id, isouter=True)
         .filter(or_(
             KnowledgeBase.user_id == current_user.id,
             KnowledgeBase.user_id.in_(super_user_ids)
@@ -42,10 +47,25 @@ def get_knowledge_bases(
         .limit(limit)
         .all()
     )
-    return knowledge_bases
+
+    results = []
+    for kb, is_superuser in knowledge_bases:
+        kb_data = ExtendKnowledgeBaseResponse(
+            id=kb.id,
+            user_id=kb.user_id,
+            name=kb.name,
+            description=kb.description,
+            created_at=kb.created_at,
+            updated_at=kb.updated_at,
+            documents=kb.documents or [],
+            is_superuser=is_superuser,
+        )
+        results.append(kb_data)
+
+    return results
 
 
-@router.get("/{kb_id}", response_model=KnowledgeBaseResponse)
+@router.get("/{kb_id}", response_model=ExtendKnowledgeBaseResponse)
 def get_knowledge_base(
     *,
     db: Session = Depends(get_db),
@@ -59,8 +79,9 @@ def get_knowledge_base(
     from sqlalchemy.orm import joinedload
 
     super_user_ids = get_super_user_ids(db=db)
-    kb = (
-        db.query(KnowledgeBase)
+    kb_data = (
+        db.query(KnowledgeBase, User.is_superuser)
+        .join(User, KnowledgeBase.user_id == User.id, isouter=True)
         .options(
             joinedload(KnowledgeBase.documents)
             .joinedload(Document.processing_tasks)
@@ -73,7 +94,19 @@ def get_knowledge_base(
         .first()
     )
 
+    kb, is_superuser = kb_data
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
-    return kb
+    result = ExtendKnowledgeBaseResponse(
+        id=kb.id,
+        user_id=kb.user_id,
+        name=kb.name,
+        description=kb.description,
+        created_at=kb.created_at,
+        updated_at=kb.updated_at,
+        documents=kb.documents or [],
+        is_superuser=is_superuser,
+    )
+
+    return result
