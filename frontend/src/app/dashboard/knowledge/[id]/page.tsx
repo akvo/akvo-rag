@@ -23,7 +23,7 @@ export default function KnowledgeBasePage() {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const searchParams = useSearchParams();
-  const kbOwner = searchParams.get("kb_owner") ? parseInt(searchParams.get("kb_owner")) : 1;
+  const kbOwner = parseInt(searchParams.get("kb_owner") || "1");
 
   const handleUploadComplete = useCallback(() => {
     setRefreshKey((prev) => prev + 1);
