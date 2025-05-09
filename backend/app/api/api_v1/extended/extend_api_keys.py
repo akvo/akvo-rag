@@ -8,10 +8,8 @@ from app.db.session import get_db
 from app.services.api_key import APIKeyService
 from app.api.api_v1.auth import get_current_user
 
-from app.api.api_v1 import api_keys
 
 router = APIRouter()
-router.include_router(api_keys.router)
 
 logger = logging.getLogger(__name__)
 

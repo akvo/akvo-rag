@@ -11,10 +11,11 @@ from app.schemas.chat import (
 )
 from app.api.api_v1.auth import get_current_user
 
-from app.api.api_v1 import chat
+from sqlalchemy import or_
+from app.api.api_v1.extended.util.util_user import get_super_user_ids
+
 
 router = APIRouter()
-router.include_router(chat.router)
 
 
 @router.post("", response_model=ChatResponse)
@@ -25,12 +26,16 @@ def create_chat(
     current_user: User = Depends(get_current_user)
 ) -> Any:
     # Verify knowledge bases exist and belong to user
+    # - include knowledge base created by super user
+    super_user_ids = get_super_user_ids(db=db)
     knowledge_bases = (
         db.query(KnowledgeBase)
         .filter(
             KnowledgeBase.id.in_(chat_in.knowledge_base_ids),
-            KnowledgeBase.user_id == current_user.id
-        )
+        ).filter(or_(
+            KnowledgeBase.user_id == current_user.id,
+            KnowledgeBase.user_id.in_(super_user_ids)
+        ))
         .all()
     )
     if len(knowledge_bases) != len(chat_in.knowledge_base_ids):

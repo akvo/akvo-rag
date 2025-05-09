@@ -8,11 +8,9 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse
 
-from app.api.api_v1 import auth
 import logging
 
 router = APIRouter()
-router.include_router(auth.router)
 
 logger = logging.getLogger(__name__)
 

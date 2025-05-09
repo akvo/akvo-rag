@@ -1,12 +1,10 @@
 from fastapi import APIRouter
-from app.api.api_v1 import knowledge_base
-
-from app.api.api_v1.extended import (
-    extend_api_keys as api_keys, extend_chat as chat,
-    extend_auth as auth
-)
+from app.api.api_v1 import auth, knowledge_base, chat, api_keys
+from app.api.api_v1.extended import extend_api
 
 api_router = APIRouter()
+
+api_router.include_router(extend_api.api_router)
 
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(knowledge_base.router, prefix="/knowledge-base", tags=["knowledge-base"])
