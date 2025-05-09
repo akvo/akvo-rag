@@ -10,6 +10,8 @@ from app.schemas.user import UserCreate, UserResponse
 
 import logging
 
+from app.api.api_v1.auth import get_current_user
+
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
@@ -58,3 +60,11 @@ def register(
             status_code=503,
             detail=msg,
         ) from e
+
+
+@router.post("/me", response_model=UserResponse)
+def user_me(current_user: User = Depends(get_current_user)) -> Any:
+    """
+    Get user profile.
+    """
+    return current_user
