@@ -9,6 +9,7 @@ from app.core.security import get_current_user
 from app.models.knowledge import KnowledgeBase, Document
 from app.schemas.knowledge import (
     KnowledgeBaseResponse,
+    DocumentResponse
 )
 
 from sqlalchemy import or_
@@ -110,3 +111,35 @@ def get_knowledge_base(
     )
 
     return result
+
+
+@router.get("/{kb_id}/documents/{doc_id}", response_model=DocumentResponse)
+async def get_document(
+    *,
+    db: Session = Depends(get_db),
+    kb_id: int,
+    doc_id: int,
+    current_user: User = Depends(get_current_user)
+) -> Any:
+    """
+    Get document details by ID.
+    - include knowledge base created by super user
+    """
+    super_user_ids = get_super_user_ids(db=db)
+    document = (
+        db.query(Document)
+        .join(KnowledgeBase)
+        .filter(
+            Document.id == doc_id,
+            Document.knowledge_base_id == kb_id,
+        ).filter(or_(
+            KnowledgeBase.user_id == current_user.id,
+            KnowledgeBase.user_id.in_(super_user_ids)
+        ))
+        .first()
+    )
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return document
