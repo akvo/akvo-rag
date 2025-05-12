@@ -53,6 +53,14 @@ jobs:
           dockerfile-location: "backend"
           cluster-name: "test"
 
+      - name: Docker Build Script
+        uses: ./composite-actions/.github/actions/docker-build
+        with:
+          app-name: "akvo-rag"
+          service-name: "script"
+          dockerfile-location: "script"
+          cluster-name: "test"
+
       - name: Docker Push Nginx
         uses: ./composite-actions/.github/actions/docker-push
         with:
@@ -74,6 +82,14 @@ jobs:
         with:
           app-name: "akvo-rag"
           service-name: "backend"
+          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
+          cluster-name: "test"
+
+      - name: Docker Push Script
+        uses: ./composite-actions/.github/actions/docker-push
+        with:
+          app-name: "akvo-rag"
+          service-name: "script"
           gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
           cluster-name: "test"
 
@@ -124,6 +140,16 @@ jobs:
           app-name: "akvo-rag"
           deployment-name: "backend-deployment"
           container-name: "backend"
+          cluster-name: "test"
+          namespace-name: "akvo-rag-namespace"
+          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+
+      - name: Rollout Script
+        uses: ./composite-actions/.github/actions/k8s-rollout
+        with:
+          app-name: "akvo-rag"
+          deployment-name: "script-deployment"
+          container-name: "script"
           cluster-name: "test"
           namespace-name: "akvo-rag-namespace"
           gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}

@@ -7,11 +7,14 @@ import DashboardLayout from "@/components/layout/dashboard-layout";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/ui/use-toast";
 import { Plus } from "lucide-react";
+import { Tag } from "@/components/ui/tag";
 
 interface KnowledgeBase {
   id: number;
   name: string;
   description: string;
+  user_id: number;
+  is_superuser: boolean;
 }
 
 export default function NewChatPage() {
@@ -167,9 +170,14 @@ export default function NewChatPage() {
                       />
                     </div>
                     <div className="flex-1 space-y-1">
-                      <p className="font-medium group-hover:text-primary transition-colors">
-                        {kb.name}
-                      </p>
+                      <div className="flex items-center space-x-2 text-md font-semibold group-hover:text-primary transition-colors">
+                        {kb.is_superuser ? (
+                          <Tag label="Public" color="bg-green-100 text-green-800" />
+                        ) : (
+                          <Tag label="Private" />
+                        )}
+                        <span>{kb.name}</span>
+                      </div>
                       <p className="text-sm text-muted-foreground line-clamp-2">
                         {kb.description || "No description provided"}
                       </p>

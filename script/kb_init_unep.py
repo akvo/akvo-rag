@@ -183,9 +183,11 @@ def upload_and_process_pdfs(pdf_files, token, kb_id):
 
         if upload_results:
             print("⚙️ Processing uploaded documents...")
+            time.sleep(1)
             rag_process_documents(token, kb_id, upload_results)
         else:
             print("❌ Skipping processing due to failed upload.")
+        time.sleep(0.5)
 
 
 def main():

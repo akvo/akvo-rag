@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useState, useCallback } from "react";
 import { DocumentUploadSteps } from "@/components/knowledge-base/document-upload-steps";
 import { DocumentList } from "@/components/knowledge-base/document-list";
@@ -22,6 +22,9 @@ export default function KnowledgeBasePage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  const searchParams = useSearchParams();
+  const kbOwner = parseInt(searchParams.get("kb_owner") || "1");
+
   const handleUploadComplete = useCallback(() => {
     setRefreshKey((prev) => prev + 1);
     setDialogOpen(false);
@@ -31,27 +34,31 @@ export default function KnowledgeBasePage() {
     <DashboardLayout>
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Knowledge Base</h1>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <PlusIcon className="w-4 h-4 mr-2" />
-              Add Document
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl">
-            <DialogHeader>
-              <DialogTitle>Add Document</DialogTitle>
-              <DialogDescription>
-                Upload a document to your knowledge base. Supported formats:
-                PDF, DOCX, Markdown, and Text files.
-              </DialogDescription>
-            </DialogHeader>
-            <DocumentUploadSteps
-              knowledgeBaseId={knowledgeBaseId}
-              onComplete={handleUploadComplete}
-            />
-          </DialogContent>
-        </Dialog>
+        {
+          kbOwner ? (
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <PlusIcon className="w-4 h-4 mr-2" />
+                  Add Document
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl">
+                <DialogHeader>
+                  <DialogTitle>Add Document</DialogTitle>
+                  <DialogDescription>
+                    Upload a document to your knowledge base. Supported formats:
+                    PDF, DOCX, Markdown, and Text files.
+                  </DialogDescription>
+                </DialogHeader>
+                <DocumentUploadSteps
+                  knowledgeBaseId={knowledgeBaseId}
+                  onComplete={handleUploadComplete}
+                />
+              </DialogContent>
+            </Dialog>
+          ) : null
+        }
       </div>
 
       <div className="mt-8">
