@@ -1,12 +1,12 @@
 from typing import List, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, selectinload
 import logging
 
 from app.db.session import get_db
 from app.models.user import User
 from app.core.security import get_current_user
-from app.models.knowledge import KnowledgeBase, Document
+from app.models.knowledge import KnowledgeBase, Document, ProcessingTask
 from app.schemas.knowledge import (
     KnowledgeBaseResponse,
     DocumentResponse
@@ -111,6 +111,56 @@ def get_knowledge_base(
     )
 
     return result
+
+
+@router.get("/{kb_id}/documents/tasks")
+async def get_processing_tasks(
+    kb_id: int,
+    task_ids: str = Query(
+        ...,
+        description="Comma-separated list of task IDs to check status for"
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get status of multiple processing tasks.
+    """
+    task_id_list = [int(id.strip()) for id in task_ids.split(",")]
+
+    kb = db.query(KnowledgeBase).filter(
+        KnowledgeBase.id == kb_id,
+        KnowledgeBase.user_id == current_user.id
+    ).first()
+
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    tasks = (
+        db.query(ProcessingTask)
+        .options(
+            selectinload(ProcessingTask.document_upload)
+        )
+        .filter(
+            ProcessingTask.id.in_(task_id_list),
+            ProcessingTask.knowledge_base_id == kb_id
+        )
+        .all()
+    )
+
+    return {
+        task.id: {
+            "document_id": task.document_id,
+            "status": task.status,
+            "error_message": task.error_message,
+            "upload_id": task.document_upload_id,
+            "file_name": (
+                task.document_upload.file_name
+                if task.document_upload else None
+            )
+        }
+        for task in tasks
+    }
 
 
 @router.get("/{kb_id}/documents/{doc_id}", response_model=DocumentResponse)
