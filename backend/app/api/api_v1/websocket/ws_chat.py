@@ -1,8 +1,12 @@
 import logging
 
 from fastapi import WebSocket, WebSocketDisconnect, Depends, APIRouter
+from starlette.websockets import WebSocketState
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
+from pydantic import BaseModel, Field, ValidationError
+from typing import Literal, List
+
 from app.db.session import get_db
 
 from app.models.knowledge import KnowledgeBase
@@ -16,6 +20,15 @@ from app.services.chat_service import generate_response
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant", "system"]
+    content: str = Field(..., min_length=1)
+
+
+class ChatMessages(BaseModel):
+    messages: List[ChatMessage]
 
 
 @router.websocket("/chat")
@@ -75,6 +88,9 @@ async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
             await websocket.close(code=4003)
             return
 
+        logger.info(
+            f"User {user.id} connected to WebSocket using kb_id={kb_id}"
+        )
         await websocket.send_json({
             "type": "info",
             "message": "Authentication successful"
@@ -109,6 +125,24 @@ async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
                     })
                     continue
 
+                if not isinstance(messages, list) or not messages:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Invalid messages format"
+                    })
+                    continue
+
+                try:
+                    validated_messages = ChatMessages(messages=messages)
+                except ValidationError as ve:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Validation error",
+                        "details": ve.errors()
+                    })
+                    continue
+
+                messages = [msg.dict() for msg in validated_messages.messages]
                 last_message = messages[-1]
                 if last_message["role"] != "user":
                     await websocket.send_json({
@@ -134,6 +168,10 @@ async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
                     chat_id=chat_id,
                     db=db
                 ):
+                    if websocket.client_state != WebSocketState.CONNECTED:
+                        logger.warning("WebSocket closed during stream")
+                        break
+
                     assistant_response += chunk
                     await websocket.send_json({
                         "type": "response_chunk",
