@@ -7,7 +7,7 @@ from app.db.session import get_db
 
 from app.models.knowledge import KnowledgeBase
 from app.models.user import User
-from app.models.chat import Chat, Message
+from app.models.chat import Chat
 
 from app.api.api_v1.auth import get_current_user
 from app.api.api_v1.extended.util.util_user import get_super_user_ids
@@ -20,7 +20,6 @@ router = APIRouter()
 
 @router.websocket("/chat")
 async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
-    # TODO :: Fix response, showing wrong response (encoded response)
     await websocket.accept()
     logger.info("WebSocket connection accepted")
 
@@ -118,16 +117,6 @@ async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
                     })
                     continue
 
-                # Simpan pesan user
-                user_msg = Message(
-                    chat_id=chat_id,
-                    content=last_message["content"],
-                    role="user"
-                )
-                db.add(user_msg)
-                db.commit()
-                db.refresh(user_msg)
-
                 knowledge_base_ids = [kb.id for kb in chat.knowledge_bases]
 
                 # Kirim response bertahap
@@ -150,15 +139,6 @@ async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
                         "type": "response_chunk",
                         "content": chunk
                     })
-
-                # Simpan response AI
-                ai_msg = Message(
-                    chat_id=chat_id,
-                    content=assistant_response,
-                    role="assistant"
-                )
-                db.add(ai_msg)
-                db.commit()
 
                 await websocket.send_json({
                     "type": "end",
