@@ -4,7 +4,7 @@ from fastapi import WebSocket, WebSocketDisconnect, Depends, APIRouter
 from starlette.websockets import WebSocketState
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, PositiveInt
 from typing import Literal, List
 
 from app.db.session import get_db
@@ -28,6 +28,11 @@ class ChatMessage(BaseModel):
 
 
 class ChatMessages(BaseModel):
+    messages: List[ChatMessage]
+
+
+class ChatPayload(BaseModel):
+    chat_id: PositiveInt
     messages: List[ChatMessage]
 
 
@@ -112,6 +117,19 @@ async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
                     })
                     continue
 
+                try:
+                    payload = ChatPayload(chat_id=chat_id, messages=messages)
+                except ValidationError as ve:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Validation error",
+                        "details": ve.errors()
+                    })
+                    continue
+
+                chat_id = payload.chat_id
+                messages = [msg.dict() for msg in payload.messages]
+
                 chat = (
                     db.query(Chat)
                     .options(joinedload(Chat.knowledge_bases))
@@ -125,24 +143,6 @@ async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
                     })
                     continue
 
-                if not isinstance(messages, list) or not messages:
-                    await websocket.send_json({
-                        "type": "error",
-                        "message": "Invalid messages format"
-                    })
-                    continue
-
-                try:
-                    validated_messages = ChatMessages(messages=messages)
-                except ValidationError as ve:
-                    await websocket.send_json({
-                        "type": "error",
-                        "message": "Validation error",
-                        "details": ve.errors()
-                    })
-                    continue
-
-                messages = [msg.dict() for msg in validated_messages.messages]
                 last_message = messages[-1]
                 if last_message["role"] != "user":
                     await websocket.send_json({
