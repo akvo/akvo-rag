@@ -1,12 +1,11 @@
-from typing import Optional, Literal, List
 import logging
+
+from typing import Optional, Literal, List
 from fastapi import WebSocket, WebSocketDisconnect, Depends, APIRouter
 from starlette.websockets import WebSocketState
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from pydantic import (
-    BaseModel, Field, ValidationError, PositiveInt
-)
+from pydantic import BaseModel, Field, ValidationError
 
 from app.db.session import get_db
 from app.models.knowledge import KnowledgeBase
@@ -26,11 +25,12 @@ class ChatMessage(BaseModel):
 
 
 class ChatPayload(BaseModel):
-    chat_id: PositiveInt
     messages: List[ChatMessage]
 
 
-async def authenticate_and_get_user(websocket: WebSocket, db: Session) -> User:
+async def authenticate_and_get_user(
+    websocket: WebSocket, db: Session
+) -> tuple[User, KnowledgeBase]:
     """
     Receive initial authentication message, validate token and knowledge base.
     Send error response and close websocket if validation fails.
@@ -88,18 +88,30 @@ async def authenticate_and_get_user(websocket: WebSocket, db: Session) -> User:
         "message": "Authentication successful"
     })
     logger.info(f"User {user.id} connected to WebSocket with kb_id={kb_id}")
-    return user
+    return user, kb
+
+
+def get_or_create_chat(db: Session, user: User, kb: KnowledgeBase) -> Chat:
+    chat = (
+        db.query(Chat)
+        .filter(Chat.user_id == user.id)
+        .filter(Chat.knowledge_bases.any(KnowledgeBase.id == kb.id))
+        .first()
+    )
+    if not chat:
+        chat = Chat(user_id=user.id, title="New Chat")
+        chat.knowledge_bases.append(kb)
+        db.add(chat)
+        db.commit()
+        db.refresh(chat)
+    return chat
 
 
 async def validate_chat_payload(
     websocket: WebSocket, data: dict
 ) -> Optional[ChatPayload]:
-    """
-    Validate the chat payload using Pydantic.
-    Send error if invalid, return None.
-    """
     try:
-        payload = ChatPayload(**data)
+        return ChatPayload(**data)
     except ValidationError as ve:
         await websocket.send_json({
             "type": "error",
@@ -107,23 +119,6 @@ async def validate_chat_payload(
             "details": ve.errors()
         })
         return None
-    else:
-        return payload
-
-
-async def check_user_chat_access(
-    db: Session, user: User, chat_id: int
-) -> Optional[Chat]:
-    """
-    Check if user has access to the specified chat.
-    """
-    chat = (
-        db.query(Chat)
-        .options(joinedload(Chat.knowledge_bases))
-        .filter(Chat.id == chat_id, Chat.user_id == user.id)
-        .first()
-    )
-    return chat
 
 
 @router.websocket("/chat")
@@ -132,7 +127,8 @@ async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
     logger.info("WebSocket connection accepted")
 
     try:
-        user = await authenticate_and_get_user(websocket, db)
+        user, kb = await authenticate_and_get_user(websocket, db)
+        chat = get_or_create_chat(db, user, kb)
 
         while True:
             client_data = await websocket.receive_json()
@@ -147,14 +143,6 @@ async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
 
             payload = await validate_chat_payload(websocket, client_data)
             if payload is None:
-                continue
-
-            chat = await check_user_chat_access(db, user, payload.chat_id)
-            if not chat:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "Chat not found or unauthorized"
-                })
                 continue
 
             messages = [msg.dict() for msg in payload.messages]
@@ -180,7 +168,7 @@ async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
                 query=last_message["content"],
                 messages={"messages": messages},
                 knowledge_base_ids=knowledge_base_ids,
-                chat_id=payload.chat_id,
+                chat_id=chat.id,
                 db=db
             ):
                 if websocket.client_state != WebSocketState.CONNECTED:
@@ -208,4 +196,4 @@ async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
             await websocket.send_json({"type": "error", "message": str(e)})
             await websocket.close(code=1011)
         except Exception:
-            pass  # WebSocket may already be closed
+            pass
