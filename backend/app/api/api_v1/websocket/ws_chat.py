@@ -41,10 +41,12 @@ async def authenticate_and_get_user(
     init_data = await websocket.receive_json()
 
     if init_data.get("type") != "auth":
-        await websocket.send_json({
-            "type": "error",
-            "message": "Expected 'auth' type as the first message"
-        })
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": "Expected 'auth' type as the first message",
+            }
+        )
         await websocket.close(code=4000)
         raise WebSocketDisconnect()
 
@@ -52,10 +54,9 @@ async def authenticate_and_get_user(
     kb_id = init_data.get("kb_id")
 
     if not token or not kb_id:
-        await websocket.send_json({
-            "type": "error",
-            "message": "Missing token or knowledge base ID"
-        })
+        await websocket.send_json(
+            {"type": "error", "message": "Missing token or knowledge base ID"}
+        )
         await websocket.close(code=4001)
         raise WebSocketDisconnect()
 
@@ -73,23 +74,25 @@ async def authenticate_and_get_user(
             KnowledgeBase.id == kb_id,
             or_(
                 KnowledgeBase.user_id == user.id,
-                KnowledgeBase.user_id.in_(super_user_ids)
-            )
+                KnowledgeBase.user_id.in_(super_user_ids),
+            ),
         )
         .first()
     )
     if not kb:
-        await websocket.send_json({
-            "type": "error",
-            "message": "Knowledge base not found or unauthorized"
-        })
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": "Knowledge base not found or unauthorized",
+            }
+        )
         await websocket.close(code=4003)
         raise WebSocketDisconnect()
 
-    await websocket.send_json({
-        "type": "info",
-        "message": "Authentication successful"
-    })
+    message = "Authentication success!"
+    if kb.name:
+        message = f"Welcome to {kb.name} knowledge base!"
+    await websocket.send_json({"type": "info", "message": message})
     logger.info(f"User {user.id} connected to WebSocket with kb_id={kb_id}")
     return user, kb
 
@@ -118,11 +121,13 @@ async def validate_chat_payload(
     try:
         return ChatPayload(**data)
     except ValidationError as ve:
-        await websocket.send_json({
-            "type": "error",
-            "message": "Validation error",
-            "details": ve.errors()
-        })
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": "Validation error",
+                "details": ve.errors(),
+            }
+        )
         return None
 
 
@@ -161,10 +166,12 @@ async def websocket_chat(websocket: WebSocket):
             msg_type = client_data.get("type")
 
             if msg_type != "chat":
-                await websocket.send_json({
-                    "type": "error",
-                    "message": f"Unknown message type: {msg_type}"
-                })
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": f"Unknown message type: {msg_type}",
+                    }
+                )
                 continue
 
             payload = await validate_chat_payload(websocket, client_data)
@@ -175,16 +182,17 @@ async def websocket_chat(websocket: WebSocket):
 
             last_message = messages[-1]
             if last_message["role"] != "user":
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "The last message must be from the user"
-                })
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": "The last message must be from the user",
+                    }
+                )
                 continue
 
-            await websocket.send_json({
-                "type": "start",
-                "message": "Generating response..."
-            })
+            await websocket.send_json(
+                {"type": "start", "message": "Generating response..."}
+            )
 
             assistant_response = ""
 
@@ -193,7 +201,7 @@ async def websocket_chat(websocket: WebSocket):
                 messages={"messages": messages},
                 knowledge_base_ids=knowledge_base_ids,
                 chat_id=chat_id,
-                db=db
+                db=db,
             ):
                 if websocket.client_state != WebSocketState.CONNECTED:
                     logger.warning(
@@ -202,15 +210,13 @@ async def websocket_chat(websocket: WebSocket):
                     break
 
                 assistant_response += chunk
-                await websocket.send_json({
-                    "type": "response_chunk",
-                    "content": chunk
-                })
+                await websocket.send_json(
+                    {"type": "response_chunk", "content": chunk}
+                )
 
-            await websocket.send_json({
-                "type": "end",
-                "message": "Response generation completed"
-            })
+            await websocket.send_json(
+                {"type": "end", "message": "Response generation completed"}
+            )
 
     except WebSocketDisconnect:
         logger.warning("Client disconnected")
