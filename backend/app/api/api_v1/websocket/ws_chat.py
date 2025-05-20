@@ -1,13 +1,14 @@
 import logging
+import asyncio
 
 from typing import Optional, Literal, List
-from fastapi import WebSocket, WebSocketDisconnect, Depends, APIRouter
+from fastapi import WebSocket, WebSocketDisconnect, APIRouter
 from starlette.websockets import WebSocketState
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import or_
 from pydantic import BaseModel, Field, ValidationError
 
-from app.db.session import get_db
+from app.db.session import SessionLocal
 from app.models.knowledge import KnowledgeBase
 from app.models.user import User
 from app.models.chat import Chat
@@ -17,6 +18,8 @@ from app.services.chat_service import generate_response
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+PING_INTERVAL = 10  # seconds
 
 
 class ChatMessage(BaseModel):
@@ -94,6 +97,8 @@ async def authenticate_and_get_user(
 def get_or_create_chat(db: Session, user: User, kb: KnowledgeBase) -> Chat:
     chat = (
         db.query(Chat)
+        # eager load knowledge_bases
+        .options(selectinload(Chat.knowledge_bases))
         .filter(Chat.user_id == user.id)
         .filter(Chat.knowledge_bases.any(KnowledgeBase.id == kb.id))
         .first()
@@ -122,13 +127,34 @@ async def validate_chat_payload(
 
 
 @router.websocket("/chat")
-async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
+async def websocket_chat(websocket: WebSocket):
+    db = SessionLocal()  # Create DB session manually
+
     await websocket.accept()
     logger.info("WebSocket connection accepted")
+
+    async def send_ping():
+        while True:
+            try:
+                await asyncio.sleep(PING_INTERVAL)
+                if websocket.client_state != WebSocketState.CONNECTED:
+                    break
+                await websocket.send_json({"type": "ping"})
+                logger.debug("Ping sent to client")
+            except Exception as e:
+                logger.warning(f"Ping failed: {e}")
+                break
 
     try:
         user, kb = await authenticate_and_get_user(websocket, db)
         chat = get_or_create_chat(db, user, kb)
+
+        # eagerly load
+        chat_id = chat.id
+        knowledge_base_ids = [kb.id for kb in chat.knowledge_bases]
+
+        # Start ping task
+        ping_task = asyncio.create_task(send_ping())
 
         while True:
             client_data = await websocket.receive_json()
@@ -155,8 +181,6 @@ async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
                 })
                 continue
 
-            knowledge_base_ids = [kb.id for kb in chat.knowledge_bases]
-
             await websocket.send_json({
                 "type": "start",
                 "message": "Generating response..."
@@ -168,7 +192,7 @@ async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
                 query=last_message["content"],
                 messages={"messages": messages},
                 knowledge_base_ids=knowledge_base_ids,
-                chat_id=chat.id,
+                chat_id=chat_id,
                 db=db
             ):
                 if websocket.client_state != WebSocketState.CONNECTED:
@@ -197,3 +221,6 @@ async def websocket_chat(websocket: WebSocket, db: Session = Depends(get_db)):
             await websocket.close(code=1011)
         except Exception:
             pass
+    finally:
+        ping_task.cancel()
+        db.close()  # Close the session when connection closes
