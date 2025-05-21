@@ -7,6 +7,9 @@ from app.core.minio import init_minio
 from app.startup.migarate import DatabaseMigrator
 from fastapi import FastAPI
 
+from app.api.api_v1.websocket.ws import ws_router
+
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -21,6 +24,7 @@ app = FastAPI(
 # Include routers
 app.include_router(api_router, prefix=settings.API_V1_STR)
 app.include_router(openapi_router, prefix="/openapi")
+app.include_router(ws_router)
 
 
 @app.on_event("startup")

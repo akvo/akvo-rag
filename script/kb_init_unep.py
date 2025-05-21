@@ -4,8 +4,10 @@ import time
 import pandas as pd
 
 from utils.rag_util import (
-    rag_login, rag_create_knowledge_base,
-    rag_upload_documents, rag_process_documents
+    rag_login,
+    rag_create_knowledge_base,
+    rag_upload_documents,
+    rag_process_documents,
 )
 
 BASE_LIST_API = "https://globalplasticshub.org/api/resources"
@@ -18,13 +20,15 @@ def ask_user_mode():
     print("=== UNEP Knowledge Import Script ===")
     while True:
         try:
-            mode = int(input(
-                "Choose mode:\n"
-                "1. Save PDF URLs to CSV only\n"
-                "2. Save CSV and download PDFs\n"
-                "3. Full process (CSV + download + upload to RAG)\n"
-                "Your choice: "
-            ))
+            mode = int(
+                input(
+                    "Choose mode:\n"
+                    "1. Save PDF URLs to CSV only\n"
+                    "2. Save CSV and download PDFs\n"
+                    "3. Full process (CSV + download + upload to RAG)\n"
+                    "Your choice: "
+                )
+            )
             if mode in [1, 2, 3]:
                 break
             else:
@@ -52,17 +56,36 @@ def ask_user_input():
     return max_pdfs, kb_description
 
 
+def safe_request_get(url, max_retries=5, delay=5):
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+            return response
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️ Attempt {attempt} failed for {url}: {e}")
+            if attempt < max_retries:
+                print(f"⏳ Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                print("❌ Max retries reached. Skipping.")
+                return None
+
+
 def fetch_pdf_attachments(resource):
     r_type = resource["type"]
     r_id = resource["id"]
     url = f"{BASE_DETAIL_API}/{r_type}/{r_id}"
     print(f"Fetching detail: {url}")
-    r = requests.get(url)
-    r.raise_for_status()
+    r = safe_request_get(url)
+    if not r:
+        print(f"❌ Failed to fetch detail for resource {resource['id']}")
+        return []
     data = r.json()
     attachments = data.get("attachments") or []
     return [
-        a for a in attachments
+        a
+        for a in attachments
         if isinstance(a, str) and a.lower().endswith(".pdf")
     ]
 
@@ -78,8 +101,13 @@ def collect_pdf_urls(max_pdfs):
         url = f"{BASE_LIST_API}?incBadges=true&limit={limit}&offset={offset}"
         url += "&orderBy=created&descending=true"
         print(f"Fetching: {url}")
-        r = requests.get(url)
-        r.raise_for_status()
+        r = safe_request_get(url)
+        if not r:
+            print(f"❌ Skipping offset {offset} due to repeated failure.")
+            offset += limit
+            print(f"➡️ Continue to offset {offset}.")
+            continue
+
         resources = r.json().get("results", [])
         if not resources:
             print("No more resources found.")
@@ -95,7 +123,7 @@ def collect_pdf_urls(max_pdfs):
                 total_pdfs += 1
 
         offset += limit
-        time.sleep(0.5)
+        time.sleep(5)
 
     print(f"\n✅ Collected {total_pdfs} PDF URLs.")
     return pdf_records
@@ -120,7 +148,7 @@ def get_last_offset_from_csv(csv_path=CSV_PATH, limit=20):
         return 0
     try:
         df = pd.read_csv(csv_path)
-        last_offset = int(df['offset'].max())
+        last_offset = int(df["offset"].max())
         return last_offset + limit
     except Exception:
         return 0
@@ -138,7 +166,7 @@ def download_pdf(url, save_dir, title_hint="document"):
     try:
         r = requests.get(url, stream=True)
         r.raise_for_status()
-        with open(filepath, 'wb') as f:
+        with open(filepath, "wb") as f:
             for chunk in r.iter_content(1024):
                 f.write(chunk)
         print(f"📥 Downloaded: {filepath}")
@@ -150,13 +178,15 @@ def download_pdf(url, save_dir, title_hint="document"):
 
 def chunk_files(file_list, chunk_size):
     for i in range(0, len(file_list), chunk_size):
-        yield file_list[i:i + chunk_size]
+        yield file_list[i : i + chunk_size]  # noqa
 
 
 def get_pdf_files_from_directory(directory: str):
-    return [os.path.join(directory, f)
-            for f in os.listdir(directory)
-            if f.lower().endswith(".pdf")]
+    return [
+        os.path.join(directory, f)
+        for f in os.listdir(directory)
+        if f.lower().endswith(".pdf")
+    ]
 
 
 def download_pdfs_from_csv(
@@ -178,16 +208,18 @@ def download_pdfs_from_csv(
 def upload_and_process_pdfs(pdf_files, token, kb_id):
     chunk_size = 10
     for idx, file_chunk in enumerate(chunk_files(pdf_files, chunk_size), 1):
-        print(f"\n📦 Uploading chunk {idx} with {len(file_chunk)} documents...")
+        print(
+            f"\n📦 Uploading chunk {idx} with {len(file_chunk)} documents..."
+        )
         upload_results = rag_upload_documents(token, kb_id, file_chunk)
 
         if upload_results:
             print("⚙️ Processing uploaded documents...")
-            time.sleep(1)
+            time.sleep(5)
             rag_process_documents(token, kb_id, upload_results)
         else:
             print("❌ Skipping processing due to failed upload.")
-        time.sleep(0.5)
+        time.sleep(5)
 
 
 def main():
