@@ -47,6 +47,12 @@ async def authenticate_and_get_user(
                 "message": "Expected 'auth' type as the first message",
             }
         )
+        logger.error(
+            {
+                "type": "error",
+                "message": "Expected 'auth' type as the first message",
+            }
+        )
         await websocket.close(code=4000)
         raise WebSocketDisconnect()
 
@@ -57,6 +63,9 @@ async def authenticate_and_get_user(
         await websocket.send_json(
             {"type": "error", "message": "Missing token or knowledge base ID"}
         )
+        logger.error(
+            {"type": "error", "message": "Missing token or knowledge base ID"}
+        )
         await websocket.close(code=4001)
         raise WebSocketDisconnect()
 
@@ -64,6 +73,7 @@ async def authenticate_and_get_user(
         user = get_current_user(token=token, db=db)
     except Exception as e:
         await websocket.send_json({"type": "error", "message": str(e)})
+        logger.error({"type": "error", "message": str(e)})
         await websocket.close(code=4002)
         raise WebSocketDisconnect()
 
@@ -81,6 +91,12 @@ async def authenticate_and_get_user(
     )
     if not kb:
         await websocket.send_json(
+            {
+                "type": "error",
+                "message": "Knowledge base not found or unauthorized",
+            }
+        )
+        logger.error(
             {
                 "type": "error",
                 "message": "Knowledge base not found or unauthorized",
@@ -122,6 +138,13 @@ async def validate_chat_payload(
         return ChatPayload(**data)
     except ValidationError as ve:
         await websocket.send_json(
+            {
+                "type": "error",
+                "message": "Validation error",
+                "details": ve.errors(),
+            }
+        )
+        logger.error(
             {
                 "type": "error",
                 "message": "Validation error",
@@ -172,6 +195,12 @@ async def websocket_chat(websocket: WebSocket):
                         "message": f"Unknown message type: {msg_type}",
                     }
                 )
+                logger.error(
+                    {
+                        "type": "error",
+                        "message": f"Unknown message type: {msg_type}",
+                    }
+                )
                 continue
 
             payload = await validate_chat_payload(websocket, client_data)
@@ -188,11 +217,18 @@ async def websocket_chat(websocket: WebSocket):
                         "message": "The last message must be from the user",
                     }
                 )
+                logger.error(
+                    {
+                        "type": "error",
+                        "message": "The last message must be from the user",
+                    }
+                )
                 continue
 
             await websocket.send_json(
                 {"type": "start", "message": "Generating response..."}
             )
+            logger.info({"type": "start", "message": "Generating response..."})
 
             assistant_response = ""
 
@@ -213,8 +249,12 @@ async def websocket_chat(websocket: WebSocket):
                 await websocket.send_json(
                     {"type": "response_chunk", "content": chunk}
                 )
+                logger.info({"type": "response_chunk", "content": chunk})
 
             await websocket.send_json(
+                {"type": "end", "message": "Response generation completed"}
+            )
+            logger.info(
                 {"type": "end", "message": "Response generation completed"}
             )
 
@@ -224,9 +264,14 @@ async def websocket_chat(websocket: WebSocket):
         logger.error(f"Unhandled error: {e}", exc_info=True)
         try:
             await websocket.send_json({"type": "error", "message": str(e)})
+            logger.error({"type": "error", "message": str(e)})
             await websocket.close(code=1011)
         except Exception:
             pass
     finally:
-        ping_task.cancel()
-        db.close()  # Close the session when connection closes
+        try:
+            ping_task.cancel()
+            await ping_task
+        except asyncio.CancelledError:
+            pass
+        db.close()
