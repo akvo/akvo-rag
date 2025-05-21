@@ -1,6 +1,5 @@
 import logging
 import asyncio
-
 from typing import Optional, Literal, List
 from fastapi import WebSocket, WebSocketDisconnect, APIRouter
 from starlette.websockets import WebSocketState
@@ -22,6 +21,9 @@ router = APIRouter()
 PING_INTERVAL = 10  # seconds
 
 
+# -------------------------------------
+# Pydantic Schemas
+# -------------------------------------
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str = Field(..., min_length=1)
@@ -31,27 +33,32 @@ class ChatPayload(BaseModel):
     messages: List[ChatMessage]
 
 
+# -------------------------------------
+# Utility: Safe WebSocket JSON Sender
+# -------------------------------------
+async def safe_send_json(websocket: WebSocket, data: dict):
+    try:
+        if websocket.client_state == WebSocketState.CONNECTED:
+            await websocket.send_json(data)
+    except Exception as e:
+        logger.warning(f"[safe_send_json] Failed: {e}")
+
+
+# -------------------------------------
+# Auth + Validation
+# -------------------------------------
 async def authenticate_and_get_user(
     websocket: WebSocket, db: Session
 ) -> tuple[User, KnowledgeBase]:
-    """
-    Receive initial authentication message, validate token and knowledge base.
-    Send error response and close websocket if validation fails.
-    """
     init_data = await websocket.receive_json()
 
     if init_data.get("type") != "auth":
-        await websocket.send_json(
+        await safe_send_json(
+            websocket,
             {
                 "type": "error",
                 "message": "Expected 'auth' type as the first message",
-            }
-        )
-        logger.error(
-            {
-                "type": "error",
-                "message": "Expected 'auth' type as the first message",
-            }
+            },
         )
         await websocket.close(code=4000)
         raise WebSocketDisconnect()
@@ -60,11 +67,9 @@ async def authenticate_and_get_user(
     kb_id = init_data.get("kb_id")
 
     if not token or not kb_id:
-        await websocket.send_json(
-            {"type": "error", "message": "Missing token or knowledge base ID"}
-        )
-        logger.error(
-            {"type": "error", "message": "Missing token or knowledge base ID"}
+        await safe_send_json(
+            websocket,
+            {"type": "error", "message": "Missing token or knowledge base ID"},
         )
         await websocket.close(code=4001)
         raise WebSocketDisconnect()
@@ -72,8 +77,7 @@ async def authenticate_and_get_user(
     try:
         user = get_current_user(token=token, db=db)
     except Exception as e:
-        await websocket.send_json({"type": "error", "message": str(e)})
-        logger.error({"type": "error", "message": str(e)})
+        await safe_send_json(websocket, {"type": "error", "message": str(e)})
         await websocket.close(code=4002)
         raise WebSocketDisconnect()
 
@@ -90,33 +94,26 @@ async def authenticate_and_get_user(
         .first()
     )
     if not kb:
-        await websocket.send_json(
+        await safe_send_json(
+            websocket,
             {
                 "type": "error",
                 "message": "Knowledge base not found or unauthorized",
-            }
-        )
-        logger.error(
-            {
-                "type": "error",
-                "message": "Knowledge base not found or unauthorized",
-            }
+            },
         )
         await websocket.close(code=4003)
         raise WebSocketDisconnect()
 
-    message = "Authentication success!"
-    if kb.name:
-        message = f"Welcome to {kb.name} knowledge base!"
-    await websocket.send_json({"type": "info", "message": message})
-    logger.info(f"User {user.id} connected to WebSocket with kb_id={kb_id}")
+    logger.info(f"Authenticated user {user.id} for kb_id={kb_id}")
     return user, kb
 
 
+# -------------------------------------
+# Create/Retrieve Chat
+# -------------------------------------
 def get_or_create_chat(db: Session, user: User, kb: KnowledgeBase) -> Chat:
     chat = (
         db.query(Chat)
-        # eager load knowledge_bases
         .options(selectinload(Chat.knowledge_bases))
         .filter(Chat.user_id == user.id)
         .filter(Chat.knowledge_bases.any(KnowledgeBase.id == kb.id))
@@ -131,33 +128,32 @@ def get_or_create_chat(db: Session, user: User, kb: KnowledgeBase) -> Chat:
     return chat
 
 
+# -------------------------------------
+# Validate Incoming Chat Payload
+# -------------------------------------
 async def validate_chat_payload(
     websocket: WebSocket, data: dict
 ) -> Optional[ChatPayload]:
     try:
         return ChatPayload(**data)
     except ValidationError as ve:
-        await websocket.send_json(
+        await safe_send_json(
+            websocket,
             {
                 "type": "error",
                 "message": "Validation error",
                 "details": ve.errors(),
-            }
-        )
-        logger.error(
-            {
-                "type": "error",
-                "message": "Validation error",
-                "details": ve.errors(),
-            }
+            },
         )
         return None
 
 
+# -------------------------------------
+# WebSocket Endpoint
+# -------------------------------------
 @router.websocket("/chat")
 async def websocket_chat(websocket: WebSocket):
-    db = SessionLocal()  # Create DB session manually
-
+    db = SessionLocal()
     await websocket.accept()
     logger.info("WebSocket connection accepted")
 
@@ -167,21 +163,19 @@ async def websocket_chat(websocket: WebSocket):
                 await asyncio.sleep(PING_INTERVAL)
                 if websocket.client_state != WebSocketState.CONNECTED:
                     break
-                await websocket.send_json({"type": "ping"})
-                logger.debug("Ping sent to client")
+                await safe_send_json(websocket, {"type": "ping"})
             except Exception as e:
                 logger.warning(f"Ping failed: {e}")
                 break
 
+    ping_task = None
+
     try:
         user, kb = await authenticate_and_get_user(websocket, db)
         chat = get_or_create_chat(db, user, kb)
-
-        # eagerly load
         chat_id = chat.id
         knowledge_base_ids = [kb.id for kb in chat.knowledge_bases]
 
-        # Start ping task
         ping_task = asyncio.create_task(send_ping())
 
         while True:
@@ -189,17 +183,12 @@ async def websocket_chat(websocket: WebSocket):
             msg_type = client_data.get("type")
 
             if msg_type != "chat":
-                await websocket.send_json(
+                await safe_send_json(
+                    websocket,
                     {
                         "type": "error",
                         "message": f"Unknown message type: {msg_type}",
-                    }
-                )
-                logger.error(
-                    {
-                        "type": "error",
-                        "message": f"Unknown message type: {msg_type}",
-                    }
+                    },
                 )
                 continue
 
@@ -208,28 +197,22 @@ async def websocket_chat(websocket: WebSocket):
                 continue
 
             messages = [msg.dict() for msg in payload.messages]
-
             last_message = messages[-1]
+
             if last_message["role"] != "user":
-                await websocket.send_json(
+                await safe_send_json(
+                    websocket,
                     {
                         "type": "error",
                         "message": "The last message must be from the user",
-                    }
-                )
-                logger.error(
-                    {
-                        "type": "error",
-                        "message": "The last message must be from the user",
-                    }
+                    },
                 )
                 continue
 
-            await websocket.send_json(
-                {"type": "start", "message": "Generating response..."}
+            await safe_send_json(
+                websocket,
+                {"type": "start", "message": "Generating response..."},
             )
-            logger.info({"type": "start", "message": "Generating response..."})
-
             assistant_response = ""
 
             async for chunk in generate_response(
@@ -246,16 +229,13 @@ async def websocket_chat(websocket: WebSocket):
                     break
 
                 assistant_response += chunk
-                await websocket.send_json(
-                    {"type": "response_chunk", "content": chunk}
+                await safe_send_json(
+                    websocket, {"type": "response_chunk", "content": chunk}
                 )
-                logger.info({"type": "response_chunk", "content": chunk})
 
-            await websocket.send_json(
-                {"type": "end", "message": "Response generation completed"}
-            )
-            logger.info(
-                {"type": "end", "message": "Response generation completed"}
+            await safe_send_json(
+                websocket,
+                {"type": "end", "message": "Response generation completed"},
             )
 
     except WebSocketDisconnect:
@@ -263,15 +243,17 @@ async def websocket_chat(websocket: WebSocket):
     except Exception as e:
         logger.error(f"Unhandled error: {e}", exc_info=True)
         try:
-            await websocket.send_json({"type": "error", "message": str(e)})
-            logger.error({"type": "error", "message": str(e)})
+            await safe_send_json(
+                websocket, {"type": "error", "message": str(e)}
+            )
             await websocket.close(code=1011)
         except Exception:
             pass
     finally:
-        try:
-            ping_task.cancel()
-            await ping_task
-        except asyncio.CancelledError:
-            pass
+        if ping_task:
+            try:
+                ping_task.cancel()
+                await ping_task
+            except asyncio.CancelledError:
+                pass
         db.close()
