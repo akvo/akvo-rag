@@ -103,8 +103,11 @@ def collect_pdf_urls(max_pdfs):
         print(f"Fetching: {url}")
         r = safe_request_get(url)
         if not r:
-            print("❌ Skipping due to failed fetch.")
-            break
+            print(f"❌ Skipping offset {offset} due to repeated failure.")
+            offset += limit
+            print(f"➡️ Continue to offset {offset}.")
+            continue
+
         resources = r.json().get("results", [])
         if not resources:
             print("No more resources found.")
