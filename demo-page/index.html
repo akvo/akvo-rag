@@ -17,7 +17,7 @@
     />
     <link
       rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/akvo-rag-js@1.1.1/dist/akvo-rag.css"
+      href="https://cdn.jsdelivr.net/npm/akvo-rag-js@1.1.2/dist/akvo-rag.css"
     />
   </head>
   <body>
@@ -32,11 +32,7 @@
         <!-- Chat widget from CDN will be injected here -->
       </div>
 
-      <div class="examples">
-        <strong>Example UNEP Queries:</strong>
-        <p>What are the key findings of the 2022 UNEP emissions gap report?</p>
-        <p>Summarize UNEP's recommendations on plastic pollution control.</p>
-      </div>
+      <div class="examples">&nbsp;</div>
     </main>
 
     <footer>
@@ -45,14 +41,42 @@
 
     <!-- Chat widget CDN script (to be added) -->
     <script src="config.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/akvo-rag-js@1.1.1/dist/akvo-rag.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/akvo-rag-js@1.1.2/dist/akvo-rag.js"></script>
     <script>
+      const params = new URLSearchParams(window.location.search);
+      const docs = params.get("docs");
+
+      const configTemp = window[`config_${docs ? docs : 500}`];
       AkvoRAG.initChat({
-        title: window.config.title,
-        token: window.config.token,
-        kb_id: window.config.kb_id,
-        wsURL: window.config.wsURL,
+        title: configTemp.title,
+        token: configTemp.token,
+        kb_id: configTemp.kb_id,
+        wsURL: configTemp.wsURL,
       });
+
+      // Conditionally render example questions based on docs param
+      const examplesDiv = document.querySelector(".examples");
+
+      if (docs === "250") {
+        examplesDiv.innerHTML = `
+      <strong>Example Akvo RSR Queries:</strong>
+      <ol>
+        <li>What is the latest update in the RSR project in Kenya?</li>
+        <li>Summarize recent activities from Akvo’s water projects.</li>
+        <li>How does Akvo collect and use project data?</li>
+      </ol>
+    `;
+      } else {
+        // default
+        examplesDiv.innerHTML = `
+      <strong>Example UNEP Queries:</strong>
+      <ol>
+        <li>Hi, what do you know about UNEP?</li>
+        <li>What are the key findings of the plastic pollution control?</li>
+        <li>Summarize UNEP's recommendations on plastic pollution control.</li>
+      </ol>
+    `;
+      }
     </script>
   </body>
 </html>
