@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Akvo RAG Chat</title>
+    <link rel="stylesheet" href="assets/styles/style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/akvo-rag-js@1.1.1/dist/akvo-rag.css"
+    />
+  </head>
+  <body>
+    <header>
+      <img src="./assets/images/akvo-logo.png" alt="Akvo Logo" />
+      <h1>RAG Chat Assistant</h1>
+      <!-- Optionally: add nav or links here -->
+    </header>
+
+    <main>
+      <div class="chat-widget-container">
+        <!-- Chat widget from CDN will be injected here -->
+      </div>
+
+      <div class="examples">
+        <strong>Example UNEP Queries:</strong>
+        <p>What are the key findings of the 2022 UNEP emissions gap report?</p>
+        <p>Summarize UNEP's recommendations on plastic pollution control.</p>
+      </div>
+    </main>
+
+    <footer>
+      <p>&copy; 2025 Akvo Foundation. All rights reserved.</p>
+    </footer>
+
+    <!-- Chat widget CDN script (to be added) -->
+    <!-- <script src="https://cdn.example.com/chat-widget.js"></script> -->
+  </body>
+
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/akvo-rag-js@1.1.1/dist/akvo-rag.js"></script>
+  <script>
+    AkvoRAG.initChat({
+      title: window.config.title,
+      token: window.config.token,
+      kb_id: window.config.kb_id,
+      wsURL: window.config.wsURL,
+    });
+  </script>
+</html>
