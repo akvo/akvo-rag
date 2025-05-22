@@ -44,17 +44,15 @@
     </footer>
 
     <!-- Chat widget CDN script (to be added) -->
-    <!-- <script src="https://cdn.example.com/chat-widget.js"></script> -->
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/akvo-rag-js@1.1.1/dist/akvo-rag.js"></script>
+    <script>
+      AkvoRAG.initChat({
+        title: window.config.title,
+        token: window.config.token,
+        kb_id: window.config.kb_id,
+        wsURL: window.config.wsURL,
+      });
+    </script>
   </body>
-
-  <script src="config.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/akvo-rag-js@1.1.1/dist/akvo-rag.js"></script>
-  <script>
-    AkvoRAG.initChat({
-      title: window.config.title,
-      token: window.config.token,
-      kb_id: window.config.kb_id,
-      wsURL: window.config.wsURL,
-    });
-  </script>
 </html>
