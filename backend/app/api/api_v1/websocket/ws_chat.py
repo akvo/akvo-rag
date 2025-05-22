@@ -1,5 +1,7 @@
 import logging
 import asyncio
+
+from datetime import datetime
 from typing import Optional, Literal, List
 from fastapi import WebSocket, WebSocketDisconnect, APIRouter
 from starlette.websockets import WebSocketState
@@ -169,12 +171,12 @@ async def websocket_chat(websocket: WebSocket):
                 break
 
     ping_task = None
+    chat_created = False
+    chat_id = None
+    knowledge_base_ids = []
 
     try:
         user, kb = await authenticate_and_get_user(websocket, db)
-        chat = get_or_create_chat(db, user, kb)
-        chat_id = chat.id
-        knowledge_base_ids = [kb.id for kb in chat.knowledge_bases]
 
         ping_task = asyncio.create_task(send_ping())
 
@@ -208,6 +210,24 @@ async def websocket_chat(websocket: WebSocket):
                     },
                 )
                 continue
+
+            # Only create chat once per session
+            if not chat_created:
+                logger.info(
+                    f"Creating new chat for user {user.id} and kb {kb.id}"
+                )
+                timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+                chat_title = f"Chat started at {timestamp}"
+
+                chat = Chat(user_id=user.id, title=chat_title)
+                chat.knowledge_bases.append(kb)
+                db.add(chat)
+                db.commit()
+                db.refresh(chat)
+
+                chat_id = chat.id
+                knowledge_base_ids = [kb.id for kb in chat.knowledge_bases]
+                chat_created = True
 
             await safe_send_json(
                 websocket,
