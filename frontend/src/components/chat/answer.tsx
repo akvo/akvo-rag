@@ -55,14 +55,14 @@ export const Answer: FC<{
 
   useEffect(() => {
     const fetchCitationInfo = async () => {
-      const infoMap: Record<string, CitationInfo> = {};
+      const newInfoMap: Record<string, CitationInfo> = { ...citationInfoMap };
 
-      for (const citation of citations) {
+      const promises = citations.map(async (citation) => {
         const { kb_id, document_id } = citation.metadata;
-        if (!kb_id || !document_id) continue;
+        if (!kb_id || !document_id) return;
 
         const key = `${kb_id}-${document_id}`;
-        if (infoMap[key]) continue;
+        if (newInfoMap[key]) return; // Sudah ada, skip
 
         try {
           const [kb, doc] = await Promise.all([
@@ -70,7 +70,7 @@ export const Answer: FC<{
             api.get(`/api/knowledge-base/${kb_id}/documents/${document_id}`),
           ]);
 
-          infoMap[key] = {
+          newInfoMap[key] = {
             knowledge_base: {
               name: kb.name,
             },
@@ -84,9 +84,13 @@ export const Answer: FC<{
         } catch (error) {
           console.error("Failed to fetch citation info:", error);
         }
-      }
+      });
 
-      setCitationInfoMap(infoMap);
+      await Promise.all(promises);
+      setCitationInfoMap((prev) => ({
+        ...prev,
+        ...newInfoMap,
+      }));
     };
 
     if (citations.length > 0) {
