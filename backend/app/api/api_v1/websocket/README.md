@@ -40,7 +40,7 @@ Upon initial connection, the client **must send an authentication message** as t
 ```json
 {
   "type": "auth",
-  "token": "<JWT token>",
+  "visitor_id": <Visitor ID>,
   "kb_id": <KnowledgeBase ID>
 }
 ```
