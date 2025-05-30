@@ -1,3 +1,4 @@
+import uuid
 import logging
 import asyncio
 
@@ -13,7 +14,6 @@ from app.db.session import SessionLocal
 from app.models.knowledge import KnowledgeBase
 from app.models.user import User
 from app.models.chat import Chat
-from app.api.api_v1.auth import get_current_user
 from app.api.api_v1.extended.util.util_user import get_super_user_ids
 from app.services.chat_service import generate_response
 
@@ -65,23 +65,38 @@ async def authenticate_and_get_user(
         await websocket.close(code=4000)
         raise WebSocketDisconnect()
 
-    token = init_data.get("token")
+    visitor_id = init_data.get("visitor_id")
     kb_id = init_data.get("kb_id")
 
-    if not token or not kb_id:
+    if not visitor_id or not kb_id:
         await safe_send_json(
             websocket,
-            {"type": "error", "message": "Missing token or knowledge base ID"},
+            {
+                "type": "error",
+                "message": "Missing Visitor ID or knowledge base ID",
+            },
         )
         await websocket.close(code=4001)
         raise WebSocketDisconnect()
 
-    try:
-        user = get_current_user(token=token, db=db)
-    except Exception as e:
-        await safe_send_json(websocket, {"type": "error", "message": str(e)})
-        await websocket.close(code=4002)
-        raise WebSocketDisconnect()
+    # Get visitor
+    visitor_email = f"visitor-{visitor_id}@visitors.mail"
+    user = db.query(User).filter(User.email == visitor_email).first()
+
+    if not user:
+        # Create user from visitor UUID
+        random_username = f"visitor-{uuid.uuid4().hex[:8]}"
+        fake_password = uuid.uuid4().hex  # Random password
+        user = User(
+            email=visitor_email,
+            username=random_username,
+            hashed_password=fake_password,
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        logger.info(f"Created new visitor user: {visitor_email}")
 
     super_user_ids = get_super_user_ids(db=db)
     kb = (
@@ -106,7 +121,10 @@ async def authenticate_and_get_user(
         await websocket.close(code=4003)
         raise WebSocketDisconnect()
 
-    logger.info(f"Authenticated user {user.id} for kb_id={kb_id}")
+    logger.info(
+        f"Authenticated visitor {visitor_id} as user_id={user.id}"
+        + "for kb_id={kb_id}"
+    )
     return user, kb
 
 
@@ -122,7 +140,11 @@ def get_or_create_chat(db: Session, user: User, kb: KnowledgeBase) -> Chat:
         .first()
     )
     if not chat:
-        chat = Chat(user_id=user.id, title="New Chat")
+        logger.info(f"Creating new chat for {user.email}")
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        chat_title = f"Chat started at {timestamp}"
+
+        chat = Chat(user_id=user.id, title=chat_title)
         chat.knowledge_bases.append(kb)
         db.add(chat)
         db.commit()
@@ -214,17 +236,10 @@ async def websocket_chat(websocket: WebSocket):
             # Only create chat once per session
             if not chat_created:
                 logger.info(
-                    f"Creating new chat for user {user.id} and kb {kb.id}"
+                    f"Getting or creating chat for user {user.id}"
+                    + " and kb {kb.id}"
                 )
-                timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-                chat_title = f"Chat started at {timestamp}"
-
-                chat = Chat(user_id=user.id, title=chat_title)
-                chat.knowledge_bases.append(kb)
-                db.add(chat)
-                db.commit()
-                db.refresh(chat)
-
+                chat = get_or_create_chat(db, user, kb)
                 chat_id = chat.id
                 knowledge_base_ids = [kb.id for kb in chat.knowledge_bases]
                 chat_created = True
