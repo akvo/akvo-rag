@@ -46,10 +46,11 @@
       const params = new URLSearchParams(window.location.search);
       const docs = params.get("docs");
 
-      const configTemp = window[`config_${docs ? docs : 500}`];
+      const defaultParam = "living_income";
+      const configTemp = window[`config_${docs ? docs : defaultParam}`];
+
       AkvoRAG.initChat({
         title: configTemp.title,
-        token: configTemp.token,
         kb_id: configTemp.kb_id,
         wsURL: configTemp.wsURL,
       });
@@ -59,23 +60,32 @@
 
       if (docs === "250") {
         examplesDiv.innerHTML = `
-      <strong>Example UNEP Queries:</strong>
-      <ol>
-        <li>Hi, what do you know about UNEP?</li>
-        <li>What are the key findings of the plastic pollution control?</li>
-        <li>Summarize UNEP's recommendations on plastic pollution control.</li>
-      </ol>
-    `;
-      } else {
+          <strong>Example UNEP Queries:</strong>
+          <ol>
+            <li>Hi, what do you know about UNEP?</li>
+            <li>What are the key findings of the plastic pollution control?</li>
+            <li>Summarize UNEP's recommendations on plastic pollution control.</li>
+          </ol>
+        `;
+      } else if (docs === "500") {
         // default
         examplesDiv.innerHTML = `
-      <strong>Example UNEP Queries:</strong>
-      <ol>
-        <li>Hi, what do you know about UNEP?</li>
-        <li>What are the key findings of the plastic pollution control?</li>
-        <li>Summarize UNEP's recommendations on plastic pollution control.</li>
-      </ol>
-    `;
+          <strong>Example UNEP Queries:</strong>
+          <ol>
+            <li>Hi, what do you know about UNEP?</li>
+            <li>What are the key findings of the plastic pollution control?</li>
+            <li>Summarize UNEP's recommendations on plastic pollution control.</li>
+          </ol>
+        `;
+      } else {
+        examplesDiv.innerHTML = `
+          <strong>Example Queries:</strong>
+          <ol>
+            <li>Hi, what is a Living Income Benchmark?</li>
+            <li>How can I use the Living Income Benchmark in my project?</li>
+            <li>What is the Living Income for a cocoa farmer's standard of living?</li>
+          </ol>
+      `;
       }
     </script>
   </body>
