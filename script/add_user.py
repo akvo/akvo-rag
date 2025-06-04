@@ -6,6 +6,7 @@ from utils.rag_util import (
 def main():
     print("=== Create or Update User ===")
     email = input("Email: ")
+    email = email.strip()
     is_super_user = input("Is Super User? (y/n): ").lower() == "y"
     rag_register_user(
         is_super_user=is_super_user,
