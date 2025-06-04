@@ -5,8 +5,12 @@ RAG_URL = "http://backend:8000/api/"
 
 
 def request_post(
-    endpoint: str, data: dict, headers: dict,
-    use_json: bool = False, files: list = None, return_status: bool = False
+    endpoint: str,
+    data: dict,
+    headers: dict,
+    use_json: bool = False,
+    files: list = None,
+    return_status: bool = False,
 ):
     url = f"{RAG_URL}{endpoint}"
     try:
@@ -20,7 +24,8 @@ def request_post(
         if response.status_code == 200:
             return (
                 (response.status_code, response.json())
-                if return_status else response.json()
+                if return_status
+                else response.json()
             )
 
         print(f"[ERROR] POST {url}: {response.status_code} - {response.text}")
@@ -37,13 +42,11 @@ def rag_register_user(is_super_user: bool = False):
         "username": os.getenv("RAG_USERNAME"),
         "password": os.getenv("RAG_PASSWORD"),
         "is_active": True,
-        "is_superuser": is_super_user
+        "is_superuser": is_super_user,
     }
     headers = {"Content-Type": "application/json"}
     status, result = request_post(
-        "auth/register",
-        payload, headers,
-        use_json=True, return_status=True
+        "auth/register", payload, headers, use_json=True, return_status=True
     )
     if status == 200 and result:
         print("✅ User registered successfully.")
@@ -55,7 +58,7 @@ def rag_register_user(is_super_user: bool = False):
 def rag_login():
     payload = {
         "username": os.getenv("RAG_USERNAME"),
-        "password": os.getenv("RAG_PASSWORD")
+        "password": os.getenv("RAG_PASSWORD"),
     }
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     status, result = request_post(
@@ -82,21 +85,22 @@ def rag_login():
 
 def rag_create_knowledge_base(token: str, title: str, description: str):
     payload = {"name": title, "description": description}
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": token
-    }
+    headers = {"Content-Type": "application/json", "Authorization": token}
     result = request_post("knowledge-base", payload, headers, use_json=True)
-    return result.get('id') if result else False
+    return result.get("id") if result else False
 
 
 def rag_upload_documents(token: str, kb_id: int, file_paths: list):
     endpoint = f"knowledge-base/{kb_id}/documents/upload"
     headers = {"Authorization": token}
 
-    files = [(
-        "files", (os.path.basename(path), open(path, "rb"), "application/pdf")
-    ) for path in file_paths]
+    files = [
+        (
+            "files",
+            (os.path.basename(path), open(path, "rb"), "application/pdf"),
+        )
+        for path in file_paths
+    ]
 
     try:
         result = request_post(endpoint, data={}, headers=headers, files=files)
@@ -108,8 +112,5 @@ def rag_upload_documents(token: str, kb_id: int, file_paths: list):
 
 def rag_process_documents(token: str, kb_id: int, upload_results: list):
     endpoint = f"knowledge-base/{kb_id}/documents/process"
-    headers = {
-        "Authorization": token,
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": token, "Content-Type": "application/json"}
     return request_post(endpoint, upload_results, headers, use_json=True)
