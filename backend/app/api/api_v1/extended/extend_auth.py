@@ -1,12 +1,12 @@
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from requests.exceptions import RequestException
 
 from app.core import security
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
 import logging
 
@@ -19,9 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Support set user as super user
 @router.post("/register", response_model=UserResponse)
-def register(
-    *, db: Session = Depends(get_db), user_in: UserCreate
-) -> Any:
+def register(*, db: Session = Depends(get_db), user_in: UserCreate) -> Any:
     """
     Register a new user.
     """
@@ -48,7 +46,7 @@ def register(
             username=user_in.username,
             hashed_password=security.get_password_hash(user_in.password),
             is_superuser=user_in.is_superuser,
-            is_active=user_in.is_active
+            is_active=user_in.is_active,
         )
         db.add(user)
         db.commit()
@@ -68,3 +66,25 @@ def user_me(current_user: User = Depends(get_current_user)) -> Any:
     Get user profile.
     """
     return current_user
+
+
+@router.put("/user", response_model=UserResponse)
+def update_user_by_email(
+    *,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    user_in: UserUpdate,
+) -> Any:
+    user = db.query(User).filter(User.email == user_in.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="A user with this email not found.",
+        )
+    user.email = user_in.email
+    user.username = user_in.username
+    user.is_active = user_in.is_active
+    user.is_superuser = user_in.is_superuser
+    db.commit()
+    db.refresh(user)
+    return user

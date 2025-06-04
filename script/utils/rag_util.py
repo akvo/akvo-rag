@@ -1,5 +1,6 @@
 import os
 import requests
+from typing import Optional
 
 RAG_URL = "http://backend:8000/api/"
 
@@ -11,15 +12,17 @@ def request_post(
     use_json: bool = False,
     files: list = None,
     return_status: bool = False,
+    method: Optional[str] = "POST",
 ):
     url = f"{RAG_URL}{endpoint}"
     try:
+        request_method = getattr(requests, method.lower())
         if files:
-            response = requests.post(url, files=files, headers=headers)
+            response = request_method(url, files=files, headers=headers)
         elif use_json:
-            response = requests.post(url, json=data, headers=headers)
+            response = request_method(url, json=data, headers=headers)
         else:
-            response = requests.post(url, data=data, headers=headers)
+            response = request_method(url, data=data, headers=headers)
 
         if response.status_code == 200:
             return (
@@ -36,11 +39,17 @@ def request_post(
         return (None, None) if return_status else False
 
 
-def rag_register_user(is_super_user: bool = False):
+def rag_register_user(
+    create_or_update: bool = False,
+    is_super_user: bool = False,
+    email: Optional[str] = None,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+):
     payload = {
-        "email": os.getenv("RAG_EMAIL"),
-        "username": os.getenv("RAG_USERNAME"),
-        "password": os.getenv("RAG_PASSWORD"),
+        "email": email or os.getenv("RAG_EMAIL"),
+        "username": username or os.getenv("RAG_USERNAME"),
+        "password": password or os.getenv("RAG_PASSWORD"),
         "is_active": True,
         "is_superuser": is_super_user,
     }
@@ -51,6 +60,26 @@ def rag_register_user(is_super_user: bool = False):
     if status == 200 and result:
         print("✅ User registered successfully.")
         return True
+
+    if status == 400 and create_or_update:
+        print("⚠️ User already exists. Trying to update user...")
+        token = rag_login()
+        headers = {"Content-Type": "application/json", "Authorization": token}
+        status, result = request_post(
+            "auth/user",
+            payload,
+            headers,
+            use_json=True,
+            return_status=True,
+            method="PUT",
+        )
+        if status == 200 and result:
+            print("✅ User updated successfully.")
+            return True
+        else:
+            print("[ERROR] User update failed.")
+            return False
+
     print(f"[ERROR] User registration failed: {status}")
     return False
 
