@@ -17,7 +17,7 @@
     />
     <link
       rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/akvo-rag-js@1.1.4/dist/akvo-rag.css"
+      href="https://cdn.jsdelivr.net/npm/akvo-rag-js@1.1.5/dist/akvo-rag.css"
     />
   </head>
   <body>
@@ -41,17 +41,18 @@
 
     <!-- Chat widget CDN script (to be added) -->
     <script src="config.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/akvo-rag-js@1.1.4/dist/akvo-rag.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/akvo-rag-js@1.1.5/dist/akvo-rag.js"></script>
     <script>
       const params = new URLSearchParams(window.location.search);
       const docs = params.get("docs");
 
-      const defaultParam = "living_income";
+      const defaultParam = "default";
       const configTemp = window[`config_${docs ? docs : defaultParam}`];
 
       AkvoRAG.initChat({
         title: configTemp.title,
-        kb_id: configTemp.kb_id,
+        kb_id: configTemp?.kb_id || null,
+        kb_options: configTemp?.kb_options || null,
         wsURL: configTemp.wsURL,
       });
 
@@ -68,24 +69,45 @@
           </ol>
         `;
       } else if (docs === "500") {
+        examplesDiv.innerHTML = `
+        <strong>Example UNEP Queries:</strong>
+        <ol>
+          <li>Hi, what do you know about UNEP?</li>
+          <li>What are the key findings of the plastic pollution control?</li>
+          <li>Summarize UNEP's recommendations on plastic pollution control.</li>
+        </ol>
+        `;
+      } else if (docs === "living_income") {
+        examplesDiv.innerHTML = `
+        <strong>Example Queries:</strong>
+        <ol>
+          <li>Hi, what is a Living Income Benchmark?</li>
+          <li>How can I use the Living Income Benchmark in my project?</li>
+          <li>What is the Living Income for a cocoa farmer's standard of living?</li>
+        </ol>
+        `;
+      } else {
         // default
         examplesDiv.innerHTML = `
+          <strong>Welcome to Akvo RAG Chat Assistant</strong>
+          <p>
+            Please select a knowledge base in the chat widget, then "Start Chat" to start the conversation.
+          </p>
+          <br/>
           <strong>Example UNEP Queries:</strong>
           <ol>
             <li>Hi, what do you know about UNEP?</li>
             <li>What are the key findings of the plastic pollution control?</li>
             <li>Summarize UNEP's recommendations on plastic pollution control.</li>
           </ol>
-        `;
-      } else {
-        examplesDiv.innerHTML = `
-          <strong>Example Queries:</strong>
+          <br/>
+          <strong>Example Living Income Benchmark Queries:</strong>
           <ol>
             <li>Hi, what is a Living Income Benchmark?</li>
             <li>How can I use the Living Income Benchmark in my project?</li>
             <li>What is the Living Income for a cocoa farmer's standard of living?</li>
           </ol>
-      `;
+        `;
       }
     </script>
   </body>
