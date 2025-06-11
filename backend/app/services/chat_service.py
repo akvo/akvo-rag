@@ -1,6 +1,8 @@
 import json
 import base64
-from typing import List, AsyncGenerator
+import uuid
+
+from typing import List, AsyncGenerator, Optional
 from sqlalchemy.orm import Session
 from langchain.chains import (
     create_history_aware_retriever,
@@ -31,6 +33,8 @@ async def generate_response(
     knowledge_base_ids: List[int],
     chat_id: int,
     db: Session,
+    max_history_length: Optional[int] = 10,
+    generate_last_n_messages: Optional[bool] = False,
 ) -> AsyncGenerator[str, None]:
     try:
         """
@@ -44,11 +48,35 @@ async def generate_response(
         Please reduce the length of the messages
         ### eol handle error
         """
+        if not generate_last_n_messages and not messages.get("id", None):
+            messages_id = uuid.uuid4()
+            messages["id"] = messages_id
 
         # Get the only last 10 messages
-        if messages.get("messages", None):
+        if not generate_last_n_messages and messages.get("messages", None):
             messages_tmp = messages["messages"]
-            messages["messages"] = messages_tmp[-10:]
+            messages["messages"] = messages_tmp[-max_history_length:]
+
+        # Generate last n message in backend
+        if generate_last_n_messages:
+            new_messages_id = uuid.uuid4()
+            messages = {"id": new_messages_id, "messages": []}
+            # limit last n messages
+            all_history_messages = (
+                db.query(Message)
+                .filter(Message.chat_id == chat_id)
+                .order_by(Message.created_at.desc())
+                .limit(max_history_length)
+                .all()
+            )
+            for message in all_history_messages:
+                messages["messages"].append(
+                    {
+                        "role": message.role,
+                        "content": message.content,
+                    }
+                )
+        # EOL generate last n message in backend
 
         # Create user message
         user_message = Message(content=query, role="user", chat_id=chat_id)
