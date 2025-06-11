@@ -5,10 +5,7 @@ A system to evaluate RAG (Retrieval-Augmented Generation) responses and iterate 
 ## Quick Start
 
 ```bash
-# 1. Make sure Akvo RAG is running
-docker compose up -d
-
-# 2. Run the evaluation dashboard
+# Just run the evaluation dashboard with all setup handled automatically
 ./rag-evaluate
 ```
 
@@ -18,12 +15,12 @@ Then open http://localhost:8501 in your browser.
 
 The evaluation system:
 
-1. Creates a dedicated virtual environment to avoid dependency conflicts
-2. Installs required dependencies in the isolated environment
-3. Configures and exposes the Streamlit port
+1. Sets up Docker to ensure both the API and Streamlit ports are exposed
+2. Creates a dedicated virtual environment to avoid dependency conflicts
+3. Installs required dependencies in the isolated environment
 4. Runs the evaluation dashboard in the virtual environment
 
-This approach keeps the evaluation dependencies separate from the main system to prevent conflicts.
+This approach keeps the evaluation dependencies separate from the main system to prevent conflicts and ensures both the API and Streamlit are accessible.
 
 ## Configuration
 
@@ -32,7 +29,7 @@ This approach keeps the evaluation dependencies separate from the main system to
 Before running the evaluation, ensure:
 
 1. A knowledge base with label "Living Income Benchmark Knowledge Base" exists
-2. Akvo RAG containers are running with `docker compose up`
+2. Docker is installed and running
 
 ### Dashboard Settings
 
@@ -53,7 +50,11 @@ In the Streamlit UI, configure:
 ## Troubleshooting
 
 - **RAGAS metrics not showing**: Ensure you've provided an OpenAI API key
-- **Connection errors**: Verify Akvo RAG is running and the API URL is correct
+- **Connection errors**: The setup script should ensure the API is accessible, but if you have issues, try running:
+  ```bash
+  cd /path/to/akvo-rag
+  docker compose -f docker-compose.dev.yml -f streamlit-override.yml up -d
+  ```
 - **Dependency issues**: The system uses a virtual environment, so dependency conflicts should be resolved automatically
 
 ## Advanced Usage

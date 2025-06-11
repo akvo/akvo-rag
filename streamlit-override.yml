@@ -1,0 +1,7 @@
+version: '3'
+
+services:
+  backend:
+    ports:
+      - "8501:8501"  # Expose Streamlit port
+      - "8000:8000"  # Ensure API port is exposed

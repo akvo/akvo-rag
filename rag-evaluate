@@ -2,4 +2,9 @@
 # Simple command to start the RAG evaluation system
 
 cd $(dirname $0)
-exec ./backend/RAG_evaluation/run_evaluation.sh "$@"
+
+echo "Ensuring Streamlit setup is correct..."
+./backend/RAG_evaluation/setup_for_streamlit.sh
+
+echo "Starting RAG evaluation system..."
+./backend/RAG_evaluation/run_evaluation.sh "$@"

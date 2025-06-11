@@ -1,9 +1,0 @@
-version: '3'
-
-# This override file adds port mapping for Streamlit to make it accessible from the host
-# It keeps the configuration simple to avoid port conflicts
-
-services:
-  backend:
-    ports:
-      - "8501:8501" # Expose Streamlit port to host

@@ -1,10 +1,14 @@
 #!/bin/bash
 # Script to start the RAG evaluation system using a virtual environment
 
+# The streamlit-override.yml is already set up by the rag-evaluate script
+# No need to run setup_for_streamlit.sh again, just check if API is running
+
 # Check if Akvo RAG is running
 echo "Checking if Akvo RAG is running..."
 if ! curl -s http://localhost:8000/api/health > /dev/null; then
-  echo "Akvo RAG doesn't seem to be running. Please start it with 'docker compose up -d'"
+  echo "Akvo RAG doesn't seem to be running. Please ensure it's running with:"
+  echo "cd $(dirname $(dirname $(pwd))) && docker compose -f docker-compose.dev.yml -f streamlit-override.yml up -d"
   exit 1
 fi
 
@@ -14,18 +18,6 @@ if [ -z "$CONTAINER_NAME" ]; then
   CONTAINER_NAME="akvo-rag-backend-1"  # fallback name
 fi
 echo "Using container: $CONTAINER_NAME"
-
-# Check if override file is in place
-if [ ! -f "../../docker-compose.override.yml" ]; then
-  echo "Copying Docker override file to expose Streamlit port..."
-  cp docker-compose.override.yml ../../
-  
-  echo "Restarting containers with override..."
-  cd ../../
-  docker compose down
-  docker compose up -d
-  cd - > /dev/null
-fi
 
 # Setup virtual environment if needed
 echo "Setting up virtual environment..."
