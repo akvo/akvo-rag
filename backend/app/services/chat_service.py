@@ -2,7 +2,6 @@ import json
 import base64
 from typing import List, AsyncGenerator
 from sqlalchemy.orm import Session
-from langchain_openai import ChatOpenAI
 from langchain.chains import (
     create_history_aware_retriever,
     create_retrieval_chain,
@@ -34,6 +33,23 @@ async def generate_response(
     db: Session,
 ) -> AsyncGenerator[str, None]:
     try:
+        """
+        Since the RAG frontend sent all chat history on FE
+        into generate_response, we need to reduce the length of the messages
+        otherwise, the model will throw an error
+
+        ### handle error
+        This model's maximum context length is 8192 tokens.
+        However, your messages resulted in 38669 tokens.
+        Please reduce the length of the messages
+        ### eol handle error
+        """
+
+        # Get the only last 10 messages
+        if messages.get("messages", None):
+            messages_tmp = messages["messages"]
+            messages["messages"] = messages_tmp[-10:]
+
         # Create user message
         user_message = Message(content=query, role="user", chat_id=chat_id)
         db.add(user_message)
@@ -65,7 +81,8 @@ async def generate_response(
             if documents:
                 # Use the factory to create the appropriate vector store
                 vector_store = VectorStoreFactory.create(
-                    store_type=settings.VECTOR_STORE_TYPE,  # 'chroma' or other supported types
+                    # 'chroma' or other supported types
+                    store_type=settings.VECTOR_STORE_TYPE,
                     collection_name=f"kb_{kb.id}",
                     embedding_function=embeddings,
                 )
