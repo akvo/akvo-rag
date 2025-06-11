@@ -8,21 +8,22 @@ A system to evaluate RAG (Retrieval-Augmented Generation) responses and iterate 
 # 1. Make sure Akvo RAG is running
 docker compose up -d
 
-# 2. Copy the Streamlit port override
-cp backend/RAG_evaluation/docker-compose.override.yml .
-
-# 3. Restart containers with the override
-docker compose down
-docker compose up -d
-
-# 4. Install dependencies
-docker exec -it akvo-rag-backend pip install -r /app/RAG_evaluation/requirements.txt
-
-# 5. Run the evaluation dashboard
-docker exec -it akvo-rag-backend python /app/RAG_evaluation/run_evaluation.py
+# 2. Run the evaluation dashboard
+./rag-evaluate
 ```
 
 Then open http://localhost:8501 in your browser.
+
+## How It Works
+
+The evaluation system:
+
+1. Creates a dedicated virtual environment to avoid dependency conflicts
+2. Installs required dependencies in the isolated environment
+3. Configures and exposes the Streamlit port
+4. Runs the evaluation dashboard in the virtual environment
+
+This approach keeps the evaluation dependencies separate from the main system to prevent conflicts.
 
 ## Configuration
 
@@ -32,7 +33,6 @@ Before running the evaluation, ensure:
 
 1. A knowledge base with label "Living Income Benchmark Knowledge Base" exists
 2. Akvo RAG containers are running with `docker compose up`
-3. Dependencies are installed
 
 ### Dashboard Settings
 
@@ -54,22 +54,19 @@ In the Streamlit UI, configure:
 
 - **RAGAS metrics not showing**: Ensure you've provided an OpenAI API key
 - **Connection errors**: Verify Akvo RAG is running and the API URL is correct
-- **Dependency issues**: Run with `--install-deps` flag or manually install from requirements.txt
+- **Dependency issues**: The system uses a virtual environment, so dependency conflicts should be resolved automatically
 
-## Running Without Docker
+## Advanced Usage
 
-If you prefer to run the evaluation system directly:
+You can pass additional parameters to the evaluation script:
 
 ```bash
-# Install dependencies
-cd backend/RAG_evaluation
-pip install -r requirements.txt
+# Use a different knowledge base
+./rag-evaluate --kb "Your Knowledge Base Label"
 
-# Run the evaluation dashboard
-python run_evaluation.py --kb "Your Knowledge Base Label"
+# Use a different port
+./rag-evaluate --port 8502
+
+# Skip dependency and service checks
+./rag-evaluate --skip-checks
 ```
-
-Additional options:
-- `--port` - Specify a custom port (default: 8501)
-- `--skip-checks` - Skip dependency and service checks
-- `--install-deps` - Automatically install missing dependencies

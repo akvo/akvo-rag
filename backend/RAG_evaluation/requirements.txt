@@ -1,16 +1,12 @@
 # RAG evaluation dependencies
 # WARNING: These are development dependencies only and should not be used in production
-
-# Core dependencies
 streamlit==1.31.0
+ragas==0.1.0  # Pinned to a specific version to avoid API changes
 pandas==2.0.0
 plotly==5.18.0
 httpx==0.26.0
-packaging==23.1
 
-# RAGAS and LangChain dependencies
-# Using a specific version of RAGAS to avoid API changes
-ragas==0.1.0
+# LangChain dependencies
 langchain-openai==0.0.5
 langchain-core==0.1.17
 langchain==0.1.3

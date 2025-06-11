@@ -72,37 +72,6 @@ def check_services() -> bool:
         logger.error("Cannot check services: httpx is not installed")
         return False
 
-def install_dependencies() -> bool:
-    """Install missing dependencies.
-    
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        logger.info("Installing dependencies...")
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        requirements_path = os.path.join(script_dir, "requirements.txt")
-        
-        if not os.path.exists(requirements_path):
-            logger.error(f"Requirements file not found: {requirements_path}")
-            return False
-        
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", requirements_path],
-            capture_output=True,
-            text=True
-        )
-        
-        if result.returncode == 0:
-            logger.info("✅ Dependencies installed successfully")
-            return True
-        else:
-            logger.error(f"❌ Failed to install dependencies: {result.stderr}")
-            return False
-    except Exception as e:
-        logger.error(f"❌ Error installing dependencies: {e}")
-        return False
-
 def main():
     parser = argparse.ArgumentParser(description="Run Akvo RAG Evaluation Dashboard")
     parser.add_argument(
@@ -114,9 +83,6 @@ def main():
     )
     parser.add_argument(
         "--skip-checks", action="store_true", help="Skip dependency and service checks"
-    )
-    parser.add_argument(
-        "--install-deps", action="store_true", help="Automatically install missing dependencies"
     )
     
     args = parser.parse_args()
@@ -134,16 +100,8 @@ def main():
         
         if missing_deps:
             logger.warning(f"Missing dependencies: {', '.join(missing_deps)}")
-            if args.install_deps:
-                if not install_dependencies():
-                    logger.error("Failed to install dependencies. Please install them manually:")
-                    logger.error(f"pip install -r {os.path.join(script_dir, 'requirements.txt')}")
-                    sys.exit(1)
-            else:
-                logger.error("Please install required dependencies first:")
-                logger.error(f"pip install -r {os.path.join(script_dir, 'requirements.txt')}")
-                logger.error("Or run with --install-deps to install automatically")
-                sys.exit(1)
+            logger.error("Some dependencies are missing. Make sure you're running in the virtual environment.")
+            sys.exit(1)
         
         # Check services
         if not check_services():
