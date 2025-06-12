@@ -255,6 +255,7 @@ async def websocket_chat(websocket: WebSocket):
                 messages={"messages": messages},
                 knowledge_base_ids=knowledge_base_ids,
                 chat_id=chat_id,
+                generate_last_n_messages=True,
                 db=db,
             ):
                 if websocket.client_state != WebSocketState.CONNECTED:

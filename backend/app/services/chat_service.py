@@ -1,8 +1,9 @@
 import json
 import base64
-from typing import List, AsyncGenerator
+import uuid
+
+from typing import List, AsyncGenerator, Optional
 from sqlalchemy.orm import Session
-from langchain_openai import ChatOpenAI
 from langchain.chains import (
     create_history_aware_retriever,
     create_retrieval_chain,
@@ -32,8 +33,51 @@ async def generate_response(
     knowledge_base_ids: List[int],
     chat_id: int,
     db: Session,
+    max_history_length: Optional[int] = 10,
+    generate_last_n_messages: Optional[bool] = False,
 ) -> AsyncGenerator[str, None]:
     try:
+        """
+        Since the RAG frontend sent all chat history on FE
+        into generate_response, we need to reduce the length of the messages
+        otherwise, the model will throw an error
+
+        ### handle error
+        This model's maximum context length is 8192 tokens.
+        However, your messages resulted in 38669 tokens.
+        Please reduce the length of the messages
+        ### eol handle error
+        """
+        if not generate_last_n_messages and not messages.get("id", None):
+            messages_id = uuid.uuid4()
+            messages["id"] = messages_id
+
+        # Get the only last 10 messages
+        if not generate_last_n_messages and messages.get("messages", None):
+            messages_tmp = messages["messages"]
+            messages["messages"] = messages_tmp[-max_history_length:]
+
+        # Generate last n message in backend
+        if generate_last_n_messages:
+            new_messages_id = uuid.uuid4()
+            messages = {"id": new_messages_id, "messages": []}
+            # limit last n messages
+            all_history_messages = (
+                db.query(Message)
+                .filter(Message.chat_id == chat_id)
+                .order_by(Message.created_at.desc())
+                .limit(max_history_length)
+                .all()
+            )
+            for message in all_history_messages:
+                messages["messages"].append(
+                    {
+                        "role": message.role,
+                        "content": message.content,
+                    }
+                )
+        # EOL generate last n message in backend
+
         # Create user message
         user_message = Message(content=query, role="user", chat_id=chat_id)
         db.add(user_message)
@@ -65,7 +109,8 @@ async def generate_response(
             if documents:
                 # Use the factory to create the appropriate vector store
                 vector_store = VectorStoreFactory.create(
-                    store_type=settings.VECTOR_STORE_TYPE,  # 'chroma' or other supported types
+                    # 'chroma' or other supported types
+                    store_type=settings.VECTOR_STORE_TYPE,
                     collection_name=f"kb_{kb.id}",
                     embedding_function=embeddings,
                 )
