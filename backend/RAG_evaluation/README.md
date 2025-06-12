@@ -28,7 +28,7 @@ This approach keeps the evaluation dependencies separate from the main system to
 
 Before running the evaluation, ensure:
 
-1. A knowledge base with label "Living Income Benchmark Knowledge Base" exists
+1. A knowledge base with name "Living Income Benchmark Knowledge Base" exists
 2. Docker is installed and running
 
 ### Dashboard Settings
@@ -36,7 +36,7 @@ Before running the evaluation, ensure:
 In the Streamlit UI, configure:
 
 - **Connection Settings**: API URL, username, and password
-- **Knowledge Base**: Label of the knowledge base to evaluate
+- **Knowledge Base**: Name of the knowledge base to evaluate
 - **Evaluation LLM**: OpenAI API key and model (required for RAGAS metrics)
 - **Test Queries**: Modify or add queries for evaluation
 
@@ -63,7 +63,7 @@ You can pass additional parameters to the evaluation script:
 
 ```bash
 # Use a different knowledge base
-./rag-evaluate --kb "Your Knowledge Base Label"
+./rag-evaluate --kb "Your Knowledge Base Name"
 
 # Use a different port
 ./rag-evaluate --port 8502
