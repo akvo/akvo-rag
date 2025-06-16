@@ -106,7 +106,7 @@ def collect_pdf_urls(max_pdfs, seen_urls=None):
 
         for res in resources:
             file = res.get("file", {})
-            title = file.get("name", "document")
+            title = file.get("name", "document") if file else "document"
             if file and file.get("url", "").lower().endswith(".pdf"):
                 pdf_url = file["url"]
                 if pdf_url in seen_urls:
@@ -114,8 +114,9 @@ def collect_pdf_urls(max_pdfs, seen_urls=None):
                 seen_urls.add(pdf_url)
                 pdf_records.append((title, pdf_url, page))
                 total_pdfs += 1
-                if total_pdfs >= max_pdfs:
-                    break
+
+        if total_pdfs >= max_pdfs:
+            break
 
         page += 1
         time.sleep(2)
