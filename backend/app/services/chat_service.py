@@ -138,11 +138,12 @@ async def generate_response(
 
         # Create contextualize question prompt
         contextualize_q_system_prompt = (
-            "Given a chat history and the latest user question "
-            "which might reference context in the chat history, "
-            "formulate a standalone question which can be understood "
-            "without the chat history. Do NOT answer the question, just "
-            "reformulate it if needed and otherwise return it as is."
+            "Given a chat history and the latest user question, your task is to create a clear, "
+            "standalone question that captures the user's intent. If the question references previous "
+            "conversation context, incorporate that context into a self-contained question. "
+            "If the question is already clear and standalone, return it unchanged. "
+            "Focus on preserving the user's original language and intent while making the question "
+            "searchable against a knowledge base."
         )
         contextualize_q_prompt = ChatPromptTemplate.from_messages(
             [
