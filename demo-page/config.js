@@ -38,3 +38,9 @@ window.config_living_income = {
   kb_id: 28,
   wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
 };
+
+window.config_local = {
+  title: "UNEP Min",
+  kb_id: 40,
+  wsURL: "ws://localhost:81/ws/chat",
+};
