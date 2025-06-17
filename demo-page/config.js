@@ -4,11 +4,7 @@ window.config_default = {
   kb_options: [
     {
       kb_id: 34,
-      label: "UNEP Knowledge Base with 500 docs",
-    },
-    {
-      kb_id: 26,
-      label: "UNEP Knowledge Base with 250 docs",
+      label: "UNEP Knowledge Base",
     },
     {
       kb_id: 28,
