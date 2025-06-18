@@ -11,18 +11,19 @@ import pandas as pd
 import plotly.express as px
 from typing import List, Dict, Any
 import json
-import time
 import os
 import logging
-import importlib
-from packaging import version
 
 # Set up logging for the evaluation
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("rag_evaluation")
 
-# Import our chat utility
-from chat_util import RagChatUtil
+# Import our evaluation logic
+from headless_evaluation import (
+    DEFAULT_TEST_QUERIES, 
+    setup_ragas, 
+    evaluate_queries
+)
 
 # Set page title and initialize session state
 st.set_page_config(page_title="Akvo RAG Evaluation", page_icon="📊", layout="wide")
@@ -44,15 +45,6 @@ if "ragas_available" not in st.session_state:
 if "ragas_import_error" not in st.session_state:
     st.session_state.ragas_import_error = None
 
-# Sample test questions
-DEFAULT_TEST_QUERIES = [
-    "What is the living income benchmark?",
-    "How is the living income benchmark calculated?",
-    "What factors influence the living income benchmark?",
-    "How does the living income benchmark differ from minimum wage?",
-    "What is the purpose of establishing a living income benchmark?"
-]
-
 # Configuration section
 st.sidebar.header("Configuration")
 
@@ -68,69 +60,13 @@ kb_name = st.sidebar.text_input("Knowledge Base Name", "Living Income Benchmark 
 st.session_state.selected_kb = kb_name
 
 # RAGAS setup
-def setup_ragas():
-    """Set up RAGAS for evaluation and determine available metrics."""
-    st.session_state.ragas_metrics = []
-    st.session_state.ragas_available = False
-
-    try:
-        # Check if ragas is installed
-        ragas_spec = importlib.util.find_spec("ragas")
-        if ragas_spec is None:
-            st.session_state.ragas_import_error = "RAGAS package is not installed. Install with 'pip install ragas'"
-            return False
-
-        # Import RAGAS
-        import ragas
-
-        # Log RAGAS version
-        ragas_version = ragas.__version__
-        logger.info(f"RAGAS version: {ragas_version}")
-
-        # Import evaluate function
-        from ragas import evaluate
-
-        # Attempt to import metrics based on version
-        metrics = []
-        metric_names = []
-
-        # Import basic metrics that should be available in all versions
-        from ragas.metrics import faithfulness
-        metrics.append(faithfulness)
-        metric_names.append("faithfulness")
-
-        # Try importing newer API metrics
-        try:
-            from ragas.metrics import answer_relevancy
-            metrics.append(answer_relevancy)
-            metric_names.append("answer_relevancy")
-        except ImportError:
-            logger.info("answer_relevancy metric not available")
-
-        try:
-            from ragas.metrics import context_precision
-            metrics.append(context_precision)
-            metric_names.append("context_precision")
-        except ImportError:
-            logger.info("context_precision metric not available")
-
-        try:
-            from ragas.metrics import context_relevancy
-            metrics.append(context_relevancy)
-            metric_names.append("context_relevancy")
-        except ImportError:
-            logger.info("context_relevancy metric not available")
-
-        # Store available metrics
-        st.session_state.ragas_metrics = metrics
-        st.session_state.ragas_metric_names = metric_names
-        st.session_state.ragas_available = True
-
-        return True
-    except Exception as e:
-        logger.error(f"Error setting up RAGAS: {str(e)}")
-        st.session_state.ragas_import_error = f"Error setting up RAGAS: {str(e)}"
-        return False
+def initialize_ragas():
+    """Initialize RAGAS and check available metrics."""
+    ragas_available, metrics, metric_names, error_message = setup_ragas()
+    st.session_state.ragas_available = ragas_available
+    st.session_state.ragas_metrics = metrics
+    st.session_state.ragas_metric_names = metric_names if ragas_available else []
+    st.session_state.ragas_import_error = error_message
 
 # LLM for evaluation
 st.sidebar.subheader("Evaluation LLM")
@@ -140,7 +76,7 @@ openai_model = st.sidebar.selectbox("Evaluation Model", ["gpt-4o", "gpt-4", "gpt
 # Check if RAGAS is available
 if not st.session_state.ragas_available and not st.session_state.ragas_import_error:
     with st.spinner("Setting up RAGAS..."):
-        setup_ragas()
+        initialize_ragas()
 
 # Display RAGAS status
 if st.session_state.ragas_import_error:
@@ -160,115 +96,59 @@ async def run_evaluation(queries: List[str], kb_name: str):
     st.session_state.logs = []
     st.session_state.results = []
 
-    # Set OpenAI API key for evaluation if provided
-    if openai_api_key:
-        os.environ["OPENAI_API_KEY"] = openai_api_key
-
-    # Create chat utility
-    chat_util = RagChatUtil(
-        base_url=rag_api_url,
-        username=username,
-        password=password
-    )
-
-    # Enable instrumentation
-    chat_util.enable_instrumentation()
-
     # Initialize progress tracking
     progress_bar = st.progress(0)
     status_text = st.empty()
+    status_text.text("Starting evaluation...")
 
-    # Process each query
-    eval_data = []
-    for i, query in enumerate(queries):
-        status_text.text(f"Processing query {i+1}/{len(queries)}: {query[:50]}...")
-
-        # Generate RAG response
-        start_time = time.time()
-        rag_result = await chat_util.generate_rag_response(query, kb_name)
-        end_time = time.time()
-
-        # Update logs
-        st.session_state.logs.extend(chat_util.get_logs())
-
-        # Format data for RAGAS evaluation
-        if "error" not in rag_result:
-            contexts = [item["page_content"] for item in rag_result.get("contexts", [])]
-            eval_data.append({
-                "query": query,
-                "ground_truths": [""],  # No ground truth for now
-                "answer": rag_result["response"],
-                "contexts": contexts,
-                "response_time": end_time - start_time
-            })
-
-            # Store result
-            st.session_state.results.append({
-                "query": query,
-                "response": rag_result["response"],
-                "contexts": contexts,
-                "kb_id": rag_result.get("kb_id"),
-                "chat_id": rag_result.get("chat_id"),
-                "response_time": end_time - start_time
-            })
+    # Progress callback to update the UI during evaluation
+    def update_progress(i, total, query, result):
+        # Update progress bar
+        progress_bar.progress((i + 1) / total)
+        # Update status text
+        status_text.text(f"Processing query {i+1}/{total}: {query[:50]}...")
+        # Update results in session state
+        if len(st.session_state.results) <= i:
+            st.session_state.results.append(result)
         else:
-            # Store error result
-            st.session_state.results.append({
-                "query": query,
-                "response": rag_result["response"],
-                "contexts": [],
-                "error": rag_result.get("error", "Unknown error"),
-                "response_time": end_time - start_time
-            })
+            st.session_state.results[i] = result
 
-        # Update progress
-        progress_bar.progress((i + 1) / len(queries))
+    # RAGAS status callback
+    def update_ragas_status(message):
+        status_text.text(message)
 
-    # Only run RAGAS evaluation if we have data, OpenAI API key, and RAGAS is available
-    if eval_data and openai_api_key and st.session_state.ragas_available and st.session_state.ragas_metrics:
-        status_text.text("Running RAGAS evaluation...")
-
-        try:
-            # Prepare data for RAGAS
-            eval_df = pd.DataFrame(eval_data)
-
-            # Create LLM for evaluation
-            from ragas.llms import LangchainLLM
-            from langchain_openai import ChatOpenAI
-
-            eval_llm = LangchainLLM(llm=ChatOpenAI(model=openai_model))
-
-            # Run evaluation with available metrics
-            metrics = st.session_state.ragas_metrics
-            metric_names = st.session_state.ragas_metric_names
-
-            status_text.text(f"Evaluating with metrics: {', '.join(metric_names)}...")
-
-            # Import evaluate function
-            from ragas import evaluate
-
-            # Run evaluation
-            result = evaluate(
-                eval_df,
-                metrics=metrics,
-                llm=eval_llm
-            )
-
-            # Store evaluation results
-            for i, row in result.items():
-                for j, item in enumerate(eval_data):
-                    if j < len(st.session_state.results):
-                        st.session_state.results[j][i] = row[j]
-
-        except Exception as e:
-            status_text.text(f"Error running evaluation: {str(e)}")
-            logger.error(f"RAGAS evaluation error: {str(e)}")
-    elif not openai_api_key:
-        status_text.text("Skipping RAGAS evaluation: OpenAI API key not provided")
-    elif not st.session_state.ragas_available:
-        status_text.text("Skipping RAGAS evaluation: RAGAS not available")
-
-    status_text.text("Evaluation complete!")
+    try:
+        # Set OpenAI API key for evaluation if provided
+        if openai_api_key:
+            os.environ["OPENAI_API_KEY"] = openai_api_key
+            
+        # Run evaluation using our core evaluation logic
+        eval_results = await evaluate_queries(
+            queries=queries,
+            kb_name=kb_name,
+            openai_model=openai_model,
+            openai_api_key=openai_api_key,
+            rag_api_url=rag_api_url,
+            username=username,
+            password=password,
+            progress_callback=update_progress,
+            ragas_status_callback=update_ragas_status
+        )
+        
+        # Update the results for display
+        st.session_state.results = eval_results.get("rag_results", [])
+        
+        # Store logs in session state
+        st.session_state.logs = eval_results.get("logs", [])
+        
+        # Update progress bar to complete
+        progress_bar.progress(1.0)
+        status_text.text("Evaluation complete!")
+        
+    except Exception as e:
+        logger.error(f"Error running evaluation: {str(e)}")
+        status_text.text(f"Error: {str(e)}")
+    
     st.session_state.evaluation_running = False
 
 # Run evaluation button
@@ -283,17 +163,25 @@ if st.session_state.results:
     results_df = pd.DataFrame(st.session_state.results)
 
     # Display metrics if available
-    if st.session_state.ragas_available:
-        metrics_cols = st.session_state.ragas_metric_names
-        available_metrics = [col for col in metrics_cols if col in results_df.columns]
-
-        if available_metrics:
+    ragas_results = None
+    for result in st.session_state.results:
+        if "ragas_results" in result:
+            ragas_results = result.get("ragas_results")
+            break
+    
+    if ragas_results and "success" in ragas_results and st.session_state.ragas_available:
+        metrics_data = ragas_results.get("metrics", {})
+        metric_names = ragas_results.get("metric_names", [])
+        
+        if metrics_data:
             st.write("### Metrics Summary")
             metrics_summary = {}
-            for metric in available_metrics:
-                if metric in results_df.columns:
-                    metrics_summary[metric] = results_df[metric].mean()
-
+            for metric in metric_names:
+                if metric in metrics_data:
+                    values = metrics_data[metric]
+                    if isinstance(values, list) and values:
+                        metrics_summary[metric] = sum(values) / len(values)
+            
             # Display metrics in columns
             cols = st.columns(len(metrics_summary))
             for i, (metric, value) in enumerate(metrics_summary.items()):
@@ -301,18 +189,27 @@ if st.session_state.results:
                     label=metric.replace('_', ' ').title(),
                     value=f"{value:.2f}",
                 )
-
-            # Create bar chart of metrics
-            st.write("### Metrics by Query")
-            fig = px.bar(
-                results_df,
-                x=results_df.index,
-                y=available_metrics,
-                labels={'index': 'Query #', 'value': 'Score'},
-                barmode='group',
-                title="Metric Scores by Query"
-            )
-            st.plotly_chart(fig)
+            
+            # Create bar chart of metrics by query
+            if metric_names and metrics_data:
+                st.write("### Metrics by Query")
+                chart_data = []
+                for i, query in enumerate(queries):
+                    query_data = {"Query": f"Q{i+1}"}
+                    for metric in metric_names:
+                        if metric in metrics_data and i < len(metrics_data[metric]):
+                            query_data[metric.replace('_', ' ').title()] = metrics_data[metric][i]
+                    chart_data.append(query_data)
+                
+                chart_df = pd.DataFrame(chart_data)
+                fig = px.bar(
+                    chart_df,
+                    x="Query",
+                    y=[col for col in chart_df.columns if col != "Query"],
+                    barmode='group',
+                    title="Metric Scores by Query"
+                )
+                st.plotly_chart(fig)
 
     # Display response times
     if 'response_time' in results_df.columns:
@@ -334,7 +231,7 @@ if st.session_state.results:
             st.write(result['query'])
 
             st.write("**Response:**")
-            st.write(result['response'])
+            st.write(result['answer'] if 'answer' in result else result.get('response', 'No response'))
 
             if 'contexts' in result and result['contexts']:
                 st.write("**Retrieved Contexts:**")
@@ -343,18 +240,29 @@ if st.session_state.results:
                     st.text(context)
 
             # Display metrics for this query if available
-            if st.session_state.ragas_available:
-                available_metrics = [m for m in st.session_state.ragas_metric_names if m in result]
-                if available_metrics:
+            ragas_results = None
+            for res in st.session_state.results:
+                if "ragas_results" in res:
+                    ragas_results = res.get("ragas_results")
+                    break
+                    
+            if ragas_results and "success" in ragas_results and st.session_state.ragas_available:
+                metrics_data = ragas_results.get("metrics", {})
+                metric_names = ragas_results.get("metric_names", [])
+                
+                if metrics_data:
                     st.write("**Metrics:**")
-                    metrics_data = {metric: result.get(metric, 'N/A') for metric in available_metrics}
-                    st.json(metrics_data)
+                    query_metrics = {}
+                    for metric in metric_names:
+                        if metric in metrics_data and i < len(metrics_data[metric]):
+                            query_metrics[metric] = metrics_data[metric][i]
+                    st.json(query_metrics)
 
             # Display error if present
             if 'error' in result:
                 st.error(f"Error: {result['error']}")
 
-# Display logs
+# Display logs if present in session state
 if st.session_state.logs:
     with st.expander("System Logs", expanded=False):
         st.json(st.session_state.logs)

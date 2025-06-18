@@ -84,6 +84,22 @@ def main():
     parser.add_argument(
         "--skip-checks", action="store_true", help="Skip dependency and service checks"
     )
+    parser.add_argument(
+        "--headless", action="store_true", help="Run evaluation in headless mode (without Streamlit)"
+    )
+    parser.add_argument(
+        "--queries", type=str, help="Path to file containing queries for headless mode"
+    )
+    parser.add_argument(
+        "--output", type=str, help="Path to output file for headless mode results"
+    )
+    parser.add_argument(
+        "--openai-api-key", type=str, help="OpenAI API key for evaluation"
+    )
+    parser.add_argument(
+        "--openai-model", type=str, default="gpt-4o", 
+        help="OpenAI model to use for evaluation (default: gpt-4o)"
+    )
     
     args = parser.parse_args()
     
@@ -112,23 +128,63 @@ def main():
     os.environ["STREAMLIT_SERVER_PORT"] = str(args.port)
     os.environ["INITIAL_KB_LABEL"] = args.kb
     
-    # Start Streamlit - ensure it listens on all interfaces for Docker access
-    cmd = [
-        "streamlit", "run", "app.py",
-        "--server.port", str(args.port),
-        "--server.address", "0.0.0.0",
-        "--server.enableCORS", "false",
-        "--browser.gatherUsageStats", "false"
-    ]
+    if args.openai_api_key:
+        os.environ["OPENAI_API_KEY"] = args.openai_api_key
     
-    logger.info(f"Starting Streamlit dashboard on port {args.port}...")
-    logger.info(f"Evaluating knowledge base: {args.kb}")
-    logger.info("Press Ctrl+C to stop")
-    
-    try:
-        subprocess.run(cmd)
-    except KeyboardInterrupt:
-        logger.info("\nStopping dashboard...")
+    if args.headless:
+        # Run in headless mode
+        logger.info("Starting headless evaluation...")
+        logger.info(f"Evaluating knowledge base: {args.kb}")
+        
+        from headless_evaluation import run_headless_evaluation
+        
+        # Load queries from file or use defaults
+        queries = None
+        if args.queries:
+            try:
+                with open(args.queries, 'r') as f:
+                    queries = [line.strip() for line in f if line.strip()]
+                logger.info(f"Loaded {len(queries)} queries from {args.queries}")
+            except Exception as e:
+                logger.error(f"Error loading queries from {args.queries}: {e}")
+                sys.exit(1)
+        
+        # Run headless evaluation
+        results = run_headless_evaluation(
+            kb_name=args.kb,
+            queries=queries,
+            openai_model=args.openai_model
+        )
+        
+        # Save results to file if specified
+        if args.output:
+            try:
+                with open(args.output, 'w') as f:
+                    json.dump(results, f, indent=2)
+                logger.info(f"Results saved to {args.output}")
+            except Exception as e:
+                logger.error(f"Error saving results to {args.output}: {e}")
+        else:
+            # Print results to console
+            print(json.dumps(results, indent=2))
+    else:
+        # Start Streamlit - ensure it listens on all interfaces for Docker access
+        cmd = [
+            "streamlit", "run", "app.py",
+            "--server.port", str(args.port),
+            "--server.address", "0.0.0.0",
+            "--server.enableCORS", "false",
+            "--browser.gatherUsageStats", "false"
+        ]
+        
+        logger.info(f"Starting Streamlit dashboard on port {args.port}...")
+        logger.info(f"Evaluating knowledge base: {args.kb}")
+        logger.info("Press Ctrl+C to stop")
+        
+        try:
+            subprocess.run(cmd)
+        except KeyboardInterrupt:
+            logger.info("\nStopping dashboard...")
 
 if __name__ == "__main__":
     main()
