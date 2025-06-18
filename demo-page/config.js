@@ -3,12 +3,8 @@ window.config_default = {
   title: "Akvo RAG",
   kb_options: [
     {
-      kb_id: 25,
-      label: "UNEP Knowledge Base with 500 docs",
-    },
-    {
-      kb_id: 26,
-      label: "UNEP Knowledge Base with 250 docs",
+      kb_id: 34,
+      label: "UNEP Knowledge Base",
     },
     {
       kb_id: 28,
@@ -37,4 +33,11 @@ window.config_living_income = {
   title: "Living Income Assistant",
   kb_id: 28,
   wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
+};
+
+// LOCAL ENV
+window.config_local = {
+  title: "Chat from Local",
+  kb_id: 38,
+  wsURL: "ws://localhost:81/ws/chat",
 };
