@@ -48,36 +48,39 @@ def setup_ragas() -> Tuple[bool, List, List[str], Optional[str]]:
         ragas_version = ragas.__version__
         logger.info(f"RAGAS version: {ragas_version}")
 
-        # Attempt to import metrics based on version
+        # Import metrics using new v0.2 API
         metrics = []
         metric_names = []
 
-        # Import basic metrics that should be available in all versions
-        from ragas.metrics import faithfulness
-        metrics.append(faithfulness)
-        metric_names.append("faithfulness")
-
-        # Try importing newer API metrics
+        # Import metrics that work without reference data
         try:
-            from ragas.metrics import answer_relevancy
-            metrics.append(answer_relevancy)
+            from ragas.metrics import Faithfulness
+            metrics.append(Faithfulness)
+            metric_names.append("faithfulness")
+        except ImportError:
+            logger.info("Faithfulness metric not available")
+
+        try:
+            from ragas.metrics import AnswerRelevancy
+            metrics.append(AnswerRelevancy)
             metric_names.append("answer_relevancy")
         except ImportError:
-            logger.info("answer_relevancy metric not available")
+            logger.info("AnswerRelevancy metric not available")
 
+        # Use LLMContextPrecisionWithoutReference instead of standard ContextPrecision
         try:
-            from ragas.metrics import context_precision
-            metrics.append(context_precision)
-            metric_names.append("context_precision")
+            from ragas.metrics import LLMContextPrecisionWithoutReference
+            metrics.append(LLMContextPrecisionWithoutReference)
+            metric_names.append("context_precision_without_reference")
         except ImportError:
-            logger.info("context_precision metric not available")
+            logger.info("LLMContextPrecisionWithoutReference metric not available")
 
         try:
-            from ragas.metrics import context_relevancy
-            metrics.append(context_relevancy)
+            from ragas.metrics import ContextRelevancy
+            metrics.append(ContextRelevancy)
             metric_names.append("context_relevancy")
         except ImportError:
-            logger.info("context_relevancy metric not available")
+            logger.info("ContextRelevancy metric not available")
 
         return True, metrics, metric_names, None
     except Exception as e:
@@ -185,7 +188,7 @@ def run_ragas_evaluation(
         return {"error": "OpenAI API key not provided. Set OPENAI_API_KEY environment variable."}
     
     # Setup RAGAS
-    ragas_available, metrics, metric_names, error_message = setup_ragas()
+    ragas_available, metric_classes, metric_names, error_message = setup_ragas()
     if not ragas_available:
         return {"error": error_message}
     
@@ -195,42 +198,68 @@ def run_ragas_evaluation(
         # Convert data to DataFrame
         eval_df = pd.DataFrame(evaluation_data)
         
+        # Rename columns to match expected format
+        if 'query' in eval_df.columns:
+            eval_df = eval_df.rename(columns={'query': 'user_input'})
+        if 'answer' in eval_df.columns:
+            eval_df = eval_df.rename(columns={'answer': 'response'})
+        if 'contexts' in eval_df.columns:
+            eval_df = eval_df.rename(columns={'contexts': 'retrieved_contexts'})
+        
+        # Filter out entries with empty contexts as they can't be meaningfully evaluated
+        if 'retrieved_contexts' in eval_df.columns:
+            # Only evaluate entries that have retrieved contexts
+            eval_df = eval_df[eval_df['retrieved_contexts'].apply(lambda x: len(x) > 0)]
+            
+        if eval_df.empty:
+            return {"error": "No evaluation data with retrieved contexts available"}
+        
         # Debug info
         logger.info(f"DataFrame columns: {eval_df.columns.tolist()}")
         logger.info(f"Sample row: {eval_df.iloc[0].to_dict()}")
         
         # Create LLM for evaluation
         try:
-            from ragas.llms import LangchainLLMWrapper
             from langchain_openai import ChatOpenAI
-            
-            logger.info("Creating LLM with LangchainLLMWrapper")
-            eval_llm = LangchainLLMWrapper(langchain_llm=ChatOpenAI(model=openai_model))
+            eval_llm = ChatOpenAI(model=openai_model, api_key=api_key)
+            logger.info(f"Created LLM: {openai_model}")
         except Exception as e:
             logger.error(f"Error creating LLM: {str(e)}")
             return {"error": f"Error creating LLM: {str(e)}"}
         
-        # Import evaluate function
+        # Import evaluate function and dataset
         try:
             from ragas import evaluate
+            from ragas import EvaluationDataset
             
-            # Convert to Dataset from HuggingFace
-            from datasets import Dataset
-            eval_dataset = Dataset.from_pandas(eval_df)
-            logger.info(f"Created Dataset with features: {eval_dataset.features}")
+            # Convert to EvaluationDataset
+            eval_dataset = EvaluationDataset.from_pandas(eval_df)
+            logger.info(f"Created EvaluationDataset with {len(eval_dataset)} samples")
+            
+            # Initialize metrics with LLM
+            metrics = []
+            for metric_class in metric_classes:
+                try:
+                    metric_instance = metric_class(llm=eval_llm)
+                    metrics.append(metric_instance)
+                except Exception as e:
+                    logger.warning(f"Could not initialize {metric_class.__name__}: {e}")
+            
+            if not metrics:
+                return {"error": "No metrics could be initialized"}
             
             # Run evaluation
             result = evaluate(
-                eval_dataset,
-                metrics=metrics,
-                llm=eval_llm
+                dataset=eval_dataset,
+                metrics=metrics
             )
             
             # Process results
             processed_results = {}
-            for metric_name in metric_names:
-                if metric_name in result:
-                    processed_results[metric_name] = result[metric_name].tolist() if hasattr(result[metric_name], 'tolist') else result[metric_name]
+            for i, metric_name in enumerate(metric_names):
+                if i < len(metrics) and hasattr(result, metric_name):
+                    metric_result = getattr(result, metric_name)
+                    processed_results[metric_name] = metric_result.tolist() if hasattr(metric_result, 'tolist') else metric_result
             
             return {
                 "success": True,

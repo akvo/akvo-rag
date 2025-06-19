@@ -26,6 +26,8 @@ def check_dependencies() -> Dict[str, bool]:
     Returns:
         Dictionary of dependencies and their status
     """
+    import importlib.util
+    
     dependencies = {
         "streamlit": False,
         "pandas": False,
@@ -37,10 +39,14 @@ def check_dependencies() -> Dict[str, bool]:
     
     for dep in dependencies:
         try:
-            __import__(dep)
-            dependencies[dep] = True
-            logger.info(f"✓ {dep} is installed")
-        except ImportError:
+            # Use importlib.util.find_spec for more reliable detection
+            spec = importlib.util.find_spec(dep)
+            if spec is not None:
+                dependencies[dep] = True
+                logger.info(f"✓ {dep} is installed")
+            else:
+                logger.warning(f"✗ {dep} is not installed")
+        except (ImportError, ModuleNotFoundError, ValueError):
             logger.warning(f"✗ {dep} is not installed")
     
     return dependencies

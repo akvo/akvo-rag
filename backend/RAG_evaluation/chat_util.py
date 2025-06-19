@@ -237,7 +237,14 @@ class RagChatUtil:
                         for line in chunk.split('\n'):
                             if line.startswith('0:'):
                                 # Extract content
-                                content = json.loads(line[2:])
+                                json_part = line[2:]
+                                if not json_part.strip():
+                                    continue  # Skip empty content
+                                try:
+                                    content = json.loads(json_part)
+                                except json.JSONDecodeError as e:
+                                    self._log("json_parse_error", {"line": line, "json_part": json_part}, {"error": str(e)})
+                                    continue
 
                                 # Check if it contains context
                                 if "__LLM_RESPONSE__" in content:

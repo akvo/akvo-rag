@@ -1,11 +1,40 @@
 #!/bin/bash
 # Script to run the headless RAG evaluation
+#
+# Usage: ./run_headless.sh [options]
+# Options:
+#   -u USERNAME    Username for authentication (default: admin@example.com)
+#   -p PASSWORD    Password for authentication (default: password)
+#   -a API_URL     RAG API URL (default: http://localhost:8000)
+#   -k KB_NAME     Knowledge base name (default: Living Income Benchmark Knowledge Base)
+
+# Default values
+USERNAME="admin@example.com"
+PASSWORD="password"
+RAG_API_URL="http://localhost:8000"
+KB_NAME="Living Income Benchmark Knowledge Base"
+
+# Parse command line options
+while getopts "u:p:a:k:" opt; do
+  case $opt in
+    u) USERNAME="$OPTARG" ;;
+    p) PASSWORD="$OPTARG" ;;
+    a) RAG_API_URL="$OPTARG" ;;
+    k) KB_NAME="$OPTARG" ;;
+    \?) echo "Invalid option: -$OPTARG" >&2; exit 1 ;;
+  esac
+done
+
+shift $((OPTIND-1))
 
 # Check if Akvo RAG is running
-echo "Checking if Akvo RAG is running..."
-if ! curl -s http://localhost:8000/api/health > /dev/null; then
-  echo "Akvo RAG doesn't seem to be running. Please ensure it's running with:"
-  echo "cd $(dirname $(dirname $(pwd))) && docker compose -f docker-compose.dev.yml up -d"
+echo "Checking if Akvo RAG is running at $RAG_API_URL..."
+if ! curl -s "${RAG_API_URL}/api/health" > /dev/null; then
+  echo "Akvo RAG doesn't seem to be running at $RAG_API_URL"
+  if [ "$RAG_API_URL" = "http://localhost:8000" ]; then
+    echo "Please ensure it's running with:"
+    echo "cd $(dirname $(dirname $(pwd))) && docker compose -f docker-compose.dev.yml up -d"
+  fi
   exit 1
 fi
 
@@ -15,6 +44,7 @@ if [ -z "$CONTAINER_NAME" ]; then
   CONTAINER_NAME="akvo-rag-backend-1"  # fallback name
 fi
 echo "Using container: $CONTAINER_NAME"
+echo "Using credentials: $USERNAME"
 
 # Setup virtual environment if needed
 echo "Setting up virtual environment..."
@@ -28,9 +58,12 @@ import json
 import sys
 
 # Parse arguments
-kb_name = 'Living Income Benchmark Knowledge Base'
+kb_name = '$KB_NAME'
 openai_model = 'gpt-4o'
 output_file = None
+username = '$USERNAME'
+password = '$PASSWORD'
+rag_api_url = '$RAG_API_URL'
 
 args = sys.argv[1:]
 i = 0
@@ -50,9 +83,14 @@ while i < len(args):
 # Run evaluation
 print(f'Running evaluation on knowledge base: {kb_name}')
 print(f'Using model: {openai_model}')
+print(f'Using credentials: {username}')
+print(f'Using API URL: {rag_api_url}')
 results = run_headless_evaluation(
     kb_name=kb_name,
-    openai_model=openai_model
+    openai_model=openai_model,
+    username=username,
+    password=password,
+    rag_api_url=rag_api_url
 )
 
 # Output results

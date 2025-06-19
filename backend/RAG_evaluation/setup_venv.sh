@@ -13,11 +13,13 @@ if [ ! -d "/app/RAG_evaluation/venv" ]; then
   python -m venv /app/RAG_evaluation/venv
 fi
 
-# Activate virtual environment and install dependencies
-echo "Installing dependencies in virtual environment..."
+# Activate virtual environment and install/update dependencies
+echo "Installing/updating dependencies in virtual environment..."
 source /app/RAG_evaluation/venv/bin/activate
 pip install --upgrade pip
-pip install -r /app/RAG_evaluation/requirements.txt
+
+# Always update dependencies to ensure latest versions are installed
+pip install --upgrade -r /app/RAG_evaluation/requirements.txt
 
 echo "Virtual environment setup complete."
 echo "To activate: source /app/RAG_evaluation/venv/bin/activate"
