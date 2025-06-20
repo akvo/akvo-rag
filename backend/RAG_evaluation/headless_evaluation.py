@@ -633,6 +633,7 @@ async def evaluate_queries(
                 for metric in metric_names:
                     if metric in metrics_data and i < len(metrics_data[metric]):
                         result[metric] = metrics_data[metric][i]
+
     
     # Return combined results
     return {

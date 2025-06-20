@@ -136,15 +136,8 @@ async def run_evaluation(queries: List[str], kb_name: str):
         )
         
         # Update the results for display
-        rag_results = eval_results.get("rag_results", [])
-        ragas_results = eval_results.get("ragas_results", {})
-        
-        logger.info(f"DEBUG: Got {len(rag_results)} RAG results")
-        logger.info(f"DEBUG: RAGAS results keys: {list(ragas_results.keys())}")
-        logger.info(f"DEBUG: RAGAS success: {ragas_results.get('success', 'Not found')}")
-        
-        st.session_state.results = rag_results
-        st.session_state.ragas_results = ragas_results  # Store RAGAS results separately
+        # Update the results for display (metrics are now stored per-query)
+        st.session_state.results = eval_results.get("rag_results", [])
         
         # Store logs in session state
         st.session_state.logs = eval_results.get("logs", [])
@@ -152,9 +145,6 @@ async def run_evaluation(queries: List[str], kb_name: str):
         # Update progress bar to complete
         progress_bar.progress(1.0)
         status_text.text("Evaluation complete!")
-        
-        logger.info(f"DEBUG: Session state results length: {len(st.session_state.results)}")
-        logger.info(f"DEBUG: Session state has ragas_results: {'ragas_results' in st.session_state}")
         
     except Exception as e:
         logger.error(f"Error running evaluation: {str(e)}")
@@ -167,11 +157,7 @@ if st.button("Run Evaluation", disabled=st.session_state.evaluation_running):
     asyncio.run(run_evaluation(queries, kb_name))
 
 # Display results
-logger.info(f"DEBUG: Checking results display - results length: {len(st.session_state.results) if st.session_state.results else 0}")
-logger.info(f"DEBUG: Results exist: {bool(st.session_state.results)}")
-
 if st.session_state.results:
-    logger.info(f"DEBUG: Displaying {len(st.session_state.results)} results")
     st.subheader("Evaluation Results")
 
     # Prepare results for display
@@ -183,31 +169,25 @@ if st.session_state.results:
         st.error(f"Error displaying results: {str(e)}")
         results_df = pd.DataFrame()
 
-    # Display metrics if available
-    ragas_results = getattr(st.session_state, 'ragas_results', None)
-    logger.info(f"DEBUG: RAGAS results for display: {ragas_results is not None}")
-    logger.info(f"DEBUG: RAGAS available: {st.session_state.ragas_available}")
-    
-    if ragas_results and "success" in ragas_results and st.session_state.ragas_available:
-        logger.info(f"DEBUG: Displaying RAGAS metrics - success: {ragas_results.get('success')}")
-        metrics_data = ragas_results.get("metrics", {})
-        metric_names = ragas_results.get("metric_names", [])
+    # Display metrics summary (computed from per-query metrics)
+    if st.session_state.ragas_available:
+        # Collect metrics from individual results
+        all_metrics = {}
+        metric_names = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
         
-        if metrics_data:
-            try:
-                logger.info(f"DEBUG: Rendering metrics with data: {metrics_data}")
-                st.write("### Metrics Summary")
-                metrics_summary = {}
-                for metric in metric_names:
-                    if metric in metrics_data:
-                        values = metrics_data[metric]
-                        logger.info(f"DEBUG: Processing metric {metric}: {values}")
-                        if isinstance(values, list) and values:
-                            metrics_summary[metric] = sum(values) / len(values)
-                logger.info(f"DEBUG: Computed metrics summary: {metrics_summary}")
-            except Exception as e:
-                logger.error(f"DEBUG: Error in metrics display: {str(e)}")
-                st.error(f"Error displaying metrics: {str(e)}")
+        for result in st.session_state.results:
+            for metric in metric_names:
+                if metric in result:
+                    if metric not in all_metrics:
+                        all_metrics[metric] = []
+                    all_metrics[metric].append(result[metric])
+        
+        if all_metrics:
+            st.write("### Metrics Summary")
+            metrics_summary = {}
+            for metric, values in all_metrics.items():
+                if values:
+                    metrics_summary[metric] = sum(values) / len(values)
             
             # Display metrics in columns
             cols = st.columns(len(metrics_summary))
@@ -218,14 +198,14 @@ if st.session_state.results:
                 )
             
             # Create bar chart of metrics by query
-            if metric_names and metrics_data:
+            if all_metrics:
                 st.write("### Metrics by Query")
                 chart_data = []
-                for i, query in enumerate(queries):
+                for i, result in enumerate(st.session_state.results):
                     query_data = {"Query": f"Q{i+1}"}
                     for metric in metric_names:
-                        if metric in metrics_data and i < len(metrics_data[metric]):
-                            query_data[metric.replace('_', ' ').title()] = metrics_data[metric][i]
+                        if metric in result:
+                            query_data[metric.replace('_', ' ').title()] = result[metric]
                     chart_data.append(query_data)
                 
                 chart_df = pd.DataFrame(chart_data)
@@ -267,23 +247,17 @@ if st.session_state.results:
                     st.text(context)
 
             # Display metrics for this query if available
-            ragas_results = None
-            for res in st.session_state.results:
-                if "ragas_results" in res:
-                    ragas_results = res.get("ragas_results")
-                    break
-                    
-            if ragas_results and "success" in ragas_results and st.session_state.ragas_available:
-                metrics_data = ragas_results.get("metrics", {})
-                metric_names = ragas_results.get("metric_names", [])
-                
-                if metrics_data:
-                    st.write("**Metrics:**")
-                    query_metrics = {}
-                    for metric in metric_names:
-                        if metric in metrics_data and i < len(metrics_data[metric]):
-                            query_metrics[metric] = metrics_data[metric][i]
-                    st.json(query_metrics)
+            query_metrics = {}
+            metric_names = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
+            
+            for metric in metric_names:
+                if metric in result:
+                    query_metrics[metric] = result[metric]
+            
+            # Display metrics if we found any
+            if query_metrics:
+                st.write("**Metrics:**")
+                st.json(query_metrics)
 
             # Display error if present
             if 'error' in result:
