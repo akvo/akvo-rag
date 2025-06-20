@@ -176,8 +176,15 @@ def create_evaluation_llm(openai_model: str, api_key: str) -> Tuple[Any, Optiona
     """
     try:
         from langchain_openai import ChatOpenAI
-        eval_llm = ChatOpenAI(model=openai_model, api_key=api_key)
-        logger.info(f"Created LLM: {openai_model}")
+        from ragas.llms import LangchainLLMWrapper
+        
+        # Create the base LangChain LLM
+        base_llm = ChatOpenAI(model=openai_model, api_key=api_key)
+        
+        # Wrap it for RAGAS compatibility
+        eval_llm = LangchainLLMWrapper(base_llm)
+        
+        logger.info(f"Created and wrapped LLM: {openai_model}")
         return eval_llm, None
     except Exception as e:
         error_msg = f"Error creating LLM: {str(e)}"
@@ -270,12 +277,29 @@ def evaluate_faithfulness(eval_dataset, eval_llm) -> Tuple[Optional[Any], Option
             metrics=[faithfulness_metric]
         )
         
-        if hasattr(result, 'faithfulness'):
+        # Debug: log what we actually got back
+        logger.info(f"RAGAS result type: {type(result).__name__}")
+        logger.info(f"RAGAS result attributes: {[attr for attr in dir(result) if not attr.startswith('_')]}")
+        logger.info(f"RAGAS scores: {result.scores if hasattr(result, 'scores') else 'No scores attr'}")
+        
+        # Try accessing through scores attribute first (correct for RAGAS 0.2.x)
+        if hasattr(result, 'scores') and isinstance(result.scores, list) and len(result.scores) > 0:
+            # Extract faithfulness scores from list of dicts
+            faithfulness_scores = [score_dict.get('faithfulness') for score_dict in result.scores if 'faithfulness' in score_dict]
+            if faithfulness_scores:
+                logger.info(f"Faithfulness evaluation completed via scores: {len(faithfulness_scores)} scores")
+                return faithfulness_scores, None
+        elif hasattr(result, 'faithfulness'):
             faithfulness_scores = result.faithfulness
             logger.info(f"Faithfulness evaluation completed: {type(faithfulness_scores).__name__}")
             return faithfulness_scores.tolist() if hasattr(faithfulness_scores, 'tolist') else faithfulness_scores, None
         else:
             logger.warning("No faithfulness result found in evaluation output")
+            # Try to log what's actually in the result
+            if hasattr(result, '__dict__'):
+                logger.info(f"Result dict keys: {list(result.__dict__.keys())}")
+            if hasattr(result, 'scores') and hasattr(result.scores, '__dict__'):
+                logger.info(f"Scores dict keys: {list(result.scores.__dict__.keys())}")
             return None, "No faithfulness result found"
             
     except Exception as e:
@@ -309,12 +333,29 @@ def evaluate_answer_relevancy(eval_dataset, eval_llm) -> Tuple[Optional[Any], Op
             metrics=[answer_relevancy_metric]
         )
         
-        if hasattr(result, 'answer_relevancy'):
+        # Debug: log what we actually got back
+        logger.info(f"RAGAS result type: {type(result).__name__}")
+        logger.info(f"RAGAS result attributes: {[attr for attr in dir(result) if not attr.startswith('_')]}")
+        logger.info(f"RAGAS scores: {result.scores if hasattr(result, 'scores') else 'No scores attr'}")
+        
+        # Try accessing through scores attribute first (correct for RAGAS 0.2.x)
+        if hasattr(result, 'scores') and isinstance(result.scores, list) and len(result.scores) > 0:
+            # Extract answer_relevancy scores from list of dicts
+            relevancy_scores = [score_dict.get('answer_relevancy') for score_dict in result.scores if 'answer_relevancy' in score_dict]
+            if relevancy_scores:
+                logger.info(f"Answer relevancy evaluation completed via scores: {len(relevancy_scores)} scores")
+                return relevancy_scores, None
+        elif hasattr(result, 'answer_relevancy'):
             relevancy_scores = result.answer_relevancy
             logger.info(f"Answer relevancy evaluation completed: {type(relevancy_scores).__name__}")
             return relevancy_scores.tolist() if hasattr(relevancy_scores, 'tolist') else relevancy_scores, None
         else:
             logger.warning("No answer_relevancy result found in evaluation output")
+            # Try to log what's actually in the result
+            if hasattr(result, '__dict__'):
+                logger.info(f"Result dict keys: {list(result.__dict__.keys())}")
+            if hasattr(result, 'scores') and hasattr(result.scores, '__dict__'):
+                logger.info(f"Scores dict keys: {list(result.scores.__dict__.keys())}")
             return None, "No answer_relevancy result found"
             
     except Exception as e:

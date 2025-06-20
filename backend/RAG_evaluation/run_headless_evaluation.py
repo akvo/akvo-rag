@@ -82,13 +82,33 @@ def main():
         rag_api_url=rag_api_url
     )
 
-    # Output results
+    # Output results with JSON serialization fix
+    def convert_numpy_types(obj):
+        """Convert numpy types to native Python types for JSON serialization"""
+        import numpy as np
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, dict):
+            return {key: convert_numpy_types(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_numpy_types(item) for item in obj]
+        return obj
+    
+    # Convert results to handle numpy types
+    serializable_results = convert_numpy_types(results)
+    
     if output_file:
         with open(output_file, 'w') as f:
-            json.dump(results, f, indent=2)
+            json.dump(serializable_results, f, indent=2)
         print(f'Results saved to {output_file}')
     else:
-        print(json.dumps(results, indent=2))
+        print(json.dumps(serializable_results, indent=2))
 
 
 if __name__ == '__main__':

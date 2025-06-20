@@ -136,7 +136,15 @@ async def run_evaluation(queries: List[str], kb_name: str):
         )
         
         # Update the results for display
-        st.session_state.results = eval_results.get("rag_results", [])
+        rag_results = eval_results.get("rag_results", [])
+        ragas_results = eval_results.get("ragas_results", {})
+        
+        logger.info(f"DEBUG: Got {len(rag_results)} RAG results")
+        logger.info(f"DEBUG: RAGAS results keys: {list(ragas_results.keys())}")
+        logger.info(f"DEBUG: RAGAS success: {ragas_results.get('success', 'Not found')}")
+        
+        st.session_state.results = rag_results
+        st.session_state.ragas_results = ragas_results  # Store RAGAS results separately
         
         # Store logs in session state
         st.session_state.logs = eval_results.get("logs", [])
@@ -144,6 +152,9 @@ async def run_evaluation(queries: List[str], kb_name: str):
         # Update progress bar to complete
         progress_bar.progress(1.0)
         status_text.text("Evaluation complete!")
+        
+        logger.info(f"DEBUG: Session state results length: {len(st.session_state.results)}")
+        logger.info(f"DEBUG: Session state has ragas_results: {'ragas_results' in st.session_state}")
         
     except Exception as e:
         logger.error(f"Error running evaluation: {str(e)}")
@@ -156,31 +167,47 @@ if st.button("Run Evaluation", disabled=st.session_state.evaluation_running):
     asyncio.run(run_evaluation(queries, kb_name))
 
 # Display results
+logger.info(f"DEBUG: Checking results display - results length: {len(st.session_state.results) if st.session_state.results else 0}")
+logger.info(f"DEBUG: Results exist: {bool(st.session_state.results)}")
+
 if st.session_state.results:
+    logger.info(f"DEBUG: Displaying {len(st.session_state.results)} results")
     st.subheader("Evaluation Results")
 
     # Prepare results for display
-    results_df = pd.DataFrame(st.session_state.results)
+    try:
+        results_df = pd.DataFrame(st.session_state.results)
+        logger.info(f"DEBUG: Created DataFrame with {len(results_df)} rows")
+    except Exception as e:
+        logger.error(f"DEBUG: Error creating DataFrame: {str(e)}")
+        st.error(f"Error displaying results: {str(e)}")
+        results_df = pd.DataFrame()
 
     # Display metrics if available
-    ragas_results = None
-    for result in st.session_state.results:
-        if "ragas_results" in result:
-            ragas_results = result.get("ragas_results")
-            break
+    ragas_results = getattr(st.session_state, 'ragas_results', None)
+    logger.info(f"DEBUG: RAGAS results for display: {ragas_results is not None}")
+    logger.info(f"DEBUG: RAGAS available: {st.session_state.ragas_available}")
     
     if ragas_results and "success" in ragas_results and st.session_state.ragas_available:
+        logger.info(f"DEBUG: Displaying RAGAS metrics - success: {ragas_results.get('success')}")
         metrics_data = ragas_results.get("metrics", {})
         metric_names = ragas_results.get("metric_names", [])
         
         if metrics_data:
-            st.write("### Metrics Summary")
-            metrics_summary = {}
-            for metric in metric_names:
-                if metric in metrics_data:
-                    values = metrics_data[metric]
-                    if isinstance(values, list) and values:
-                        metrics_summary[metric] = sum(values) / len(values)
+            try:
+                logger.info(f"DEBUG: Rendering metrics with data: {metrics_data}")
+                st.write("### Metrics Summary")
+                metrics_summary = {}
+                for metric in metric_names:
+                    if metric in metrics_data:
+                        values = metrics_data[metric]
+                        logger.info(f"DEBUG: Processing metric {metric}: {values}")
+                        if isinstance(values, list) and values:
+                            metrics_summary[metric] = sum(values) / len(values)
+                logger.info(f"DEBUG: Computed metrics summary: {metrics_summary}")
+            except Exception as e:
+                logger.error(f"DEBUG: Error in metrics display: {str(e)}")
+                st.error(f"Error displaying metrics: {str(e)}")
             
             # Display metrics in columns
             cols = st.columns(len(metrics_summary))
