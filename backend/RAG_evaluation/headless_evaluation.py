@@ -164,6 +164,244 @@ async def generate_rag_responses(
 
     return results, all_logs
 
+def create_evaluation_llm(openai_model: str, api_key: str) -> Tuple[Any, Optional[str]]:
+    """Create LLM for RAGAS evaluation.
+    
+    Args:
+        openai_model: OpenAI model name
+        api_key: OpenAI API key
+        
+    Returns:
+        Tuple of (llm_instance, error_message)
+    """
+    try:
+        from langchain_openai import ChatOpenAI
+        eval_llm = ChatOpenAI(model=openai_model, api_key=api_key)
+        logger.info(f"Created LLM: {openai_model}")
+        return eval_llm, None
+    except Exception as e:
+        error_msg = f"Error creating LLM: {str(e)}"
+        logger.error(error_msg)
+        return None, error_msg
+
+def prepare_evaluation_data(evaluation_data: List[Dict[str, Any]]) -> Tuple[pd.DataFrame, bool, Optional[str]]:
+    """Prepare and validate evaluation data.
+    
+    Args:
+        evaluation_data: List of evaluation dictionaries
+        
+    Returns:
+        Tuple of (dataframe, has_contexts, error_message)
+    """
+    try:
+        # Convert data to DataFrame
+        eval_df = pd.DataFrame(evaluation_data)
+        logger.info(f"Created DataFrame with {len(eval_df)} rows")
+        
+        # Rename columns to match expected format
+        column_mapping = {
+            'query': 'user_input',
+            'answer': 'response', 
+            'contexts': 'retrieved_contexts'
+        }
+        
+        for old_col, new_col in column_mapping.items():
+            if old_col in eval_df.columns:
+                eval_df = eval_df.rename(columns={old_col: new_col})
+                logger.info(f"Renamed column '{old_col}' to '{new_col}'")
+        
+        # Check if we have any data to evaluate
+        if eval_df.empty:
+            return None, False, "No evaluation data available"
+        
+        # Check for contexts
+        has_contexts = False
+        if 'retrieved_contexts' in eval_df.columns:
+            context_counts = eval_df['retrieved_contexts'].apply(lambda x: len(x) if x else 0)
+            has_contexts = (context_counts > 0).any()
+            total_contexts = context_counts.sum()
+            rows_with_contexts = (context_counts > 0).sum()
+            
+            logger.info(f"Context analysis: {rows_with_contexts}/{len(eval_df)} rows have contexts, total contexts: {total_contexts}")
+            
+            if not has_contexts:
+                logger.warning("No retrieved contexts found in any rows - context-based metrics will be skipped")
+        else:
+            logger.warning("No 'retrieved_contexts' column found")
+        
+        # Debug info
+        logger.info(f"DataFrame columns: {eval_df.columns.tolist()}")
+        if len(eval_df) > 0:
+            sample_row = eval_df.iloc[0].to_dict()
+            # Truncate long values for logging
+            for key, value in sample_row.items():
+                if isinstance(value, str) and len(value) > 100:
+                    sample_row[key] = value[:100] + "..."
+            logger.info(f"Sample row: {sample_row}")
+        
+        return eval_df, has_contexts, None
+        
+    except Exception as e:
+        error_msg = f"Error preparing evaluation data: {str(e)}"
+        logger.error(error_msg)
+        return None, False, error_msg
+
+def evaluate_faithfulness(eval_dataset, eval_llm) -> Tuple[Optional[Any], Optional[str]]:
+    """Evaluate faithfulness metric.
+    
+    Args:
+        eval_dataset: EvaluationDataset instance
+        eval_llm: LLM instance for evaluation
+        
+    Returns:
+        Tuple of (metric_result, error_message)
+    """
+    try:
+        from ragas.metrics import Faithfulness
+        from ragas import evaluate
+        
+        logger.info("Initializing faithfulness metric...")
+        faithfulness_metric = Faithfulness(llm=eval_llm)
+        logger.info("Successfully initialized faithfulness metric")
+        
+        logger.info("Running faithfulness evaluation...")
+        result = evaluate(
+            dataset=eval_dataset,
+            metrics=[faithfulness_metric]
+        )
+        
+        if hasattr(result, 'faithfulness'):
+            faithfulness_scores = result.faithfulness
+            logger.info(f"Faithfulness evaluation completed: {type(faithfulness_scores).__name__}")
+            return faithfulness_scores.tolist() if hasattr(faithfulness_scores, 'tolist') else faithfulness_scores, None
+        else:
+            logger.warning("No faithfulness result found in evaluation output")
+            return None, "No faithfulness result found"
+            
+    except Exception as e:
+        error_msg = f"Faithfulness evaluation error: {str(e)}"
+        logger.error(error_msg)
+        import traceback
+        logger.error(traceback.format_exc())
+        return None, error_msg
+
+def evaluate_answer_relevancy(eval_dataset, eval_llm) -> Tuple[Optional[Any], Optional[str]]:
+    """Evaluate answer relevancy metric.
+    
+    Args:
+        eval_dataset: EvaluationDataset instance
+        eval_llm: LLM instance for evaluation
+        
+    Returns:
+        Tuple of (metric_result, error_message)
+    """
+    try:
+        from ragas.metrics import AnswerRelevancy
+        from ragas import evaluate
+        
+        logger.info("Initializing answer relevancy metric...")
+        answer_relevancy_metric = AnswerRelevancy(llm=eval_llm)
+        logger.info("Successfully initialized answer relevancy metric")
+        
+        logger.info("Running answer relevancy evaluation...")
+        result = evaluate(
+            dataset=eval_dataset,
+            metrics=[answer_relevancy_metric]
+        )
+        
+        if hasattr(result, 'answer_relevancy'):
+            relevancy_scores = result.answer_relevancy
+            logger.info(f"Answer relevancy evaluation completed: {type(relevancy_scores).__name__}")
+            return relevancy_scores.tolist() if hasattr(relevancy_scores, 'tolist') else relevancy_scores, None
+        else:
+            logger.warning("No answer_relevancy result found in evaluation output")
+            return None, "No answer_relevancy result found"
+            
+    except Exception as e:
+        error_msg = f"Answer relevancy evaluation error: {str(e)}"
+        logger.error(error_msg)
+        import traceback
+        logger.error(traceback.format_exc())
+        return None, error_msg
+
+def evaluate_context_precision(eval_dataset, eval_llm) -> Tuple[Optional[Any], Optional[str]]:
+    """Evaluate context precision metric (without reference).
+    
+    Args:
+        eval_dataset: EvaluationDataset instance
+        eval_llm: LLM instance for evaluation
+        
+    Returns:
+        Tuple of (metric_result, error_message)
+    """
+    try:
+        from ragas.metrics import LLMContextPrecisionWithoutReference
+        from ragas import evaluate
+        
+        logger.info("Initializing context precision metric...")
+        context_precision_metric = LLMContextPrecisionWithoutReference(llm=eval_llm)
+        logger.info("Successfully initialized context precision metric")
+        
+        logger.info("Running context precision evaluation...")
+        result = evaluate(
+            dataset=eval_dataset,
+            metrics=[context_precision_metric]
+        )
+        
+        if hasattr(result, 'context_precision_without_reference'):
+            precision_scores = result.context_precision_without_reference
+            logger.info(f"Context precision evaluation completed: {type(precision_scores).__name__}")
+            return precision_scores.tolist() if hasattr(precision_scores, 'tolist') else precision_scores, None
+        else:
+            logger.warning("No context_precision_without_reference result found in evaluation output")
+            return None, "No context_precision_without_reference result found"
+            
+    except Exception as e:
+        error_msg = f"Context precision evaluation error: {str(e)}"
+        logger.error(error_msg)
+        import traceback
+        logger.error(traceback.format_exc())
+        return None, error_msg
+
+def evaluate_context_relevancy(eval_dataset, eval_llm) -> Tuple[Optional[Any], Optional[str]]:
+    """Evaluate context relevancy metric.
+    
+    Args:
+        eval_dataset: EvaluationDataset instance
+        eval_llm: LLM instance for evaluation
+        
+    Returns:
+        Tuple of (metric_result, error_message)
+    """
+    try:
+        from ragas.metrics import ContextRelevancy
+        from ragas import evaluate
+        
+        logger.info("Initializing context relevancy metric...")
+        context_relevancy_metric = ContextRelevancy(llm=eval_llm)
+        logger.info("Successfully initialized context relevancy metric")
+        
+        logger.info("Running context relevancy evaluation...")
+        result = evaluate(
+            dataset=eval_dataset,
+            metrics=[context_relevancy_metric]
+        )
+        
+        if hasattr(result, 'context_relevancy'):
+            relevancy_scores = result.context_relevancy
+            logger.info(f"Context relevancy evaluation completed: {type(relevancy_scores).__name__}")
+            return relevancy_scores.tolist() if hasattr(relevancy_scores, 'tolist') else relevancy_scores, None
+        else:
+            logger.warning("No context_relevancy result found in evaluation output")
+            return None, "No context_relevancy result found"
+            
+    except Exception as e:
+        error_msg = f"Context relevancy evaluation error: {str(e)}"
+        logger.error(error_msg)
+        import traceback
+        logger.error(traceback.format_exc())
+        return None, error_msg
+
 def run_ragas_evaluation(
     evaluation_data: List[Dict[str, Any]], 
     openai_model: str = "gpt-4o",
@@ -179,6 +417,8 @@ def run_ragas_evaluation(
     Returns:
         Dictionary with evaluation results or error
     """
+    logger.info("Starting RAGAS evaluation...")
+    
     # Check for OpenAI API key
     if openai_api_key:
         os.environ["OPENAI_API_KEY"] = openai_api_key
@@ -188,112 +428,104 @@ def run_ragas_evaluation(
         return {"error": "OpenAI API key not provided. Set OPENAI_API_KEY environment variable."}
     
     # Setup RAGAS
+    logger.info("Setting up RAGAS metrics...")
     ragas_available, metric_classes, metric_names, error_message = setup_ragas()
     if not ragas_available:
         return {"error": error_message}
     
-    logger.info(f"Using metrics: {', '.join(metric_names)}")
+    logger.info(f"Available metrics: {', '.join(metric_names)}")
     
     try:
-        # Convert data to DataFrame
-        eval_df = pd.DataFrame(evaluation_data)
-        
-        # Rename columns to match expected format
-        if 'query' in eval_df.columns:
-            eval_df = eval_df.rename(columns={'query': 'user_input'})
-        if 'answer' in eval_df.columns:
-            eval_df = eval_df.rename(columns={'answer': 'response'})
-        if 'contexts' in eval_df.columns:
-            eval_df = eval_df.rename(columns={'contexts': 'retrieved_contexts'})
-        
-        # Check if we have any data to evaluate
-        if eval_df.empty:
-            return {"error": "No evaluation data available"}
-            
-        # Split data into entries with and without contexts
-        has_contexts_df = eval_df[eval_df['retrieved_contexts'].apply(lambda x: len(x) > 0)] if 'retrieved_contexts' in eval_df.columns else pd.DataFrame()
-        no_contexts_df = eval_df[eval_df['retrieved_contexts'].apply(lambda x: len(x) == 0)] if 'retrieved_contexts' in eval_df.columns else eval_df
-        
-        # Use metrics that don't require contexts if we have no retrieved contexts
-        if has_contexts_df.empty and not no_contexts_df.empty:
-            logger.info("No retrieved contexts found, using context-free metrics only")
-        
-        # Debug info
-        logger.info(f"DataFrame columns: {eval_df.columns.tolist()}")
-        logger.info(f"Sample row: {eval_df.iloc[0].to_dict()}")
+        # Prepare evaluation data
+        eval_df, has_contexts, error_msg = prepare_evaluation_data(evaluation_data)
+        if error_msg:
+            return {"error": error_msg}
         
         # Create LLM for evaluation
-        try:
-            from langchain_openai import ChatOpenAI
-            eval_llm = ChatOpenAI(model=openai_model, api_key=api_key)
-            logger.info(f"Created LLM: {openai_model}")
-        except Exception as e:
-            logger.error(f"Error creating LLM: {str(e)}")
-            return {"error": f"Error creating LLM: {str(e)}"}
+        eval_llm, error_msg = create_evaluation_llm(openai_model, api_key)
+        if error_msg:
+            return {"error": error_msg}
         
-        # Import evaluate function and dataset
+        # Convert to EvaluationDataset
         try:
-            from ragas import evaluate
             from ragas import EvaluationDataset
-            
-            # Determine which metrics to use based on available data
-            available_metrics = []
-            available_metric_names = []
-            
-            for i, metric_class in enumerate(metric_classes):
-                metric_name = metric_names[i]
-                
-                # Skip context-based metrics if we have no contexts
-                if has_contexts_df.empty and metric_name in ["context_precision_without_reference", "context_relevancy"]:
-                    logger.info(f"Skipping {metric_name} - no retrieved contexts available")
-                    continue
-                    
-                try:
-                    metric_instance = metric_class(llm=eval_llm)
-                    available_metrics.append(metric_instance)
-                    available_metric_names.append(metric_name)
-                except Exception as e:
-                    logger.warning(f"Could not initialize {metric_class.__name__}: {e}")
-            
-            if not available_metrics:
-                return {"error": "No metrics could be initialized"}
-            
-            logger.info(f"Using metrics: {', '.join(available_metric_names)}")
-            
-            # Convert to EvaluationDataset
             eval_dataset = EvaluationDataset.from_pandas(eval_df)
             logger.info(f"Created EvaluationDataset with {len(eval_dataset)} samples")
-            
-            # Run evaluation
-            result = evaluate(
-                dataset=eval_dataset,
-                metrics=available_metrics
-            )
-            
-            # Process results
-            processed_results = {}
-            for metric_name in available_metric_names:
-                if hasattr(result, metric_name):
-                    metric_result = getattr(result, metric_name)
-                    processed_results[metric_name] = metric_result.tolist() if hasattr(metric_result, 'tolist') else metric_result
-            
-            return {
-                "success": True,
-                "metrics": processed_results,
-                "metric_names": available_metric_names
-            }
-            
         except Exception as e:
-            logger.error(f"RAGAS evaluation error: {str(e)}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return {"error": f"RAGAS evaluation error: {str(e)}"}
+            error_msg = f"Error creating EvaluationDataset: {str(e)}"
+            logger.error(error_msg)
+            return {"error": error_msg}
+        
+        # Run individual metric evaluations
+        results = {}
+        successful_metrics = []
+        errors = []
+        
+        # Evaluate faithfulness (doesn't require contexts)
+        logger.info("Evaluating faithfulness metric...")
+        faithfulness_result, error_msg = evaluate_faithfulness(eval_dataset, eval_llm)
+        if error_msg:
+            errors.append(f"faithfulness: {error_msg}")
+        else:
+            results["faithfulness"] = faithfulness_result
+            successful_metrics.append("faithfulness")
+        
+        # Evaluate answer relevancy (doesn't require contexts)
+        logger.info("Evaluating answer relevancy metric...")
+        relevancy_result, error_msg = evaluate_answer_relevancy(eval_dataset, eval_llm)
+        if error_msg:
+            errors.append(f"answer_relevancy: {error_msg}")
+        else:
+            results["answer_relevancy"] = relevancy_result
+            successful_metrics.append("answer_relevancy")
+        
+        # Evaluate context-based metrics only if contexts are available
+        if has_contexts:
+            logger.info("Evaluating context precision metric...")
+            precision_result, error_msg = evaluate_context_precision(eval_dataset, eval_llm)
+            if error_msg:
+                errors.append(f"context_precision_without_reference: {error_msg}")
+            else:
+                results["context_precision_without_reference"] = precision_result
+                successful_metrics.append("context_precision_without_reference")
             
+            logger.info("Evaluating context relevancy metric...")
+            context_relevancy_result, error_msg = evaluate_context_relevancy(eval_dataset, eval_llm)
+            if error_msg:
+                errors.append(f"context_relevancy: {error_msg}")
+            else:
+                results["context_relevancy"] = context_relevancy_result
+                successful_metrics.append("context_relevancy")
+        else:
+            logger.info("Skipping context-based metrics - no contexts available")
+            errors.append("context_precision_without_reference: No contexts available")
+            errors.append("context_relevancy: No contexts available")
+        
+        # Check if any metrics succeeded
+        if not successful_metrics:
+            error_details = "; ".join(errors) if errors else "Unknown reasons"
+            return {"error": f"No metrics could be evaluated. Details: {error_details}"}
+        
+        logger.info(f"Successfully evaluated {len(successful_metrics)} metrics: {', '.join(successful_metrics)}")
+        if errors:
+            logger.warning(f"Failed to evaluate some metrics: {'; '.join(errors)}")
+        
+        logger.info("RAGAS evaluation completed successfully")
+        return {
+            "success": True,
+            "metrics": results,
+            "metric_names": successful_metrics,
+            "has_contexts": has_contexts,
+            "total_samples": len(eval_dataset),
+            "errors": errors
+        }
+        
     except Exception as e:
-        logger.error(f"Error in run_ragas_evaluation: {str(e)}")
+        error_msg = f"Error in run_ragas_evaluation: {str(e)}"
+        logger.error(error_msg)
         import traceback
         logger.error(traceback.format_exc())
-        return {"error": f"Error in run_ragas_evaluation: {str(e)}"}
+        return {"error": error_msg}
 
 async def evaluate_queries(
     queries: List[str],

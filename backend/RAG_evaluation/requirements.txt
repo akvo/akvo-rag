@@ -5,8 +5,3 @@ ragas==0.2.15  # Pinned to a specific version to avoid API changes
 pandas==2.0.0
 plotly==5.18.0
 httpx==0.26.0
-
-# LangChain dependencies - updated for Ragas 0.2.15 compatibility
-langchain-openai>=0.1.0
-langchain-core>=0.2.0
-langchain>=0.2.0
