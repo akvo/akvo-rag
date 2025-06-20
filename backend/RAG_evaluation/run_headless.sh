@@ -7,20 +7,23 @@
 #   -p PASSWORD    Password for authentication (default: password)
 #   -a API_URL     RAG API URL (default: http://localhost:8000)
 #   -k KB_NAME     Knowledge base name (default: Living Income Benchmark Knowledge Base)
+#   -c CSV_FILE    CSV file with 'prompt' column (optional, uses default prompts if not provided)
 
 # Default values
 USERNAME="admin@example.com"
 PASSWORD="password"
 RAG_API_URL="http://localhost:8000"
 KB_NAME="Living Income Benchmark Knowledge Base"
+CSV_FILE=""
 
 # Parse command line options
-while getopts "u:p:a:k:" opt; do
+while getopts "u:p:a:k:c:" opt; do
   case $opt in
     u) USERNAME="$OPTARG" ;;
     p) PASSWORD="$OPTARG" ;;
     a) RAG_API_URL="$OPTARG" ;;
     k) KB_NAME="$OPTARG" ;;
+    c) CSV_FILE="$OPTARG" ;;
     \?) echo "Invalid option: -$OPTARG" >&2; exit 1 ;;
   esac
 done
@@ -52,52 +55,4 @@ docker exec $CONTAINER_NAME bash /app/RAG_evaluation/setup_venv.sh
 
 # Run the headless evaluation in the virtual environment
 echo "Starting headless evaluation..."
-docker exec -e OPENAI_API_KEY="${OPENAI_API_KEY}" $CONTAINER_NAME bash -c "cd /app/RAG_evaluation && source venv/bin/activate && python -c \"
-from headless_evaluation import run_headless_evaluation
-import json
-import sys
-
-# Parse arguments
-kb_name = '$KB_NAME'
-openai_model = 'gpt-4o'
-output_file = None
-username = '$USERNAME'
-password = '$PASSWORD'
-rag_api_url = '$RAG_API_URL'
-
-args = sys.argv[1:]
-i = 0
-while i < len(args):
-    if args[i] == '--kb' and i+1 < len(args):
-        kb_name = args[i+1]
-        i += 2
-    elif args[i] == '--openai-model' and i+1 < len(args):
-        openai_model = args[i+1]
-        i += 2
-    elif args[i] == '--output' and i+1 < len(args):
-        output_file = args[i+1]
-        i += 2
-    else:
-        i += 1
-
-# Run evaluation
-print(f'Running evaluation on knowledge base: {kb_name}')
-print(f'Using model: {openai_model}')
-print(f'Using credentials: {username}')
-print(f'Using API URL: {rag_api_url}')
-results = run_headless_evaluation(
-    kb_name=kb_name,
-    openai_model=openai_model,
-    username=username,
-    password=password,
-    rag_api_url=rag_api_url
-)
-
-# Output results
-if output_file:
-    with open(output_file, 'w') as f:
-        json.dump(results, f, indent=2)
-    print(f'Results saved to {output_file}')
-else:
-    print(json.dumps(results, indent=2))
-\" $*"
+docker exec -e OPENAI_API_KEY="${OPENAI_API_KEY}" -e KB_NAME="$KB_NAME" -e USERNAME="$USERNAME" -e PASSWORD="$PASSWORD" -e RAG_API_URL="$RAG_API_URL" -e CSV_FILE="$CSV_FILE" $CONTAINER_NAME bash -c "cd /app/RAG_evaluation && source venv/bin/activate && python run_headless_evaluation.py $*"

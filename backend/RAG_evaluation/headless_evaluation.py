@@ -206,13 +206,17 @@ def run_ragas_evaluation(
         if 'contexts' in eval_df.columns:
             eval_df = eval_df.rename(columns={'contexts': 'retrieved_contexts'})
         
-        # Filter out entries with empty contexts as they can't be meaningfully evaluated
-        if 'retrieved_contexts' in eval_df.columns:
-            # Only evaluate entries that have retrieved contexts
-            eval_df = eval_df[eval_df['retrieved_contexts'].apply(lambda x: len(x) > 0)]
-            
+        # Check if we have any data to evaluate
         if eval_df.empty:
-            return {"error": "No evaluation data with retrieved contexts available"}
+            return {"error": "No evaluation data available"}
+            
+        # Split data into entries with and without contexts
+        has_contexts_df = eval_df[eval_df['retrieved_contexts'].apply(lambda x: len(x) > 0)] if 'retrieved_contexts' in eval_df.columns else pd.DataFrame()
+        no_contexts_df = eval_df[eval_df['retrieved_contexts'].apply(lambda x: len(x) == 0)] if 'retrieved_contexts' in eval_df.columns else eval_df
+        
+        # Use metrics that don't require contexts if we have no retrieved contexts
+        if has_contexts_df.empty and not no_contexts_df.empty:
+            logger.info("No retrieved contexts found, using context-free metrics only")
         
         # Debug info
         logger.info(f"DataFrame columns: {eval_df.columns.tolist()}")
@@ -232,39 +236,51 @@ def run_ragas_evaluation(
             from ragas import evaluate
             from ragas import EvaluationDataset
             
+            # Determine which metrics to use based on available data
+            available_metrics = []
+            available_metric_names = []
+            
+            for i, metric_class in enumerate(metric_classes):
+                metric_name = metric_names[i]
+                
+                # Skip context-based metrics if we have no contexts
+                if has_contexts_df.empty and metric_name in ["context_precision_without_reference", "context_relevancy"]:
+                    logger.info(f"Skipping {metric_name} - no retrieved contexts available")
+                    continue
+                    
+                try:
+                    metric_instance = metric_class(llm=eval_llm)
+                    available_metrics.append(metric_instance)
+                    available_metric_names.append(metric_name)
+                except Exception as e:
+                    logger.warning(f"Could not initialize {metric_class.__name__}: {e}")
+            
+            if not available_metrics:
+                return {"error": "No metrics could be initialized"}
+            
+            logger.info(f"Using metrics: {', '.join(available_metric_names)}")
+            
             # Convert to EvaluationDataset
             eval_dataset = EvaluationDataset.from_pandas(eval_df)
             logger.info(f"Created EvaluationDataset with {len(eval_dataset)} samples")
             
-            # Initialize metrics with LLM
-            metrics = []
-            for metric_class in metric_classes:
-                try:
-                    metric_instance = metric_class(llm=eval_llm)
-                    metrics.append(metric_instance)
-                except Exception as e:
-                    logger.warning(f"Could not initialize {metric_class.__name__}: {e}")
-            
-            if not metrics:
-                return {"error": "No metrics could be initialized"}
-            
             # Run evaluation
             result = evaluate(
                 dataset=eval_dataset,
-                metrics=metrics
+                metrics=available_metrics
             )
             
             # Process results
             processed_results = {}
-            for i, metric_name in enumerate(metric_names):
-                if i < len(metrics) and hasattr(result, metric_name):
+            for metric_name in available_metric_names:
+                if hasattr(result, metric_name):
                     metric_result = getattr(result, metric_name)
                     processed_results[metric_name] = metric_result.tolist() if hasattr(metric_result, 'tolist') else metric_result
             
             return {
                 "success": True,
                 "metrics": processed_results,
-                "metric_names": metric_names
+                "metric_names": available_metric_names
             }
             
         except Exception as e:
