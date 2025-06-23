@@ -76,11 +76,11 @@ def setup_ragas() -> Tuple[bool, List, List[str], Optional[str]]:
             logger.info("LLMContextPrecisionWithoutReference metric not available")
 
         try:
-            from ragas.metrics import ContextRelevancy
-            metrics.append(ContextRelevancy)
+            from ragas.metrics import ContextRelevance
+            metrics.append(ContextRelevance)
             metric_names.append("context_relevancy")
         except ImportError:
-            logger.info("ContextRelevancy metric not available")
+            logger.info("ContextRelevance metric not available")
 
         return True, metrics, metric_names, None
     except Exception as e:
@@ -140,7 +140,6 @@ async def generate_rag_responses(
                 "query": query,
                 "ground_truths": [""],  # No ground truth for now
                 "answer": rag_result["response"],
-                "response": rag_result["response"],  # For backwards compatibility
                 "contexts": contexts,
                 "response_time": end_time - start_time,
                 "kb_id": rag_result.get("kb_id"),
@@ -150,7 +149,6 @@ async def generate_rag_responses(
             # Store error result
             results.append({
                 "query": query,
-                "response": rag_result.get("response", ""),
                 "answer": rag_result.get("response", ""),  # For RAGAS compatibility
                 "contexts": [],
                 "ground_truths": [""],  # Still need this for RAGAS compatibility
@@ -389,11 +387,33 @@ def evaluate_context_precision(eval_dataset, eval_llm) -> Tuple[Optional[Any], O
             metrics=[context_precision_metric]
         )
         
-        if hasattr(result, 'context_precision_without_reference'):
-            precision_scores = result.context_precision_without_reference
+        # Debug: Check what attributes are available
+        logger.info(f"RAGAS result type: {type(result).__name__}")
+        logger.info(f"RAGAS result attributes: {[attr for attr in dir(result) if not attr.startswith('_')]}")
+        
+        # Try different possible attribute names for context precision
+        possible_attrs = ['context_precision_without_reference', 'context_precision', 'contextprecision', 'llm_context_precision_without_reference']
+        precision_scores = None
+        
+        for attr in possible_attrs:
+            if hasattr(result, attr):
+                precision_scores = getattr(result, attr)
+                logger.info(f"Found context precision result under attribute: {attr}")
+                break
+        
+        if precision_scores is not None:
             logger.info(f"Context precision evaluation completed: {type(precision_scores).__name__}")
             return precision_scores.tolist() if hasattr(precision_scores, 'tolist') else precision_scores, None
         else:
+            # Try to get from scores like other metrics
+            if hasattr(result, 'scores') and result.scores:
+                logger.info(f"RAGAS scores: {result.scores}")
+                for score_dict in result.scores:
+                    for key in score_dict:
+                        if 'precision' in key.lower() and 'context' in key.lower():
+                            logger.info(f"Found context precision in scores under key: {key}")
+                            return [score_dict[key]], None
+            
             logger.warning("No context_precision_without_reference result found in evaluation output")
             return None, "No context_precision_without_reference result found"
             
@@ -415,11 +435,11 @@ def evaluate_context_relevancy(eval_dataset, eval_llm) -> Tuple[Optional[Any], O
         Tuple of (metric_result, error_message)
     """
     try:
-        from ragas.metrics import ContextRelevancy
+        from ragas.metrics import ContextRelevance
         from ragas import evaluate
         
         logger.info("Initializing context relevancy metric...")
-        context_relevancy_metric = ContextRelevancy(llm=eval_llm)
+        context_relevancy_metric = ContextRelevance(llm=eval_llm)
         logger.info("Successfully initialized context relevancy metric")
         
         logger.info("Running context relevancy evaluation...")
@@ -428,11 +448,33 @@ def evaluate_context_relevancy(eval_dataset, eval_llm) -> Tuple[Optional[Any], O
             metrics=[context_relevancy_metric]
         )
         
-        if hasattr(result, 'context_relevancy'):
-            relevancy_scores = result.context_relevancy
+        # Debug: Check what attributes are available
+        logger.info(f"RAGAS result type: {type(result).__name__}")
+        logger.info(f"RAGAS result attributes: {[attr for attr in dir(result) if not attr.startswith('_')]}")
+        
+        # Try different possible attribute names for context relevancy
+        possible_attrs = ['context_relevancy', 'context_relevance', 'contextrelevancy', 'contextrelevance']
+        relevancy_scores = None
+        
+        for attr in possible_attrs:
+            if hasattr(result, attr):
+                relevancy_scores = getattr(result, attr)
+                logger.info(f"Found context relevancy result under attribute: {attr}")
+                break
+        
+        if relevancy_scores is not None:
             logger.info(f"Context relevancy evaluation completed: {type(relevancy_scores).__name__}")
             return relevancy_scores.tolist() if hasattr(relevancy_scores, 'tolist') else relevancy_scores, None
         else:
+            # Try to get from scores like other metrics
+            if hasattr(result, 'scores') and result.scores:
+                logger.info(f"RAGAS scores: {result.scores}")
+                for score_dict in result.scores:
+                    for key in score_dict:
+                        if 'context_relevance' in key.lower() or 'relevancy' in key.lower():
+                            logger.info(f"Found context relevancy in scores under key: {key}")
+                            return [score_dict[key]], None
+            
             logger.warning("No context_relevancy result found in evaluation output")
             return None, "No context_relevancy result found"
             

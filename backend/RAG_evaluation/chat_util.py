@@ -230,45 +230,98 @@ class RagChatUtil:
 
                 full_response = ""
                 context_data = {}
+                sse_buffer = ""  # Buffer to accumulate SSE data across chunks
+                context_processed = False  # Track if we've processed the context chunk
 
                 async for chunk in response.aiter_text():
                     if chunk.strip():
-                        # Parse SSE format
-                        for line in chunk.split('\n'):
+                        # Add to buffer for complete SSE message reconstruction
+                        sse_buffer += chunk
+                        
+                        # Process complete SSE lines
+                        lines = sse_buffer.split('\n')
+                        # Keep last incomplete line in buffer for next chunk
+                        sse_buffer = lines[-1] if not sse_buffer.endswith('\n') else ""
+                        
+                        for line in lines[:-1] if not sse_buffer.endswith('\n') else lines:
                             if line.startswith('0:'):
-                                # Extract content
-                                json_part = line[2:]
-                                if not json_part.strip():
-                                    continue  # Skip empty content
-                                try:
-                                    content = json.loads(json_part)
-                                except json.JSONDecodeError as e:
-                                    self._log("json_parse_error", {"line": line, "json_part": json_part}, {"error": str(e)})
+                                # Extract raw JSON content from SSE format
+                                raw_content = line[2:].strip()
+                                if not raw_content:
                                     continue
-
-                                # Check if it contains context
-                                if "__LLM_RESPONSE__" in content:
-                                    parts = content.split("__LLM_RESPONSE__")
-                                    if len(parts) > 1:
-                                        try:
-                                            context_b64 = parts[0]
-                                            context_json = base64.b64decode(context_b64).decode()
-                                            context_data = json.loads(context_json)
-
-                                            self._log("received_context", {"chat_id": chat_id},
-                                                    {"num_chunks": len(context_data.get("context", []))})
-                                        except Exception as e:
-                                            self._log("parse_context", {"data": parts[0]}, {"error": str(e)})
-
-                                    # Add actual response text
-                                    if len(parts) > 1:
-                                        response_text = parts[1]
-                                        full_response += response_text
-                                        yield response_text, context_data
+                                
+                                logger.info(f"RAW SSE LINE: '{raw_content[:100]}...'")
+                                
+                                # Check if this might be base64 context data first
+                                if not context_processed and raw_content.startswith('"') and len(raw_content) > 100:
+                                    # This looks like a long quoted string - likely base64 context
+                                    try:
+                                        parsed_content = json.loads(raw_content)
+                                        # This is a valid JSON string, check if it contains base64 + separator
+                                        if "__LLM_RESPONSE__" in parsed_content:
+                                            logger.info(f"PROCESSING BASE64 CONTEXT WITH SEPARATOR: '{parsed_content[:50]}...'")
+                                            parts = parsed_content.split("__LLM_RESPONSE__", 1)
+                                            base64_part = parts[0]
+                                            response_part = parts[1] if len(parts) > 1 else ""
+                                            
+                                            try:
+                                                # Add base64 padding if needed
+                                                padding_needed = 4 - len(base64_part) % 4
+                                                if padding_needed != 4:
+                                                    base64_part += '=' * padding_needed
+                                                
+                                                # Decode base64 context
+                                                context_json = base64.b64decode(base64_part).decode()
+                                                context_data = json.loads(context_json)
+                                                
+                                                logger.info(f"SUCCESSFULLY PARSED CONTEXT: {len(context_data.get('context', []))} chunks")
+                                                self._log("received_context", {"chat_id": chat_id},
+                                                        {"num_chunks": len(context_data.get("context", []))})
+                                                
+                                                context_processed = True
+                                                
+                                                # If there's response text after separator, yield it
+                                                if response_part:
+                                                    full_response += response_part
+                                                    yield response_part, context_data
+                                                    
+                                            except Exception as e:
+                                                logger.error(f"ERROR PARSING CONTEXT: {e}")
+                                                self._log("parse_context_error", {"data": base64_part[:100]}, {"error": str(e)})
+                                                # Treat as regular content if parsing fails
+                                                full_response += parsed_content
+                                                yield parsed_content, context_data
+                                                context_processed = True
+                                        else:
+                                            # This might be base64 context without separator yet - check if it looks like base64
+                                            if len(parsed_content) > 50 and all(c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=' for c in parsed_content[:50]):
+                                                logger.info("BASE64 CONTENT WITHOUT SEPARATOR - might be truncated, treating as response")
+                                                full_response += parsed_content
+                                                yield parsed_content, context_data
+                                            else:
+                                                # Regular response text
+                                                full_response += parsed_content
+                                                yield parsed_content, context_data
+                                    except json.JSONDecodeError:
+                                        # Not valid JSON, skip
+                                        logger.info(f"UNPARSEABLE QUOTED STRING: '{raw_content[:50]}...'")
+                                        continue
                                 else:
-                                    # Regular response chunk
-                                    full_response += content
-                                    yield content, context_data
+                                    # Try to parse as complete JSON (normal response text)
+                                    try:
+                                        parsed_content = json.loads(raw_content)
+                                        # Regular response text
+                                        full_response += parsed_content
+                                        yield parsed_content, context_data
+                                        continue
+                                        
+                                    except json.JSONDecodeError:
+                                        # Not valid JSON, skip
+                                        logger.info(f"UNPARSEABLE CONTENT: '{raw_content[:50]}...'")
+                                        continue
+
+                # Log completion
+                logger.info(f"SSE STREAM COMPLETE: response_length={len(full_response)}, context_processed={context_processed}")
 
                 self._log("send_message_complete", {"chat_id": chat_id},
                         {"status": "success", "response_length": len(full_response)})
