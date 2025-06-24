@@ -70,10 +70,14 @@ async def generate_response(
                 .all()
             )
             for message in all_history_messages:
+                marker = "__LLM_RESPONSE__"
+                content = message.content
+                if content and marker in content:
+                    content = content.split(marker, 1)[1].strip()
                 messages["messages"].append(
                     {
                         "role": message.role,
-                        "content": message.content,
+                        "content": content,
                     }
                 )
         # EOL generate last n message in backend
