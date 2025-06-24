@@ -3,12 +3,8 @@ window.config_default = {
   title: "Akvo RAG",
   kb_options: [
     {
-      kb_id: 25,
-      label: "UNEP Knowledge Base with 500 docs",
-    },
-    {
-      kb_id: 26,
-      label: "UNEP Knowledge Base with 250 docs",
+      kb_id: 34,
+      label: "UNEP Knowledge Base",
     },
     {
       kb_id: 28,
@@ -40,7 +36,7 @@ window.config_living_income = {
 };
 
 window.config_local = {
-  title: "UNEP Min",
-  kb_id: 40,
+  title: "TDT #3",
+  kb_id: 43,
   wsURL: "ws://localhost:81/ws/chat",
 };

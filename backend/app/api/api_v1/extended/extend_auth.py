@@ -1,5 +1,5 @@
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from requests.exceptions import RequestException
 
@@ -81,8 +81,9 @@ def update_user_by_email(
             status_code=404,
             detail="A user with this email not found.",
         )
-    user.email = user_in.email
-    user.username = user_in.username
+    # DO NOT UPDATE USERNAME IF USER EXIST
+    # user.email = user_in.email
+    # user.username = user.username or user_in.username
     user.is_active = user_in.is_active
     user.is_superuser = user_in.is_superuser
     db.commit()
