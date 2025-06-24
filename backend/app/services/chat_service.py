@@ -35,6 +35,7 @@ async def generate_response(
     db: Session,
     max_history_length: Optional[int] = 10,
     generate_last_n_messages: Optional[bool] = False,
+    strict_mode: Optional[bool] = True,
 ) -> AsyncGenerator[str, None]:
     try:
         """
@@ -70,14 +71,10 @@ async def generate_response(
                 .all()
             )
             for message in all_history_messages:
-                marker = "__LLM_RESPONSE__"
-                content = message.content
-                if content and marker in content:
-                    content = content.split(marker, 1)[1].strip()
                 messages["messages"].append(
                     {
                         "role": message.role,
-                        "content": content,
+                        "content": message.content,
                     }
                 )
         # EOL generate last n message in backend
@@ -142,13 +139,26 @@ async def generate_response(
 
         # Create contextualize question prompt
         contextualize_q_system_prompt = (
-            "Given a chat history and the latest user question, your task is to create a clear, "
-            "standalone question that captures the user's intent. If the question references previous "
-            "conversation context, incorporate that context into a self-contained question. "
-            "If the question is already clear and standalone, return it unchanged. "
-            "Focus on preserving the user's original language and intent while making the question "
-            "searchable against a knowledge base."
+            "You are given a chat history and the user's latest question. Your task is to rewrite the user's input as a clear, "
+            "standalone question that fully captures their intent. The reformulated question must be understandable on its own, "
+            "without requiring access to earlier parts of the conversation.\n\n"
+            "If the user refers to earlier messages or prior context (e.g., 'what did we talk about?', 'summarize our chat', "
+            "'what was your last response?', or 'can you remind me what I said before?'), incorporate the relevant details from the "
+            "chat history into the rewritten question. Be precise—do not omit specific topics, facts, or tools mentioned earlier.\n\n"
+            "Your reformulated question should:\n"
+            "1. Retain the user's original language and tone.\n"
+            "2. Be specific and context-aware.\n"
+            "3. Be suitable for use in retrieval or question-answering over a knowledge base.\n\n"
+            "Examples:\n"
+            "- User: 'Can you summarize what we’ve discussed so far?'\n"
+            "  Reformulated: 'Summarize our conversation so far about fine-tuning a language model.'\n"
+            "- User: 'What was the tool you mentioned before?'\n"
+            "  Reformulated: 'What was the name of the tool you mentioned earlier for data labeling in NLP pipelines?'\n"
+            "- User: 'What did I ask you in the beginning?'\n"
+            "  Reformulated: 'What was my first question regarding LangChain integration?'\n\n"
+            "Focus on maintaining the intent while making the question precise and independently interpretable."
         )
+
         contextualize_q_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", contextualize_q_system_prompt),
@@ -163,27 +173,46 @@ async def generate_response(
         )
 
         # Create QA prompt
-        qa_system_prompt = (
-            "You are a helpful AI assistant that provides accurate, clear answers based on the given context. "
-            "Your goal is to be as helpful as possible while staying truthful to the provided information.\n\n"
-            "## Instructions:\n"
-            "1. **Answer Strategy**: Use the provided contexts to give comprehensive, accurate answers. "
-            "Try to synthesize information from multiple contexts when relevant.\n"
-            "2. **Citation Format**: Cite sources using [citation:x] where x is the context number (1, 2, 3, etc.). "
-            "Place citations at the end of sentences that use that information. "
-            "For information from multiple contexts, use [citation:1][citation:2].\n"
-            "3. **Language**: Respond in the same language as the user's question, except for code, "
-            "technical terms, proper names, and citations.\n"
-            "4. **Completeness**: Provide comprehensive answers when possible. Only say 'information is missing on [topic]' "
-            "if the contexts truly lack essential information needed to answer the core question. "
-            "If you have partial information, provide what you can and note what might be incomplete.\n"
-            "5. **Style**: Write in a natural, conversational tone suitable for general users. "
-            "Explain technical concepts clearly when needed. Keep responses concise but thorough.\n"
-            "6. **Context Usage**: The contexts are numbered sequentially. Use them intelligently - "
-            "combine related information and present it coherently rather than just repeating context verbatim.\n\n"
-            "Context: {context}\n\n"
-            "Remember: Your primary goal is to help the user with accurate, useful information from the provided contexts."
+        qa_flexible_prompt = (
+            "You are given a user question, and please write clean, concise and accurate answer to the question. "
+            "You will be given a set of related contexts to the question, which are numbered sequentially starting from 1. "
+            "Each context has an implicit reference number based on its position in the array (first context is 1, second is 2, etc.). "
+            "Please use these contexts and cite them using the format [citation:x] at the end of each sentence where applicable. "
+            "Your answer must be correct, accurate and written by an expert using an unbiased and professional tone. "
+            "Please limit to 1024 tokens. Do not give any information that is not related to the question, and do not repeat. "
+            "Say 'information is missing on' followed by the related topic, if the given context do not provide sufficient information. "
+            "If a sentence draws from multiple contexts, please list all applicable citations, like [citation:1][citation:2]. "
+            "Other than code and specific names and citations, your answer must be written in the same language as the question. "
+            "Be concise.\n\nContext: {context}\n\n"
+            "Remember: Cite contexts by their position number (1 for first context, 2 for second, etc.) and don't blindly "
+            "repeat the contexts verbatim."
         )
+        qa_strict_prompt = (
+            "You are a highly knowledgeable and factual AI assistant. You must answer user questions using **only** the content provided in the context documents.\n\n"
+            "### Strict Answering Rules:\n"
+            "1. **Use Context Only**: Do not use external knowledge or assumptions. All parts of your answer must be supported by the given context.\n"
+            "2. **Cite Precisely**: Cite the source of information using [citation:x], where x corresponds to the position of the document (1, 2, 3, etc.). "
+            "Citations must be placed at the end of each sentence where the context is used.\n"
+            "3. **If Information Is Missing**:\n"
+            "   - If key information needed to answer the question is missing, respond with: \n"
+            "     'Information is missing on [specific topic] based on the provided context.'\n"
+            "   - If the context gives partial information, summarize what is known and clearly state what is missing.\n"
+            "4. **Writing Style & Language**:\n"
+            "   - Respond in the same language used in the user’s question.\n"
+            "   - Be clear, concise, and professional.\n"
+            "   - Do not copy context verbatim—summarize or paraphrase it when necessary.\n"
+            "5. **Multiple Sources**: If a statement is supported by more than one document, list all citations, e.g., [citation:1][citation:3].\n"
+            "6. **Length Limit**: Keep the full answer under 1024 tokens. Be brief but complete.\n\n"
+            "### Provided Context:\n{context}\n"
+        )
+
+        if strict_mode:
+            qa_system_prompt = qa_strict_prompt
+        else:
+            qa_system_prompt = (
+                qa_flexible_prompt  # your original or a looser version
+            )
+
         qa_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", qa_system_prompt),
@@ -229,8 +258,9 @@ async def generate_response(
             {"input": query, "chat_history": chat_history}
         ):
             if "context" in chunk:
+                retrieved_docs = chunk["context"]
                 serializable_context = []
-                for context in chunk["context"]:
+                for context in retrieved_docs:
                     serializable_doc = {
                         "page_content": context.page_content.replace(
                             '"', '\\"'
