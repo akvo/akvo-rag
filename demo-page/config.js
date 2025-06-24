@@ -35,9 +35,8 @@ window.config_living_income = {
   wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
 };
 
-// LOCAL ENV
 window.config_local = {
-  title: "Chat from Local",
-  kb_id: 38,
+  title: "TDT #3",
+  kb_id: 43,
   wsURL: "ws://localhost:81/ws/chat",
 };

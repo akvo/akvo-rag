@@ -35,6 +35,7 @@ async def generate_response(
     db: Session,
     max_history_length: Optional[int] = 10,
     generate_last_n_messages: Optional[bool] = False,
+    strict_mode: Optional[bool] = True,
 ) -> AsyncGenerator[str, None]:
     try:
         """
@@ -70,14 +71,10 @@ async def generate_response(
                 .all()
             )
             for message in all_history_messages:
-                marker = "__LLM_RESPONSE__"
-                content = message.content
-                if content and marker in content:
-                    content = content.split(marker, 1)[1].strip()
                 messages["messages"].append(
                     {
                         "role": message.role,
-                        "content": content,
+                        "content": message.content,
                     }
                 )
         # EOL generate last n message in backend
@@ -142,12 +139,26 @@ async def generate_response(
 
         # Create contextualize question prompt
         contextualize_q_system_prompt = (
-            "Given a chat history and the latest user question "
-            "which might reference context in the chat history, "
-            "formulate a standalone question which can be understood "
-            "without the chat history. Do NOT answer the question, just "
-            "reformulate it if needed and otherwise return it as is."
+            "You are given a chat history and the user's latest question. Your task is to rewrite the user's input as a clear, "
+            "standalone question that fully captures their intent. The reformulated question must be understandable on its own, "
+            "without requiring access to earlier parts of the conversation.\n\n"
+            "If the user refers to earlier messages or prior context (e.g., 'what did we talk about?', 'summarize our chat', "
+            "'what was your last response?', or 'can you remind me what I said before?'), incorporate the relevant details from the "
+            "chat history into the rewritten question. Be precise—do not omit specific topics, facts, or tools mentioned earlier.\n\n"
+            "Your reformulated question should:\n"
+            "1. Retain the user's original language and tone.\n"
+            "2. Be specific and context-aware.\n"
+            "3. Be suitable for use in retrieval or question-answering over a knowledge base.\n\n"
+            "Examples:\n"
+            "- User: 'Can you summarize what we’ve discussed so far?'\n"
+            "  Reformulated: 'Summarize our conversation so far about fine-tuning a language model.'\n"
+            "- User: 'What was the tool you mentioned before?'\n"
+            "  Reformulated: 'What was the name of the tool you mentioned earlier for data labeling in NLP pipelines?'\n"
+            "- User: 'What did I ask you in the beginning?'\n"
+            "  Reformulated: 'What was my first question regarding LangChain integration?'\n\n"
+            "Focus on maintaining the intent while making the question precise and independently interpretable."
         )
+
         contextualize_q_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", contextualize_q_system_prompt),
@@ -162,7 +173,7 @@ async def generate_response(
         )
 
         # Create QA prompt
-        qa_system_prompt = (
+        qa_flexible_prompt = (
             "You are given a user question, and please write clean, concise and accurate answer to the question. "
             "You will be given a set of related contexts to the question, which are numbered sequentially starting from 1. "
             "Each context has an implicit reference number based on its position in the array (first context is 1, second is 2, etc.). "
@@ -176,6 +187,32 @@ async def generate_response(
             "Remember: Cite contexts by their position number (1 for first context, 2 for second, etc.) and don't blindly "
             "repeat the contexts verbatim."
         )
+        qa_strict_prompt = (
+            "You are a highly knowledgeable and factual AI assistant. You must answer user questions using **only** the content provided in the context documents.\n\n"
+            "### Strict Answering Rules:\n"
+            "1. **Use Context Only**: Do not use external knowledge or assumptions. All parts of your answer must be supported by the given context.\n"
+            "2. **Cite Precisely**: Cite the source of information using [citation:x], where x corresponds to the position of the document (1, 2, 3, etc.). "
+            "Citations must be placed at the end of each sentence where the context is used.\n"
+            "3. **If Information Is Missing**:\n"
+            "   - If key information needed to answer the question is missing, respond with: \n"
+            "     'Information is missing on [specific topic] based on the provided context.'\n"
+            "   - If the context gives partial information, summarize what is known and clearly state what is missing.\n"
+            "4. **Writing Style & Language**:\n"
+            "   - Respond in the same language used in the user’s question.\n"
+            "   - Be clear, concise, and professional.\n"
+            "   - Do not copy context verbatim—summarize or paraphrase it when necessary.\n"
+            "5. **Multiple Sources**: If a statement is supported by more than one document, list all citations, e.g., [citation:1][citation:3].\n"
+            "6. **Length Limit**: Keep the full answer under 1024 tokens. Be brief but complete.\n\n"
+            "### Provided Context:\n{context}\n"
+        )
+
+        if strict_mode:
+            qa_system_prompt = qa_strict_prompt
+        else:
+            qa_system_prompt = (
+                qa_flexible_prompt  # your original or a looser version
+            )
+
         qa_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", qa_system_prompt),
@@ -221,8 +258,9 @@ async def generate_response(
             {"input": query, "chat_history": chat_history}
         ):
             if "context" in chunk:
+                retrieved_docs = chunk["context"]
                 serializable_context = []
-                for context in chunk["context"]:
+                for context in retrieved_docs:
                     serializable_doc = {
                         "page_content": context.page_content.replace(
                             '"', '\\"'
