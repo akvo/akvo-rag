@@ -33,6 +33,12 @@ class RagChatUtil:
         self.client = httpx.AsyncClient(timeout=60.0)
         self.instrumentation_enabled = False
         self.logs = []
+        
+        # Log initialization details
+        logger.info(f"=== RAG CHAT UTIL INITIALIZED ===")
+        logger.info(f"Base URL: '{base_url}'")
+        logger.info(f"Username: '{username}'")
+        logger.info(f"Password: {'***' if password else 'None'}")
 
     def enable_instrumentation(self):
         """Enable instrumentation for logging API interactions."""
@@ -76,19 +82,31 @@ class RagChatUtil:
             "password": self.password
         }
 
+        logger.info(f"Attempting login to: {login_url}")
+        logger.info(f"Login payload: username='{self.username}', password={'***' if self.password else 'None'}")
         self._log("login", {"username": self.username}, "Logging in")
 
         try:
             response = await self.client.post(login_url, data=payload)
+            logger.info(f"Login response: status={response.status_code}")
+            
             if response.status_code == 200:
                 token_data = response.json()
                 self.token = token_data.get("access_token")
+                logger.info(f"✅ Login successful - token received: {'***' if self.token else 'None'}")
                 self._log("login", {}, {"status": "success"})
                 return True
             else:
+                logger.error(f"❌ Login failed: HTTP {response.status_code}")
+                try:
+                    error_text = response.text
+                    logger.error(f"Login error response: {error_text}")
+                except:
+                    pass
                 self._log("login", {}, {"status": "failed", "status_code": response.status_code})
                 return False
         except Exception as e:
+            logger.error(f"❌ Login exception: {str(e)}")
             self._log("login", {}, {"status": "error", "error": str(e)})
             return False
 
@@ -116,12 +134,21 @@ class RagChatUtil:
             if response.status_code == 200:
                 kbs = response.json()
                 self._log("get_knowledge_bases", {}, {"status": "success", "count": len(kbs)})
+                
+                # Log all available knowledge base names for debugging
+                kb_names = [kb.get("name", "NO_NAME") for kb in kbs]
+                logger.info(f"Available knowledge bases ({len(kbs)} total):")
+                for i, name in enumerate(kb_names):
+                    logger.info(f"  {i+1}. '{name}'")
+                
                 return kbs
             else:
                 self._log("get_knowledge_bases", {}, {"status": "failed", "status_code": response.status_code})
+                logger.error(f"Failed to get knowledge bases: HTTP {response.status_code}")
                 return []
         except Exception as e:
             self._log("get_knowledge_bases", {}, {"status": "error", "error": str(e)})
+            logger.error(f"Exception getting knowledge bases: {str(e)}")
             return []
 
     async def get_knowledge_base_by_name(self, name: str) -> Optional[Dict[str, Any]]:
@@ -136,14 +163,23 @@ class RagChatUtil:
         kbs = await self.get_knowledge_bases()
 
         self._log("get_knowledge_base_by_name", {"name": name}, {"total_kbs": len(kbs)})
-        # Log the returned kbs
-        self._log("get_knowledge_base_by_name", {"name": name}, {"kbs": kbs if len(kbs) < 10 else "...(truncated)"})
-
-        for kb in kbs:
-            if kb.get("name") == name:
-                self._log("get_knowledge_base_by_name", {"name": name}, {"status": "found", "kb_id": kb.get("id")})
+        
+        # Enhanced logging for knowledge base search
+        logger.info(f"Searching for knowledge base: '{name}'")
+        logger.info(f"Comparing against {len(kbs)} available knowledge bases...")
+        
+        for i, kb in enumerate(kbs):
+            kb_name = kb.get("name", "NO_NAME")
+            is_match = kb_name == name
+            logger.info(f"  KB {i+1}: '{kb_name}' -> Match: {is_match}")
+            
+            if is_match:
+                kb_id = kb.get("id")
+                logger.info(f"✅ FOUND: Knowledge base '{name}' with ID: {kb_id}")
+                self._log("get_knowledge_base_by_name", {"name": name}, {"status": "found", "kb_id": kb_id})
                 return kb
 
+        logger.error(f"❌ NOT FOUND: Knowledge base '{name}' not found in {len(kbs)} available knowledge bases")
         self._log("get_knowledge_base_by_name", {"name": name}, {"status": "not_found"})
         return None
 

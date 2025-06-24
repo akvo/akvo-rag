@@ -408,11 +408,21 @@ def evaluate_context_precision(eval_dataset, eval_llm) -> Tuple[Optional[Any], O
             # Try to get from scores like other metrics
             if hasattr(result, 'scores') and result.scores:
                 logger.info(f"RAGAS scores: {result.scores}")
+                # Find the correct key for context precision
+                precision_key = None
                 for score_dict in result.scores:
                     for key in score_dict:
                         if 'precision' in key.lower() and 'context' in key.lower():
+                            precision_key = key
                             logger.info(f"Found context precision in scores under key: {key}")
-                            return [score_dict[key]], None
+                            break
+                    if precision_key:
+                        break
+                
+                if precision_key:
+                    # Extract scores from all queries
+                    precision_scores = [score_dict.get(precision_key) for score_dict in result.scores if precision_key in score_dict]
+                    return precision_scores, None
             
             logger.warning("No context_precision_without_reference result found in evaluation output")
             return None, "No context_precision_without_reference result found"
@@ -469,11 +479,21 @@ def evaluate_context_relevancy(eval_dataset, eval_llm) -> Tuple[Optional[Any], O
             # Try to get from scores like other metrics
             if hasattr(result, 'scores') and result.scores:
                 logger.info(f"RAGAS scores: {result.scores}")
+                # Find the correct key for context relevancy
+                relevancy_key = None
                 for score_dict in result.scores:
                     for key in score_dict:
                         if 'context_relevance' in key.lower() or 'relevancy' in key.lower():
+                            relevancy_key = key
                             logger.info(f"Found context relevancy in scores under key: {key}")
-                            return [score_dict[key]], None
+                            break
+                    if relevancy_key:
+                        break
+                
+                if relevancy_key:
+                    # Extract scores from all queries
+                    relevancy_scores = [score_dict.get(relevancy_key) for score_dict in result.scores if relevancy_key in score_dict]
+                    return relevancy_scores, None
             
             logger.warning("No context_relevancy result found in evaluation output")
             return None, "No context_relevancy result found"
@@ -671,10 +691,21 @@ async def evaluate_queries(
             metrics_data = ragas_results.get("metrics", {})
             metric_names = ragas_results.get("metric_names", [])
             
+            # Check for incomplete metric evaluation (common RAGAS issue)
+            expected_results = len(rag_results)
+            for metric, values in metrics_data.items():
+                if len(values) != expected_results:
+                    logger.warning(f"RAGAS metric '{metric}' only has {len(values)} values for {expected_results} queries")
+            
             for i, result in enumerate(rag_results):
                 for metric in metric_names:
                     if metric in metrics_data and i < len(metrics_data[metric]):
                         result[metric] = metrics_data[metric][i]
+                    else:
+                        # For missing context-based metrics, assign None to indicate failed evaluation
+                        if metric in ['context_precision_without_reference', 'context_relevancy']:
+                            result[metric] = None
+                            logger.warning(f"RAGAS failed to evaluate '{metric}' for query {i+1}")
 
     
     # Return combined results
