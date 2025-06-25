@@ -28,8 +28,146 @@ DEFAULT_TEST_QUERIES = [
     "What is the purpose of establishing a living income benchmark?"
 ]
 
-def setup_ragas() -> Tuple[bool, List, List[str], Optional[str]]:
+def detect_csv_format(df: pd.DataFrame) -> Tuple[bool, bool, Optional[str]]:
+    """Detect CSV format and validate structure.
+    
+    Args:
+        df: Pandas DataFrame from CSV
+        
+    Returns:
+        Tuple of (has_prompts, has_references, error_message)
+    """
+    # Check for required prompt column
+    prompt_columns = ['prompt', 'query', 'question']
+    prompt_col = None
+    for col in prompt_columns:
+        if col in df.columns:
+            prompt_col = col
+            break
+    
+    if not prompt_col:
+        return False, False, f"CSV must contain one of these columns: {', '.join(prompt_columns)}"
+    
+    # Check for reference answer columns
+    reference_columns = ['reference_answer', 'reference', 'ground_truth', 'answer']
+    reference_col = None
+    for col in reference_columns:
+        if col in df.columns:
+            reference_col = col
+            break
+    
+    has_references = reference_col is not None
+    
+    # Validate data
+    if df.empty:
+        return False, False, "CSV file is empty"
+    
+    # Check if prompt column has data
+    non_empty_prompts = df[prompt_col].dropna().str.strip().astype(bool).sum()
+    if non_empty_prompts == 0:
+        return False, False, f"No valid prompts found in '{prompt_col}' column"
+    
+    # If we have references, check if they have data
+    if has_references:
+        non_empty_refs = df[reference_col].dropna().str.strip().astype(bool).sum()
+        if non_empty_refs == 0:
+            has_references = False  # References column exists but is empty
+    
+    return True, has_references, None
+
+def parse_csv_queries(df: pd.DataFrame) -> Tuple[List[str], Optional[List[str]], Optional[str]]:
+    """Parse queries and optional reference answers from CSV DataFrame.
+    
+    Args:
+        df: Pandas DataFrame from CSV
+        
+    Returns:
+        Tuple of (queries, reference_answers, error_message)
+    """
+    has_prompts, has_references, error_msg = detect_csv_format(df)
+    if error_msg:
+        return [], None, error_msg
+    
+    # Find prompt column
+    prompt_columns = ['prompt', 'query', 'question']
+    prompt_col = None
+    for col in prompt_columns:
+        if col in df.columns:
+            prompt_col = col
+            break
+    
+    # Extract queries
+    queries = df[prompt_col].dropna().str.strip().tolist()
+    queries = [q for q in queries if q]  # Remove empty strings
+    
+    reference_answers = None
+    if has_references:
+        # Find reference column
+        reference_columns = ['reference_answer', 'reference', 'ground_truth', 'answer']
+        reference_col = None
+        for col in reference_columns:
+            if col in df.columns:
+                reference_col = col
+                break
+        
+        if reference_col:
+            reference_answers = df[reference_col].fillna('').str.strip().tolist()
+            # Ensure reference_answers matches queries length
+            if len(reference_answers) != len(df):
+                # Pad or truncate to match DataFrame length, then filter to match queries
+                reference_answers = reference_answers[:len(df)]
+            
+            # Filter reference answers to match non-empty queries
+            filtered_refs = []
+            for i, query in enumerate(df[prompt_col]):
+                if pd.notna(query) and str(query).strip():
+                    ref_idx = min(i, len(reference_answers) - 1)
+                    filtered_refs.append(reference_answers[ref_idx] if ref_idx >= 0 else '')
+            reference_answers = filtered_refs
+    
+    logger.info(f"Parsed {len(queries)} queries" + 
+                (f" with {len([r for r in reference_answers if r])} reference answers" if reference_answers else " (no references)"))
+    
+    return queries, reference_answers, None
+
+def validate_queries_and_references(queries: List[str], reference_answers: Optional[List[str]] = None) -> Tuple[bool, Optional[str]]:
+    """Validate queries and reference answers.
+    
+    Args:
+        queries: List of query strings
+        reference_answers: Optional list of reference answers
+        
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not queries:
+        return False, "No queries provided"
+    
+    if len(queries) == 0:
+        return False, "Query list is empty"
+    
+    # Check for empty queries
+    empty_queries = [i for i, q in enumerate(queries) if not q or not q.strip()]
+    if empty_queries:
+        return False, f"Empty queries found at positions: {empty_queries}"
+    
+    # Validate reference answers if provided
+    if reference_answers is not None:
+        if len(reference_answers) != len(queries):
+            return False, f"Mismatch: {len(queries)} queries but {len(reference_answers)} reference answers"
+        
+        # Check for reference quality (warn but don't fail)
+        empty_refs = [i for i, ref in enumerate(reference_answers) if not ref or not ref.strip()]
+        if empty_refs:
+            logger.warning(f"Empty reference answers found at positions: {empty_refs} - these queries will use reference-free metrics only")
+    
+    return True, None
+
+def setup_ragas(enable_reference_metrics: bool = False) -> Tuple[bool, List, List[str], Optional[str]]:
     """Set up RAGAS for evaluation and determine available metrics.
+    
+    Args:
+        enable_reference_metrics: If True, include metrics that require reference answers
     
     Returns:
         Tuple of (ragas_available, metrics, metric_names, error_message)
@@ -82,6 +220,42 @@ def setup_ragas() -> Tuple[bool, List, List[str], Optional[str]]:
         except ImportError:
             logger.info("ContextRelevance metric not available")
 
+        # Add reference-based metrics if enabled
+        if enable_reference_metrics:
+            logger.info("Adding reference-based metrics...")
+            
+            try:
+                from ragas.metrics import AnswerSimilarity
+                metrics.append(AnswerSimilarity)
+                metric_names.append("answer_similarity")
+                logger.info("Added AnswerSimilarity metric")
+            except ImportError:
+                logger.info("AnswerSimilarity metric not available")
+            
+            try:
+                from ragas.metrics import AnswerCorrectness
+                metrics.append(AnswerCorrectness)
+                metric_names.append("answer_correctness")
+                logger.info("Added AnswerCorrectness metric")
+            except ImportError:
+                logger.info("AnswerCorrectness metric not available")
+            
+            try:
+                from ragas.metrics import ContextPrecision
+                metrics.append(ContextPrecision)
+                metric_names.append("context_precision")
+                logger.info("Added ContextPrecision metric (standard version)")
+            except ImportError:
+                logger.info("ContextPrecision metric not available")
+            
+            try:
+                from ragas.metrics import ContextRecall
+                metrics.append(ContextRecall)
+                metric_names.append("context_recall")
+                logger.info("Added ContextRecall metric")
+            except ImportError:
+                logger.info("ContextRecall metric not available")
+
         return True, metrics, metric_names, None
     except Exception as e:
         logger.error(f"Error setting up RAGAS: {str(e)}")
@@ -93,6 +267,7 @@ async def generate_rag_responses(
     rag_api_url: str = "http://localhost:8000", 
     username: str = "admin@example.com", 
     password: str = "password",
+    reference_answers: Optional[List[str]] = None,
     progress_callback=None
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Generate RAG responses for a list of queries
@@ -103,6 +278,7 @@ async def generate_rag_responses(
         rag_api_url: URL of the RAG API
         username: Username for API authentication
         password: Password for API authentication
+        reference_answers: Optional list of reference answers (must match queries length if provided)
         progress_callback: Optional callback function for progress updates
         
     Returns:
@@ -133,12 +309,18 @@ async def generate_rag_responses(
         logs = chat_util.get_logs()
         all_logs.extend(logs)
 
+        # Get reference answer for this query
+        reference_answer = ""
+        if reference_answers and i < len(reference_answers):
+            reference_answer = reference_answers[i] or ""
+
         # Format response
         if "error" not in rag_result:
             contexts = [item["page_content"] for item in rag_result.get("contexts", [])]
             results.append({
                 "query": query,
-                "ground_truths": [""],  # No ground truth for now
+                "ground_truths": [reference_answer] if reference_answer else [""],
+                "reference_answer": reference_answer,  # Store for easier access
                 "answer": rag_result["response"],
                 "contexts": contexts,
                 "response_time": end_time - start_time,
@@ -151,7 +333,8 @@ async def generate_rag_responses(
                 "query": query,
                 "answer": rag_result.get("response", ""),  # For RAGAS compatibility
                 "contexts": [],
-                "ground_truths": [""],  # Still need this for RAGAS compatibility
+                "ground_truths": [reference_answer] if reference_answer else [""],
+                "reference_answer": reference_answer,
                 "error": rag_result.get("error", "Unknown error"),
                 "response_time": end_time - start_time
             })
@@ -508,7 +691,8 @@ def evaluate_context_relevancy(eval_dataset, eval_llm) -> Tuple[Optional[Any], O
 def run_ragas_evaluation(
     evaluation_data: List[Dict[str, Any]], 
     openai_model: str = "gpt-4o",
-    openai_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None,
+    enable_reference_metrics: bool = False
 ) -> Dict[str, Any]:
     """Run RAGAS evaluation on the given data
     
@@ -516,6 +700,7 @@ def run_ragas_evaluation(
         evaluation_data: List of dictionaries with query, answer, contexts, ground_truths
         openai_model: OpenAI model to use for evaluation
         openai_api_key: OpenAI API key (will use env var if None)
+        enable_reference_metrics: If True, enable metrics that require reference answers
         
     Returns:
         Dictionary with evaluation results or error
@@ -532,7 +717,7 @@ def run_ragas_evaluation(
     
     # Setup RAGAS
     logger.info("Setting up RAGAS metrics...")
-    ragas_available, metric_classes, metric_names, error_message = setup_ragas()
+    ragas_available, metric_classes, metric_names, error_message = setup_ragas(enable_reference_metrics)
     if not ragas_available:
         return {"error": error_message}
     
@@ -543,6 +728,22 @@ def run_ragas_evaluation(
         eval_df, has_contexts, error_msg = prepare_evaluation_data(evaluation_data)
         if error_msg:
             return {"error": error_msg}
+        
+        # Check for reference answers availability
+        has_references = False
+        if 'ground_truths' in eval_df.columns:
+            # Check if we have meaningful reference answers (not just empty strings)
+            non_empty_refs = eval_df['ground_truths'].apply(
+                lambda x: any(ref.strip() for ref in x) if isinstance(x, list) and x else False
+            )
+            has_references = non_empty_refs.any()
+            ref_count = non_empty_refs.sum()
+            logger.info(f"Reference analysis: {ref_count}/{len(eval_df)} rows have reference answers")
+            
+            if enable_reference_metrics and not has_references:
+                logger.warning("Reference metrics requested but no reference answers found - some metrics will be skipped")
+        else:
+            logger.warning("No 'ground_truths' column found")
         
         # Create LLM for evaluation
         eval_llm, error_msg = create_evaluation_llm(openai_model, api_key)
@@ -638,6 +839,7 @@ async def evaluate_queries(
     rag_api_url: str = "http://localhost:8000",
     username: str = "admin@example.com",
     password: str = "password",
+    reference_answers: Optional[List[str]] = None,
     progress_callback=None,
     ragas_status_callback=None
 ) -> Dict[str, Any]:
@@ -651,12 +853,21 @@ async def evaluate_queries(
         rag_api_url: URL of the RAG API
         username: Username for authentication
         password: Password for authentication
+        reference_answers: Optional list of reference answers for enhanced metrics
         progress_callback: Optional callback for query progress updates
         ragas_status_callback: Optional callback for RAGAS status updates
         
     Returns:
         Dictionary with evaluation results
     """
+    # Validate inputs
+    is_valid, error_msg = validate_queries_and_references(queries, reference_answers)
+    if not is_valid:
+        return {"error": error_msg}
+    
+    # Determine if we should enable reference metrics
+    enable_reference_metrics = reference_answers is not None and any(ref.strip() for ref in reference_answers)
+    
     # Generate RAG responses
     rag_results, logs = await generate_rag_responses(
         queries=queries,
@@ -664,6 +875,7 @@ async def evaluate_queries(
         rag_api_url=rag_api_url,
         username=username,
         password=password,
+        reference_answers=reference_answers,
         progress_callback=progress_callback
     )
     
@@ -683,7 +895,8 @@ async def evaluate_queries(
         ragas_results = run_ragas_evaluation(
             evaluation_data=rag_results,
             openai_model=openai_model,
-            openai_api_key=openai_api_key
+            openai_api_key=openai_api_key,
+            enable_reference_metrics=enable_reference_metrics
         )
         
         if "success" in ragas_results and ragas_results["success"]:

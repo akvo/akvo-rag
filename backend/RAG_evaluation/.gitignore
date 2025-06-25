@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Downloaded/test template files
+*_template.csv
+test_*.csv
+downloaded_*.csv
+
+# Screenshots from testing
+*.png
+
+# Keep templates and example directories but ignore temporary files
+!templates/
+templates/*_temp.csv
+templates/test_*.csv
+
+!example_csv_inputs/
+example_csv_inputs/*_temp.csv
+example_csv_inputs/test_*.csv

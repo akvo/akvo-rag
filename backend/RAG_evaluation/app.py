@@ -9,7 +9,7 @@ import streamlit as st
 import asyncio
 import pandas as pd
 import plotly.express as px
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import os
 import logging
@@ -95,18 +95,61 @@ elif st.session_state.ragas_available:
 # Test queries
 st.subheader("Test Queries")
 
+# Mode selection
+col1, col2 = st.columns([1, 3])
+with col1:
+    evaluation_mode = st.radio(
+        "Evaluation Mode",
+        ["Basic (4 metrics)", "Full (8 metrics)"],
+        help="Basic: Uses 4 reference-free metrics. Full: Uses 8 metrics including reference-based ones."
+    )
+
+with col2:
+    if evaluation_mode == "Full (8 metrics)":
+        st.info("💡 Full mode requires reference answers for enhanced metrics like Answer Similarity and Answer Correctness.")
+    else:
+        st.info("ℹ️ Basic mode evaluates responses without requiring reference answers.")
+
+enable_reference_metrics = evaluation_mode == "Full (8 metrics)"
+
+# Store mode in session state
+if "enable_reference_metrics" not in st.session_state:
+    st.session_state.enable_reference_metrics = False
+st.session_state.enable_reference_metrics = enable_reference_metrics
+
 # CSV upload option with template download
 st.write("**Option 1: Use CSV file**")
 
 # Template CSV download button (above upload for better workflow)
-template_csv = "prompt\nWhat is your first question?\nWhat is your second question?\nWhat is your third question?"
+def load_template(template_name: str) -> str:
+    """Load template content from templates directory."""
+    template_path = os.path.join(os.path.dirname(__file__), "templates", template_name)
+    try:
+        with open(template_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        logger.warning(f"Template file not found: {template_path}")
+        # Fallback to hardcoded content
+        if template_name == "full_template.csv":
+            return "prompt,reference_answer\nWhat is your first question?,This is the expected answer to the first question.\nWhat is your second question?,This is the expected answer to the second question.\nWhat is your third question?,This is the expected answer to the third question."
+        else:
+            return "prompt\nWhat is your first question?\nWhat is your second question?\nWhat is your third question?"
+
+if enable_reference_metrics:
+    template_csv = load_template("full_template.csv")
+    template_filename = "query_template_with_references.csv"
+    help_text = "Download a CSV template with reference answers for full evaluation mode"
+else:
+    template_csv = load_template("basic_template.csv")
+    template_filename = "query_template_basic.csv"
+    help_text = "Download a basic CSV template for queries only"
 
 st.download_button(
     label="📥 Download CSV Template",
     data=template_csv,
-    file_name="query_template.csv",
+    file_name=template_filename,
     mime="text/csv",
-    help="Download a CSV template, fill it with your queries, then upload it below",
+    help=help_text,
     use_container_width=False
 )
 
@@ -118,41 +161,99 @@ uploaded_file = st.file_uploader(
 )
 
 # Initialize queries from uploaded file or default
+uploaded_queries = []
+uploaded_references = None
 if uploaded_file is not None:
     try:
         import pandas as pd
-        df = pd.read_csv(uploaded_file)
+        from headless_evaluation import parse_csv_queries
         
-        if 'prompt' not in df.columns:
-            st.error("CSV file must contain a 'prompt' column")
+        df = pd.read_csv(uploaded_file)
+        uploaded_queries, uploaded_references, error_msg = parse_csv_queries(df)
+        
+        if error_msg:
+            st.error(f"Error parsing CSV: {error_msg}")
             uploaded_queries = []
+            uploaded_references = None
         else:
-            uploaded_queries = df['prompt'].dropna().tolist()
-            uploaded_queries = [str(q).strip() for q in uploaded_queries if str(q).strip()]
-            st.success(f"✅ Loaded {len(uploaded_queries)} queries from CSV")
+            # Show success message with details
+            if uploaded_references and any(ref.strip() for ref in uploaded_references):
+                ref_count = len([ref for ref in uploaded_references if ref.strip()])
+                st.success(f"✅ Loaded {len(uploaded_queries)} queries with {ref_count} reference answers from CSV")
+                
+                if enable_reference_metrics:
+                    st.success("🎯 Full evaluation mode enabled with reference answers!")
+                else:
+                    st.warning("⚠️ Reference answers found but Basic mode selected. Switch to Full mode to use reference-based metrics.")
+            else:
+                st.success(f"✅ Loaded {len(uploaded_queries)} queries from CSV (no reference answers)")
+                if enable_reference_metrics:
+                    st.warning("⚠️ Full mode selected but no reference answers found in CSV. Only basic metrics will be available.")
             
-            # Show preview of uploaded queries
-            with st.expander("Preview uploaded queries", expanded=False):
+            # Show preview of uploaded content
+            with st.expander("Preview uploaded content", expanded=False):
                 for i, query in enumerate(uploaded_queries[:5], 1):
-                    st.write(f"{i}. {query}")
+                    st.write(f"**Q{i}:** {query}")
+                    if uploaded_references and i-1 < len(uploaded_references) and uploaded_references[i-1].strip():
+                        st.write(f"**Ref:** {uploaded_references[i-1]}")
+                    st.write("---")
                 if len(uploaded_queries) > 5:
                     st.write(f"... and {len(uploaded_queries) - 5} more queries")
         
         # Use uploaded queries as default text
-        default_text = "\n".join(uploaded_queries) if uploaded_queries else "\n".join(DEFAULT_TEST_QUERIES)
+        default_queries_text = "\n".join(uploaded_queries) if uploaded_queries else "\n".join(DEFAULT_TEST_QUERIES)
+        default_references_text = "\n".join(uploaded_references) if uploaded_references else ""
     except Exception as e:
         st.error(f"Error reading CSV file: {str(e)}")
-        default_text = "\n".join(DEFAULT_TEST_QUERIES)
+        default_queries_text = "\n".join(DEFAULT_TEST_QUERIES)
+        default_references_text = ""
         uploaded_queries = []
+        uploaded_references = None
 else:
-    default_text = "\n".join(DEFAULT_TEST_QUERIES)
+    default_queries_text = "\n".join(DEFAULT_TEST_QUERIES)
+    default_references_text = ""
 
 st.write("**Option 2: Enter queries manually**")
-test_queries = st.text_area("Enter test queries (one per line)", default_text, height=200)
+
+# Queries text area
+test_queries = st.text_area("Enter test queries (one per line)", default_queries_text, height=200)
 queries = [q.strip() for q in test_queries.split("\n") if q.strip()]
 
+# Reference answers text area (only in Full mode)
+reference_answers = None
+if enable_reference_metrics:
+    st.write("**Reference Answers** (one per line, matching query order)")
+    reference_text = st.text_area(
+        "Enter reference answers (one per line, same order as queries)",
+        default_references_text,
+        height=150,
+        help="Provide the expected/correct answer for each query above. Leave empty for queries without reference answers."
+    )
+    reference_answers = [ref.strip() for ref in reference_text.split("\n")]
+    
+    # Validate query/reference pairing
+    if len(queries) != len(reference_answers):
+        if len(reference_answers) < len(queries):
+            # Pad with empty strings
+            reference_answers.extend([''] * (len(queries) - len(reference_answers)))
+        else:
+            # Truncate
+            reference_answers = reference_answers[:len(queries)]
+    
+    # Show pairing preview
+    if queries and reference_answers:
+        ref_count = len([ref for ref in reference_answers if ref])
+        if ref_count > 0:
+            st.success(f"✅ {len(queries)} queries paired with {ref_count} reference answers")
+        else:
+            st.warning("⚠️ No reference answers provided. Only basic metrics will be available.")
+
+# Store in session state for evaluation
+st.session_state.current_queries = queries
+st.session_state.current_references = reference_answers
+
 # Function to run evaluation
-async def run_evaluation(queries: List[str], kb_name: str):
+async def run_evaluation(queries: List[str], kb_name: str, reference_answers: Optional[List[str]] = None):
     """Run RAG evaluation on the given queries"""
     st.session_state.evaluation_running = True
     st.session_state.logs = []
@@ -221,6 +322,7 @@ async def run_evaluation(queries: List[str], kb_name: str):
             rag_api_url=rag_api_url,
             username=username,
             password=password,
+            reference_answers=reference_answers,
             progress_callback=update_progress,
             ragas_status_callback=update_ragas_status
         )
@@ -274,13 +376,17 @@ def results_to_csv(results):
     
     # Create a list to store CSV data
     csv_data = []
-    metric_names = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
+    # Include all possible metrics in CSV output
+    basic_metrics = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
+    reference_metrics = ['answer_similarity', 'answer_correctness', 'context_precision', 'context_recall']
+    metric_names = basic_metrics + reference_metrics
     
     for i, result in enumerate(results):
         row = {
             "Query_ID": f"Q{i+1}",
             "Query": result.get('query', ''),
             "Response": result.get('answer', result.get('response', '')),
+            "Reference_Answer": result.get('reference_answer', ''),
             "Response_Time_Seconds": result.get('response_time', 0),
             "Context_Count": len(result.get('contexts', [])),
             "Has_Error": 'Yes' if 'error' in result else 'No',
@@ -366,7 +472,9 @@ if run_button:
         st.error(error_msg)
     else:
         try:
-            asyncio.run(run_evaluation(queries, kb_name))
+            # Get reference answers from session state
+            current_references = st.session_state.get('current_references', None)
+            asyncio.run(run_evaluation(queries, kb_name, current_references))
         except Exception as e:
             logger.error(f"Error in asyncio.run: {str(e)}")
             st.error(f"Evaluation failed: {str(e)}")
@@ -391,9 +499,17 @@ if st.session_state.results:
 
     # Display metrics summary (computed from per-query metrics)
     if st.session_state.ragas_available:
-        # Collect metrics from individual results (now including working context-based metrics)
+        # Collect metrics from individual results (including reference-based metrics)
         all_metrics = {}
-        metric_names = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
+        # Define all possible metric names (basic + reference-based)
+        basic_metrics = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
+        reference_metrics = ['answer_similarity', 'answer_correctness', 'context_precision', 'context_recall']
+        
+        # Use appropriate metric set based on session state
+        if st.session_state.get('enable_reference_metrics', False):
+            metric_names = basic_metrics + reference_metrics
+        else:
+            metric_names = basic_metrics
         
         for result in st.session_state.results:
             for metric in metric_names:
@@ -403,24 +519,43 @@ if st.session_state.results:
                     all_metrics[metric].append(result[metric])
         
         if all_metrics:
-            # Calculate total queries for context
+            # Calculate total queries and mode for context
             total_queries = len(st.session_state.results)
+            mode_info = "Full Mode (8 metrics)" if st.session_state.get('enable_reference_metrics', False) else "Basic Mode (4 metrics)"
+            
             st.write(f"### Average Metrics Summary")
-            st.caption(f"Average scores across {total_queries} queries")
+            st.caption(f"Average scores across {total_queries} queries • {mode_info}")
             
             # Add explanation of metrics
             with st.expander("ℹ️ About RAGAS Metrics", expanded=False):
-                st.write("""
-                **Context-dependent metrics** require retrieved context/documents:
-                - **Faithfulness**: How well grounded the response is in the retrieved context
-                - **Context Relevancy**: How relevant the retrieved context is to the query  
-                - **Context Precision**: Precision of context retrieval without reference answers
-                
-                **Response-only metrics** evaluate the generated response quality:
-                - **Answer Relevancy**: How relevant the response is to the original query
-                
-                *All metrics return scores from 0.0 to 1.0, with higher scores indicating better performance.*
-                """)
+                if st.session_state.get('enable_reference_metrics', False):
+                    st.write("""
+                    **Reference-Free Metrics** (work without reference answers):
+                    - **Faithfulness** 🧠: How well grounded the response is in the retrieved context
+                    - **Answer Relevancy**: How relevant the response is to the original query
+                    - **Context Relevancy** 🧠: How relevant the retrieved context is to the query
+                    - **Context Precision Without Reference** 🧠: Precision of context retrieval without reference answers
+                    
+                    **Reference-Based Metrics** (require reference answers for comparison):
+                    - **Answer Similarity**: Semantic similarity between generated and reference answers
+                    - **Answer Correctness**: Factual accuracy against reference answers
+                    - **Context Precision** 🧠: More accurate precision using reference answers
+                    - **Context Recall** 🧠: How well retrieved contexts cover the reference answer
+                    
+                    🧠 = Context-dependent metrics | *All metrics range from 0.0 to 1.0, with higher scores indicating better performance.*
+                    """)
+                else:
+                    st.write("""
+                    **Context-dependent metrics** 🧠 require retrieved context/documents:
+                    - **Faithfulness**: How well grounded the response is in the retrieved context
+                    - **Context Relevancy**: How relevant the retrieved context is to the query  
+                    - **Context Precision Without Reference**: Precision of context retrieval without reference answers
+                    
+                    **Response-only metrics** evaluate the generated response quality:
+                    - **Answer Relevancy**: How relevant the response is to the original query
+                    
+                    🧠 = Context-dependent metrics | *All metrics range from 0.0 to 1.0, with higher scores indicating better performance.*
+                    """)
             
             metrics_summary = {}
             for metric, values in all_metrics.items():
