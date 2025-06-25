@@ -94,7 +94,61 @@ elif st.session_state.ragas_available:
 
 # Test queries
 st.subheader("Test Queries")
-test_queries = st.text_area("Enter test queries (one per line)", "\n".join(DEFAULT_TEST_QUERIES), height=200)
+
+# CSV upload option with template download
+st.write("**Option 1: Use CSV file**")
+
+# Template CSV download button (above upload for better workflow)
+template_csv = "prompt\nWhat is your first question?\nWhat is your second question?\nWhat is your third question?"
+
+st.download_button(
+    label="📥 Download CSV Template",
+    data=template_csv,
+    file_name="query_template.csv",
+    mime="text/csv",
+    help="Download a CSV template, fill it with your queries, then upload it below",
+    use_container_width=False
+)
+
+# Upload widget below the template download
+uploaded_file = st.file_uploader(
+    "Upload your filled CSV file", 
+    type=['csv'],
+    help="CSV should have a 'prompt' column with one query per row"
+)
+
+# Initialize queries from uploaded file or default
+if uploaded_file is not None:
+    try:
+        import pandas as pd
+        df = pd.read_csv(uploaded_file)
+        
+        if 'prompt' not in df.columns:
+            st.error("CSV file must contain a 'prompt' column")
+            uploaded_queries = []
+        else:
+            uploaded_queries = df['prompt'].dropna().tolist()
+            uploaded_queries = [str(q).strip() for q in uploaded_queries if str(q).strip()]
+            st.success(f"✅ Loaded {len(uploaded_queries)} queries from CSV")
+            
+            # Show preview of uploaded queries
+            with st.expander("Preview uploaded queries", expanded=False):
+                for i, query in enumerate(uploaded_queries[:5], 1):
+                    st.write(f"{i}. {query}")
+                if len(uploaded_queries) > 5:
+                    st.write(f"... and {len(uploaded_queries) - 5} more queries")
+        
+        # Use uploaded queries as default text
+        default_text = "\n".join(uploaded_queries) if uploaded_queries else "\n".join(DEFAULT_TEST_QUERIES)
+    except Exception as e:
+        st.error(f"Error reading CSV file: {str(e)}")
+        default_text = "\n".join(DEFAULT_TEST_QUERIES)
+        uploaded_queries = []
+else:
+    default_text = "\n".join(DEFAULT_TEST_QUERIES)
+
+st.write("**Option 2: Enter queries manually**")
+test_queries = st.text_area("Enter test queries (one per line)", default_text, height=200)
 queries = [q.strip() for q in test_queries.split("\n") if q.strip()]
 
 # Function to run evaluation
