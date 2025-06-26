@@ -525,16 +525,30 @@ def results_to_csv(results):
     metric_names = basic_metrics + reference_metrics
 
     for i, result in enumerate(results):
-        row = {
-            "Query_ID": f"Q{i+1}",
-            "Query": result.get('query', ''),
-            "Response": result.get('answer', result.get('response', '')),
-            "Reference_Answer": result.get('reference_answer', ''),
-            "Response_Time_Seconds": result.get('response_time', 0),
-            "Context_Count": len(result.get('contexts', [])),
-            "Has_Error": 'Yes' if 'error' in result else 'No',
-            "Error_Message": result.get('error', '')
-        }
+        # Order columns based on whether reference metrics are enabled
+        if st.session_state.get('enable_reference_metrics', False):
+            # For 8-metric mode: Query_ID → Query → Reference_Answer → Response → metrics
+            row = {
+                "Query_ID": f"Q{i+1}",
+                "Query": result.get('query', ''),
+                "Reference_Answer": result.get('reference_answer', ''),
+                "Response": result.get('answer', result.get('response', '')),
+                "Response_Time_Seconds": result.get('response_time', 0),
+                "Context_Count": len(result.get('contexts', [])),
+                "Has_Error": 'Yes' if 'error' in result else 'No',
+                "Error_Message": result.get('error', '')
+            }
+        else:
+            # For 4-metric mode: Query_ID → Query → Response → other info
+            row = {
+                "Query_ID": f"Q{i+1}",
+                "Query": result.get('query', ''),
+                "Response": result.get('answer', result.get('response', '')),
+                "Response_Time_Seconds": result.get('response_time', 0),
+                "Context_Count": len(result.get('contexts', [])),
+                "Has_Error": 'Yes' if 'error' in result else 'No',
+                "Error_Message": result.get('error', '')
+            }
 
         # Add metric scores
         for metric in metric_names:
@@ -786,10 +800,24 @@ if st.session_state.results:
             metric_names = basic_metrics
 
         for i, result in enumerate(st.session_state.results):
-            row = {
-                "Query": f"Q{i+1}: {result['query'][:50]}..." if len(result['query']) > 50 else f"Q{i+1}: {result['query']}",
-                "Response Time (s)": f"{result.get('response_time', 0):.2f}" if 'response_time' in result else "N/A"
-            }
+            # Order columns based on whether reference metrics are enabled
+            if st.session_state.get('enable_reference_metrics', False):
+                # For 8-metric mode: Query_ID → Query → Reference_Answer → Response → metrics
+                row = {
+                    "Query_ID": f"Q{i+1}",
+                    "Query": result['query'][:60] + "..." if len(result['query']) > 60 else result['query'],
+                    "Reference_Answer": (result.get('reference_answer', '') or '')[:40] + "..." if len(result.get('reference_answer', '') or '') > 40 else (result.get('reference_answer', '') or ''),
+                    "Response": (result.get('answer', result.get('response', '')) or '')[:60] + "..." if len(result.get('answer', result.get('response', '')) or '') > 60 else (result.get('answer', result.get('response', '')) or ''),
+                    "Response Time (s)": f"{result.get('response_time', 0):.2f}" if 'response_time' in result else "N/A"
+                }
+            else:
+                # For 4-metric mode: Query_ID → Query → Response → metrics  
+                row = {
+                    "Query_ID": f"Q{i+1}",
+                    "Query": result['query'][:60] + "..." if len(result['query']) > 60 else result['query'],
+                    "Response": (result.get('answer', result.get('response', '')) or '')[:60] + "..." if len(result.get('answer', result.get('response', '')) or '') > 60 else (result.get('answer', result.get('response', '')) or ''),
+                    "Response Time (s)": f"{result.get('response_time', 0):.2f}" if 'response_time' in result else "N/A"
+                }
 
             # Add metric scores
             for metric in metric_names:
