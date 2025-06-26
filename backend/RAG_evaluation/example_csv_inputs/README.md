@@ -16,6 +16,14 @@ This directory contains example CSV files that can be used to test the RAG evalu
 - **Use case**: Testing simple single-query evaluation
 - **Columns**: `prompt`
 
+### `kenya_drylands_full_evaluation.csv`
+- **Type**: Full evaluation CSV with prompts and reference answers (Full mode compatible)
+- **Queries**: 20 comprehensive investment-related questions about Kenya Drylands
+- **Use case**: Testing full 8-metric evaluation mode with reference answers
+- **Columns**: `prompt`, `reference_answer`
+- **Source**: Converted from RAG Test data with NotebookLM outputs as reference answers
+- **Content**: Investment climate, challenges, ASAL regions, government support, and sector-specific questions
+
 ## Usage
 
 1. **Upload via Streamlit UI**: Use the file uploader in the web interface
@@ -24,11 +32,20 @@ This directory contains example CSV files that can be used to test the RAG evalu
 
 ## Format
 
-These files follow the basic CSV format:
+### Basic Mode Format (4 metrics)
+Files like `kenya_prompts.csv` and `single_query.csv`:
 ```csv
 prompt
 Your question here
 Another question here
 ```
 
-For Full mode evaluation (8 metrics), you would need files with both `prompt` and `reference_answer` columns. You can download the Full mode template from the Streamlit UI to see the required format.
+### Full Mode Format (8 metrics)  
+Files like `kenya_drylands_full_evaluation.csv`:
+```csv
+prompt,reference_answer
+Your question here,Expected answer with detailed explanation
+Another question here,Another comprehensive reference answer
+```
+
+The `kenya_drylands_full_evaluation.csv` file demonstrates the full format with real-world investment questions and comprehensive reference answers from NotebookLM, making it ideal for testing all 8 RAGAS metrics including Answer Similarity and Answer Correctness.
