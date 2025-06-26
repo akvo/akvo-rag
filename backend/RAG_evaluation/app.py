@@ -22,8 +22,8 @@ logger = logging.getLogger("rag_evaluation")
 
 # Import our evaluation logic
 from headless_evaluation import (
-    DEFAULT_TEST_QUERIES, 
-    setup_ragas, 
+    DEFAULT_TEST_QUERIES,
+    setup_ragas,
     evaluate_queries
 )
 
@@ -48,6 +48,22 @@ if "ragas_available" not in st.session_state:
 if "ragas_import_error" not in st.session_state:
     st.session_state.ragas_import_error = None
 
+# Dynamic input fields session state
+if "dynamic_queries" not in st.session_state:
+    st.session_state.dynamic_queries = [""]
+if "dynamic_references" not in st.session_state:
+    st.session_state.dynamic_references = [""]
+if "field_counter" not in st.session_state:
+    st.session_state.field_counter = 1
+if "next_field_id" not in st.session_state:
+    st.session_state.next_field_id = 0
+if "field_ids" not in st.session_state:
+    st.session_state.field_ids = [0]
+if "last_uploaded_file" not in st.session_state:
+    st.session_state.last_uploaded_file = None
+if "csv_populated" not in st.session_state:
+    st.session_state.csv_populated = False
+
 # Configuration section
 st.sidebar.header("Configuration")
 
@@ -63,9 +79,9 @@ kb_name = st.sidebar.text_input("Knowledge Base Name", placeholder="Enter your k
 st.session_state.selected_kb = kb_name
 
 # RAGAS setup
-def initialize_ragas():
+def initialize_ragas(enable_reference_metrics=False):
     """Initialize RAGAS and check available metrics."""
-    ragas_available, metrics, metric_names, error_message = setup_ragas()
+    ragas_available, metrics, metric_names, error_message = setup_ragas(enable_reference_metrics)
     st.session_state.ragas_available = ragas_available
     st.session_state.ragas_metrics = metrics
     st.session_state.ragas_metric_names = metric_names if ragas_available else []
@@ -76,10 +92,12 @@ st.sidebar.subheader("Evaluation LLM")
 openai_api_key = st.sidebar.text_input("OpenAI API Key", os.environ.get("OPENAI_API_KEY", ""), type="password")
 openai_model = st.sidebar.selectbox("Evaluation Model", ["gpt-4o", "gpt-4", "gpt-3.5-turbo-16k"], index=0)
 
-# Check if RAGAS is available
-if not st.session_state.ragas_available and not st.session_state.ragas_import_error:
+# Check if RAGAS is available - reinitialize when mode changes
+if (not st.session_state.ragas_available and not st.session_state.ragas_import_error) or \
+   False:  # Disabled for now - will initialize after mode is determined
     with st.spinner("Setting up RAGAS..."):
-        initialize_ragas()
+        initialize_ragas(False)  # Initialize with basic metrics first
+        st.session_state.last_reference_mode = False
 
 # Display RAGAS status
 if st.session_state.ragas_import_error:
@@ -116,6 +134,12 @@ enable_reference_metrics = evaluation_mode == "Full (8 metrics)"
 if "enable_reference_metrics" not in st.session_state:
     st.session_state.enable_reference_metrics = False
 st.session_state.enable_reference_metrics = enable_reference_metrics
+
+# Initialize or reinitialize RAGAS with the correct mode
+if not st.session_state.ragas_available or st.session_state.get('last_ragas_mode') != enable_reference_metrics:
+    with st.spinner("Setting up RAGAS metrics..."):
+        initialize_ragas(enable_reference_metrics)
+        st.session_state.last_ragas_mode = enable_reference_metrics
 
 # CSV upload option with template download
 st.write("**Option 1: Use CSV file**")
@@ -155,7 +179,7 @@ st.download_button(
 
 # Upload widget below the template download
 uploaded_file = st.file_uploader(
-    "Upload your filled CSV file", 
+    "Upload your filled CSV file",
     type=['csv'],
     help="CSV should have a 'prompt' column with one query per row"
 )
@@ -167,10 +191,10 @@ if uploaded_file is not None:
     try:
         import pandas as pd
         from headless_evaluation import parse_csv_queries
-        
+
         df = pd.read_csv(uploaded_file)
         uploaded_queries, uploaded_references, error_msg = parse_csv_queries(df)
-        
+
         if error_msg:
             st.error(f"Error parsing CSV: {error_msg}")
             uploaded_queries = []
@@ -180,7 +204,7 @@ if uploaded_file is not None:
             if uploaded_references and any(ref.strip() for ref in uploaded_references):
                 ref_count = len([ref for ref in uploaded_references if ref.strip()])
                 st.success(f"✅ Loaded {len(uploaded_queries)} queries with {ref_count} reference answers from CSV")
-                
+
                 if enable_reference_metrics:
                     st.success("🎯 Full evaluation mode enabled with reference answers!")
                 else:
@@ -189,7 +213,7 @@ if uploaded_file is not None:
                 st.success(f"✅ Loaded {len(uploaded_queries)} queries from CSV (no reference answers)")
                 if enable_reference_metrics:
                     st.warning("⚠️ Full mode selected but no reference answers found in CSV. Only basic metrics will be available.")
-            
+
             # Show preview of uploaded content
             with st.expander("Preview uploaded content", expanded=False):
                 for i, query in enumerate(uploaded_queries[:5], 1):
@@ -199,10 +223,9 @@ if uploaded_file is not None:
                     st.write("---")
                 if len(uploaded_queries) > 5:
                     st.write(f"... and {len(uploaded_queries) - 5} more queries")
-        
-        # Use uploaded queries as default text
-        default_queries_text = "\n".join(uploaded_queries) if uploaded_queries else "\n".join(DEFAULT_TEST_QUERIES)
-        default_references_text = "\n".join(uploaded_references) if uploaded_references else ""
+
+        # Note: Dynamic fields will be populated automatically via populate_from_csv()
+        # No need for default text formatting since we're using individual input fields
     except Exception as e:
         st.error(f"Error reading CSV file: {str(e)}")
         default_queries_text = "\n".join(DEFAULT_TEST_QUERIES)
@@ -210,43 +233,160 @@ if uploaded_file is not None:
         uploaded_queries = []
         uploaded_references = None
 else:
-    default_queries_text = "\n".join(DEFAULT_TEST_QUERIES)
-    default_references_text = ""
+    # Initialize with default queries if no CSV uploaded
+    if not st.session_state.dynamic_queries or st.session_state.dynamic_queries == [""]:
+        st.session_state.dynamic_queries = DEFAULT_TEST_QUERIES[:]
+        st.session_state.dynamic_references = ["" for _ in DEFAULT_TEST_QUERIES]
+        st.session_state.field_counter = len(DEFAULT_TEST_QUERIES)
+        st.session_state.field_ids = list(range(len(DEFAULT_TEST_QUERIES)))
+        st.session_state.next_field_id = len(DEFAULT_TEST_QUERIES)
+
+# Helper functions for dynamic fields
+def populate_from_csv(queries_list, references_list=None):
+    """Populate dynamic fields from CSV upload"""
+    st.session_state.dynamic_queries = queries_list[:] if queries_list else [""]
+    if references_list and enable_reference_metrics:
+        # Ensure same length
+        refs = references_list[:]
+        while len(refs) < len(st.session_state.dynamic_queries):
+            refs.append("")
+        st.session_state.dynamic_references = refs
+    else:
+        st.session_state.dynamic_references = ["" for _ in st.session_state.dynamic_queries]
+    st.session_state.field_counter = len(st.session_state.dynamic_queries)
+    # Reset field IDs for CSV data
+    st.session_state.field_ids = list(range(len(st.session_state.dynamic_queries)))
+    st.session_state.next_field_id = len(st.session_state.dynamic_queries)
+
+def add_field():
+    """Add a new query/reference field pair"""
+    st.session_state.dynamic_queries.append("")
+    st.session_state.dynamic_references.append("")
+    st.session_state.field_ids.append(st.session_state.next_field_id)
+    st.session_state.next_field_id += 1
+    st.session_state.field_counter += 1
+
+def remove_field(index):
+    """Remove a field pair at the given index"""
+    if len(st.session_state.dynamic_queries) > 1:  # Keep at least one field
+        st.session_state.dynamic_queries.pop(index)
+        st.session_state.dynamic_references.pop(index)
+        st.session_state.field_ids.pop(index)
+        st.session_state.field_counter = len(st.session_state.dynamic_queries)
+
+# Populate from CSV if uploaded (only once per new file)
+if uploaded_file is not None:
+    # Check if this is a new file upload
+    current_file_info = (uploaded_file.name, uploaded_file.size) if uploaded_file else None
+    if current_file_info != st.session_state.last_uploaded_file:
+        st.session_state.last_uploaded_file = current_file_info
+        if uploaded_queries:  # Only populate if we successfully parsed queries
+            populate_from_csv(uploaded_queries, uploaded_references)
+            st.session_state.csv_populated = True
+else:
+    # No file uploaded, reset tracking
+    st.session_state.last_uploaded_file = None
+    st.session_state.csv_populated = False
 
 st.write("**Option 2: Enter queries manually**")
 
-# Queries text area
-test_queries = st.text_area("Enter test queries (one per line)", default_queries_text, height=200)
-queries = [q.strip() for q in test_queries.split("\n") if q.strip()]
-
-# Reference answers text area (only in Full mode)
-reference_answers = None
+# Dynamic input fields
 if enable_reference_metrics:
-    st.write("**Reference Answers** (one per line, matching query order)")
-    reference_text = st.text_area(
-        "Enter reference answers (one per line, same order as queries)",
-        default_references_text,
-        height=150,
-        help="Provide the expected/correct answer for each query above. Leave empty for queries without reference answers."
-    )
-    reference_answers = [ref.strip() for ref in reference_text.split("\n")]
-    
-    # Validate query/reference pairing
-    if len(queries) != len(reference_answers):
-        if len(reference_answers) < len(queries):
-            # Pad with empty strings
-            reference_answers.extend([''] * (len(queries) - len(reference_answers)))
-        else:
-            # Truncate
-            reference_answers = reference_answers[:len(queries)]
-    
-    # Show pairing preview
-    if queries and reference_answers:
+    # Full mode: Query + Reference pairs
+    st.write("**Query and Reference Pairs**")
+    st.caption("Each query should have a corresponding reference answer for full evaluation.")
+
+    for i in range(len(st.session_state.dynamic_queries)):
+        field_id = st.session_state.field_ids[i]
+        col1, col2, col3 = st.columns([5, 5, 1])
+
+        with col1:
+            query_key = f"query_{field_id}"
+            st.session_state.dynamic_queries[i] = st.text_area(
+                f"Query {i+1}",
+                value=st.session_state.dynamic_queries[i],
+                height=100,
+                key=query_key,
+                help="Enter your question or prompt here"
+            )
+
+        with col2:
+            ref_key = f"reference_{field_id}"
+            st.session_state.dynamic_references[i] = st.text_area(
+                f"Reference Answer {i+1}",
+                value=st.session_state.dynamic_references[i],
+                height=100,
+                key=ref_key,
+                help="Enter the expected/correct answer for this query"
+            )
+
+        with col3:
+            st.write("")
+            st.write("")
+            if len(st.session_state.dynamic_queries) > 1:
+                if st.button("🗑️", key=f"remove_{field_id}", help="Remove this pair"):
+                    remove_field(i)
+                    st.rerun()
+
+    # Add new pair button
+    if st.button("➕ Add Query/Reference Pair", key="add_pair"):
+        add_field()
+        st.rerun()
+
+else:
+    # Basic mode: Queries only
+    st.write("**Queries**")
+    st.caption("Enter your questions or prompts for evaluation.")
+
+    for i in range(len(st.session_state.dynamic_queries)):
+        field_id = st.session_state.field_ids[i]
+        col1, col2 = st.columns([9, 1])
+
+        with col1:
+            query_key = f"query_basic_{field_id}"
+            st.session_state.dynamic_queries[i] = st.text_area(
+                f"Query {i+1}",
+                value=st.session_state.dynamic_queries[i],
+                height=80,
+                key=query_key,
+                help="Enter your question or prompt here"
+            )
+
+        with col2:
+            st.write("")
+            st.write("")
+            if len(st.session_state.dynamic_queries) > 1:
+                if st.button("🗑️", key=f"remove_basic_{field_id}", help="Remove this query"):
+                    remove_field(i)
+                    st.rerun()
+
+    # Add new query button
+    if st.button("➕ Add Query", key="add_query"):
+        add_field()
+        st.rerun()
+
+# Collect queries and references from dynamic fields
+queries = [q.strip() for q in st.session_state.dynamic_queries if q.strip()]
+if enable_reference_metrics:
+    reference_answers = [r.strip() for r in st.session_state.dynamic_references]
+    # Ensure same length
+    while len(reference_answers) < len(queries):
+        reference_answers.append("")
+    reference_answers = reference_answers[:len(queries)]
+else:
+    reference_answers = None
+
+# Show summary
+if queries:
+    if enable_reference_metrics and reference_answers:
         ref_count = len([ref for ref in reference_answers if ref])
-        if ref_count > 0:
-            st.success(f"✅ {len(queries)} queries paired with {ref_count} reference answers")
-        else:
-            st.warning("⚠️ No reference answers provided. Only basic metrics will be available.")
+        st.success(f"✅ {len(queries)} queries prepared with {ref_count} reference answers")
+        if ref_count < len(queries):
+            st.warning(f"⚠️ {len(queries) - ref_count} queries missing reference answers")
+    else:
+        st.success(f"✅ {len(queries)} queries prepared for basic evaluation")
+else:
+    st.warning("⚠️ No queries entered")
 
 # Store in session state for evaluation
 st.session_state.current_queries = queries
@@ -302,7 +442,7 @@ async def run_evaluation(queries: List[str], kb_name: str, reference_answers: Op
             logger.info("OpenAI API key set in environment")
         else:
             logger.warning("No OpenAI API key provided - RAGAS metrics may fail")
-            
+
         # Log evaluation parameters
         logger.info(f"Starting evaluate_queries with parameters:")
         logger.info(f"  queries: {len(queries)} items")
@@ -311,7 +451,7 @@ async def run_evaluation(queries: List[str], kb_name: str, reference_answers: Op
         logger.info(f"  rag_api_url: {rag_api_url}")
         logger.info(f"  username: {username}")
         logger.info(f"  password: {'***' if password else 'None'}")
-            
+
         # Run evaluation using our core evaluation logic
         logger.info("Calling evaluate_queries...")
         eval_results = await evaluate_queries(
@@ -327,17 +467,19 @@ async def run_evaluation(queries: List[str], kb_name: str, reference_answers: Op
             ragas_status_callback=update_ragas_status
         )
         logger.info(f"evaluate_queries completed successfully")
-        
+
         # Update the results for display
         # Update the results for display (metrics are now stored per-query)
         rag_results = eval_results.get("rag_results", [])
         logger.info(f"Received {len(rag_results)} RAG results")
-        
+
         for i, result in enumerate(rag_results):
             # Debug: Log which metrics are present for each result
-            metric_names = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
-            present_metrics = [metric for metric in metric_names if metric in result and result[metric] is not None]
-            
+            basic_metrics = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
+            reference_metrics = ['answer_similarity', 'answer_correctness', 'context_precision', 'context_recall']
+            all_possible_metrics = basic_metrics + reference_metrics
+            present_metrics = [metric for metric in all_possible_metrics if metric in result and result[metric] is not None]
+
             logger.info(f"Result {i+1}: query='{result.get('query', '')[:50]}...', "
                        f"response_len={len(result.get('response', ''))}, "
                        f"contexts={len(result.get('contexts', []))}, "
@@ -345,25 +487,25 @@ async def run_evaluation(queries: List[str], kb_name: str, reference_answers: Op
                        f"metrics_present={present_metrics}")
             if 'error' in result:
                 logger.error(f"Result {i+1} error: {result['error']}")
-        
+
         st.session_state.results = rag_results
-        
+
         # Store logs in session state
         logs = eval_results.get("logs", [])
         st.session_state.logs = logs
         logger.info(f"Stored {len(logs)} log entries")
-        
+
         # Update progress bar to complete
         progress_bar.progress(1.0)
         status_text.text("Evaluation complete!")
         logger.info("=== STREAMLIT EVALUATION COMPLETED ===")
-        
+
     except Exception as e:
         error_msg = f"Error running evaluation: {str(e)}"
         logger.error(error_msg)
         logger.error("Exception details:", exc_info=True)
         status_text.text(f"Error: {str(e)}")
-    
+
     st.session_state.evaluation_running = False
 
 # Function to convert results to CSV
@@ -373,14 +515,14 @@ def results_to_csv(results):
     if not results:
         logger.warning("DEBUG CSV: No results provided, returning None")
         return None
-    
+
     # Create a list to store CSV data
     csv_data = []
     # Include all possible metrics in CSV output
     basic_metrics = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
     reference_metrics = ['answer_similarity', 'answer_correctness', 'context_precision', 'context_recall']
     metric_names = basic_metrics + reference_metrics
-    
+
     for i, result in enumerate(results):
         row = {
             "Query_ID": f"Q{i+1}",
@@ -392,23 +534,23 @@ def results_to_csv(results):
             "Has_Error": 'Yes' if 'error' in result else 'No',
             "Error_Message": result.get('error', '')
         }
-        
+
         # Add metric scores
         for metric in metric_names:
             if metric in result and result[metric] is not None:
                 row[metric.replace('_', ' ').title().replace(' ', '_')] = f"{result[metric]:.4f}"
             else:
                 row[metric.replace('_', ' ').title().replace(' ', '_')] = 'N/A'
-        
+
         # Add contexts as a single text field
         if 'contexts' in result and result['contexts']:
             contexts_text = "\n\n--- CONTEXT SEPARATOR ---\n\n".join(result['contexts'])
             row['Retrieved_Contexts'] = contexts_text
         else:
             row['Retrieved_Contexts'] = ''
-        
+
         csv_data.append(row)
-    
+
     # Convert to DataFrame and then to CSV
     try:
         df = pd.DataFrame(csv_data)
@@ -435,7 +577,7 @@ with col2:
         if csv_data:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"rag_evaluation_results_{timestamp}.csv"
-            
+
             st.download_button(
                 label="📥 Download Results (CSV)",
                 data=csv_data,
@@ -460,7 +602,7 @@ if run_button:
     logger.info(f"  OpenAI Model: {openai_model}")
     logger.info(f"  OpenAI API Key: {'Set' if openai_api_key else 'Not set'}")
     logger.info(f"  Number of queries: {len(queries)}")
-    
+
     if not rag_api_url or not username or not password or not kb_name:
         missing = []
         if not rag_api_url: missing.append("RAG API URL")
@@ -504,28 +646,26 @@ if st.session_state.results:
         # Define all possible metric names (basic + reference-based)
         basic_metrics = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
         reference_metrics = ['answer_similarity', 'answer_correctness', 'context_precision', 'context_recall']
-        
+
         # Use appropriate metric set based on session state
         if st.session_state.get('enable_reference_metrics', False):
             metric_names = basic_metrics + reference_metrics
         else:
             metric_names = basic_metrics
-        
+
         for result in st.session_state.results:
             for metric in metric_names:
                 if metric in result and result[metric] is not None:
                     if metric not in all_metrics:
                         all_metrics[metric] = []
                     all_metrics[metric].append(result[metric])
-        
+
         if all_metrics:
             # Calculate total queries and mode for context
             total_queries = len(st.session_state.results)
             mode_info = "Full Mode (8 metrics)" if st.session_state.get('enable_reference_metrics', False) else "Basic Mode (4 metrics)"
-            
-            st.write(f"### Average Metrics Summary")
-            st.caption(f"Average scores across {total_queries} queries • {mode_info}")
-            
+
+
             # Add explanation of metrics
             with st.expander("ℹ️ About RAGAS Metrics", expanded=False):
                 if st.session_state.get('enable_reference_metrics', False):
@@ -535,47 +675,49 @@ if st.session_state.results:
                     - **Answer Relevancy**: How relevant the response is to the original query
                     - **Context Relevancy** 🧠: How relevant the retrieved context is to the query
                     - **Context Precision Without Reference** 🧠: Precision of context retrieval without reference answers
-                    
+
                     **Reference-Based Metrics** (require reference answers for comparison):
                     - **Answer Similarity**: Semantic similarity between generated and reference answers
                     - **Answer Correctness**: Factual accuracy against reference answers
                     - **Context Precision** 🧠: More accurate precision using reference answers
                     - **Context Recall** 🧠: How well retrieved contexts cover the reference answer
-                    
+
                     🧠 = Context-dependent metrics | *All metrics range from 0.0 to 1.0, with higher scores indicating better performance.*
                     """)
                 else:
                     st.write("""
                     **Context-dependent metrics** 🧠 require retrieved context/documents:
                     - **Faithfulness**: How well grounded the response is in the retrieved context
-                    - **Context Relevancy**: How relevant the retrieved context is to the query  
+                    - **Context Relevancy**: How relevant the retrieved context is to the query
                     - **Context Precision Without Reference**: Precision of context retrieval without reference answers
-                    
+
                     **Response-only metrics** evaluate the generated response quality:
                     - **Answer Relevancy**: How relevant the response is to the original query
-                    
+
                     🧠 = Context-dependent metrics | *All metrics range from 0.0 to 1.0, with higher scores indicating better performance.*
                     """)
-            
+
+            st.write(f"### Average Metrics Summary")
+            st.caption(f"Average scores across {total_queries} queries • {mode_info}")
             metrics_summary = {}
             for metric, values in all_metrics.items():
                 if values:
                     metrics_summary[metric] = sum(values) / len(values)
-            
+
             # Display metrics in columns with context indicators
             cols = st.columns(len(metrics_summary))
             context_dependent_metrics = {'faithfulness', 'context_relevancy', 'context_precision_without_reference'}
-            
+
             for i, (metric, value) in enumerate(metrics_summary.items()):
                 metric_label = metric.replace('_', ' ').title()
                 if metric in context_dependent_metrics:
                     metric_label += " 🧠"  # Brain emoji to indicate context-dependent
-                
+
                 cols[i].metric(
                     label=metric_label,
                     value=f"{value:.2f}",
                 )
-            
+
             # Create bar chart of metrics by query
             if all_metrics:
                 st.write("### Metrics by Query")
@@ -586,7 +728,7 @@ if st.session_state.results:
                         if metric in result and result[metric] is not None:
                             query_data[metric.replace('_', ' ').title()] = result[metric]
                     chart_data.append(query_data)
-                
+
                 chart_df = pd.DataFrame(chart_data)
                 fig = px.bar(
                     chart_df,
@@ -600,26 +742,32 @@ if st.session_state.results:
     # Display metrics table for all queries
     if st.session_state.ragas_available and all_metrics:
         st.write("### Metrics by Query")
-        
+
         # Create table data
         table_data = []
-        metric_names = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
-        
+        # Use the same metric set as the summary display
+        basic_metrics = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
+        reference_metrics = ['answer_similarity', 'answer_correctness', 'context_precision', 'context_recall']
+        if st.session_state.get('enable_reference_metrics', False):
+            metric_names = basic_metrics + reference_metrics
+        else:
+            metric_names = basic_metrics
+
         for i, result in enumerate(st.session_state.results):
             row = {
                 "Query": f"Q{i+1}: {result['query'][:50]}..." if len(result['query']) > 50 else f"Q{i+1}: {result['query']}",
                 "Response Time (s)": f"{result.get('response_time', 0):.2f}" if 'response_time' in result else "N/A"
             }
-            
+
             # Add metric scores
             for metric in metric_names:
                 if metric in result and result[metric] is not None:
                     row[metric.replace('_', ' ').title()] = f"{result[metric]:.3f}"
                 else:
                     row[metric.replace('_', ' ').title()] = "N/A"
-            
+
             table_data.append(row)
-        
+
         if table_data:
             # Create DataFrame for the table
             table_df = pd.DataFrame(table_data)
@@ -648,9 +796,14 @@ if st.session_state.results:
             st.write(result['answer'] if 'answer' in result else result.get('response', 'No response'))
 
             # Display metrics for this query if available
-            metric_names = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
+            basic_metrics = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
+            reference_metrics = ['answer_similarity', 'answer_correctness', 'context_precision', 'context_recall']
+            if st.session_state.get('enable_reference_metrics', False):
+                metric_names = basic_metrics + reference_metrics
+            else:
+                metric_names = basic_metrics
             query_metrics = {metric: result[metric] for metric in metric_names if metric in result and result[metric] is not None}
-            
+
             if query_metrics:
                 st.write("**Evaluation Scores:**")
                 cols = st.columns(len(query_metrics))
@@ -666,7 +819,7 @@ if st.session_state.results:
                 all_contexts = ""
                 for j, context in enumerate(result['contexts']):
                     all_contexts += f"--- Context {j+1} ---\n{context}\n\n"
-                
+
                 st.text_area(
                     f"Retrieved {len(result['contexts'])} context(s)",
                     value=all_contexts.strip(),
@@ -683,19 +836,19 @@ if st.session_state.results:
 if st.session_state.logs:
     with st.expander("System Logs", expanded=False):
         st.write(f"**{len(st.session_state.logs)} log entries**")
-        
+
         # Show key operations summary
         operations = {}
         for log in st.session_state.logs:
             if isinstance(log, dict) and 'operation' in log:
                 op = log['operation']
                 operations[op] = operations.get(op, 0) + 1
-        
+
         if operations:
             st.write("**Operations Summary:**")
             for op, count in operations.items():
                 st.write(f"- {op}: {count}")
-        
+
         # Show detailed logs
         st.write("**Detailed Logs:**")
         st.json(st.session_state.logs)
