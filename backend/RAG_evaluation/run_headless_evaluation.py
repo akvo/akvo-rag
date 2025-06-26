@@ -22,6 +22,7 @@ def main():
     rag_api_url = 'http://localhost:8000'
     csv_file = ''
     queries = None
+    reference_answers = None
 
     # Get values from environment (set by shell script)
     import os
@@ -31,7 +32,7 @@ def main():
     rag_api_url = os.getenv('RAG_API_URL', rag_api_url)
     csv_file = os.getenv('CSV_FILE', csv_file)
 
-    # Load queries from CSV if provided
+    # Load queries and reference answers from CSV if provided
     if csv_file and csv_file.strip():
         try:
             print(f'Loading queries from CSV file: {csv_file}')
@@ -39,6 +40,13 @@ def main():
             if 'prompt' in df.columns:
                 queries = df['prompt'].tolist()
                 print(f'Loaded {len(queries)} queries from CSV')
+                
+                # Check for reference answers
+                if 'reference' in df.columns:
+                    reference_answers = df['reference'].tolist()
+                    print(f'Loaded {len(reference_answers)} reference answers from CSV')
+                else:
+                    print('No reference answers found in CSV (no "reference" column)')
             else:
                 print('Error: CSV file must have a "prompt" column')
                 sys.exit(1)
@@ -71,11 +79,17 @@ def main():
         print(f'Using {len(queries)} queries from CSV file')
     else:
         print('Using default queries')
+    
+    if reference_answers:
+        print(f'Reference-based metrics will be enabled with {len(reference_answers)} reference answers')
+    else:
+        print('No reference answers provided - only basic metrics will be evaluated')
 
     # Run evaluation
     results = run_headless_evaluation(
         kb_name=kb_name,
         queries=queries,
+        reference_answers=reference_answers,
         openai_model=openai_model,
         username=username,
         password=password,

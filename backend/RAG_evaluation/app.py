@@ -214,15 +214,6 @@ if uploaded_file is not None:
                 if enable_reference_metrics:
                     st.warning("⚠️ Full mode selected but no reference answers found in CSV. Only basic metrics will be available.")
 
-            # Show preview of uploaded content
-            with st.expander("Preview uploaded content", expanded=False):
-                for i, query in enumerate(uploaded_queries[:5], 1):
-                    st.write(f"**Q{i}:** {query}")
-                    if uploaded_references and i-1 < len(uploaded_references) and uploaded_references[i-1].strip():
-                        st.write(f"**Ref:** {uploaded_references[i-1]}")
-                    st.write("---")
-                if len(uploaded_queries) > 5:
-                    st.write(f"... and {len(uploaded_queries) - 5} more queries")
 
         # Note: Dynamic fields will be populated automatically via populate_from_csv()
         # No need for default text formatting since we're using individual input fields
@@ -451,6 +442,7 @@ async def run_evaluation(queries: List[str], kb_name: str, reference_answers: Op
         logger.info(f"  rag_api_url: {rag_api_url}")
         logger.info(f"  username: {username}")
         logger.info(f"  password: {'***' if password else 'None'}")
+        logger.info(f"  reference_answers: {reference_answers is not None}, count: {len(reference_answers) if reference_answers else 0}")
 
         # Run evaluation using our core evaluation logic
         logger.info("Calling evaluate_queries...")
@@ -489,6 +481,15 @@ async def run_evaluation(queries: List[str], kb_name: str, reference_answers: Op
                 logger.error(f"Result {i+1} error: {result['error']}")
 
         st.session_state.results = rag_results
+
+        # Update reference metrics flag based on actual evaluation results
+        ragas_results = eval_results.get("ragas_results", {})
+        if ragas_results and "metric_names" in ragas_results:
+            actual_metrics = ragas_results["metric_names"]
+            reference_based_metrics = ['answer_similarity', 'answer_correctness', 'context_precision', 'context_recall']
+            has_reference_metrics = any(metric in actual_metrics for metric in reference_based_metrics)
+            st.session_state.enable_reference_metrics = has_reference_metrics
+            logger.info(f"Updated enable_reference_metrics to {has_reference_metrics} based on actual metrics: {actual_metrics}")
 
         # Store logs in session state
         logs = eval_results.get("logs", [])
@@ -653,12 +654,29 @@ if st.session_state.results:
         else:
             metric_names = basic_metrics
 
-        for result in st.session_state.results:
+        for i, result in enumerate(st.session_state.results):
             for metric in metric_names:
                 if metric in result and result[metric] is not None:
-                    if metric not in all_metrics:
-                        all_metrics[metric] = []
-                    all_metrics[metric].append(result[metric])
+                    try:
+                        # Handle both individual values and lists
+                        value = result[metric]
+                        if isinstance(value, list):
+                            if len(value) > 0:
+                                value = value[0]  # Take first value if it's a list
+                            else:
+                                continue  # Skip empty lists
+                        if value is not None:
+                            if metric not in all_metrics:
+                                all_metrics[metric] = []
+                            all_metrics[metric].append(float(value))
+                    except (TypeError, ValueError) as e:
+                        logger.warning(f"Error processing metric {metric} for query {i+1}: {e}")
+                else:
+                    logger.debug(f"Query {i+1}: Missing metric '{metric}' (value: {result.get(metric, 'NOT_FOUND')})")
+        
+        logger.info(f"Collected metrics for display - enable_reference_metrics: {st.session_state.get('enable_reference_metrics', False)}")
+        logger.info(f"Available metrics: {list(all_metrics.keys())}")
+        logger.info(f"Expected metric_names: {metric_names}")
 
         if all_metrics:
             # Calculate total queries and mode for context
@@ -677,12 +695,12 @@ if st.session_state.results:
                     - **Context Precision Without Reference** 🧠: Precision of context retrieval without reference answers
 
                     **Reference-Based Metrics** (require reference answers for comparison):
-                    - **Answer Similarity**: Semantic similarity between generated and reference answers
-                    - **Answer Correctness**: Factual accuracy against reference answers
-                    - **Context Precision** 🧠: More accurate precision using reference answers
-                    - **Context Recall** 🧠: How well retrieved contexts cover the reference answer
+                    - **Answer Similarity** 📚: Semantic similarity between generated and reference answers
+                    - **Answer Correctness** 📚: Factual accuracy against reference answers
+                    - **Context Precision** 🧠📚: More accurate precision using reference answers
+                    - **Context Recall** 🧠📚: How well retrieved contexts cover the reference answer
 
-                    🧠 = Context-dependent metrics | *All metrics range from 0.0 to 1.0, with higher scores indicating better performance.*
+                    🧠 = Context-dependent | 📚 = Reference-based | *All metrics range from 0.0 to 1.0, with higher scores indicating better performance.*
                     """)
                 else:
                     st.write("""
@@ -706,12 +724,15 @@ if st.session_state.results:
 
             # Display metrics in columns with context indicators
             cols = st.columns(len(metrics_summary))
-            context_dependent_metrics = {'faithfulness', 'context_relevancy', 'context_precision_without_reference'}
+            context_dependent_metrics = {'faithfulness', 'context_relevancy', 'context_precision_without_reference', 'context_precision', 'context_recall'}
+            reference_based_metrics = {'answer_similarity', 'answer_correctness', 'context_precision', 'context_recall'}
 
             for i, (metric, value) in enumerate(metrics_summary.items()):
                 metric_label = metric.replace('_', ' ').title()
                 if metric in context_dependent_metrics:
                     metric_label += " 🧠"  # Brain emoji to indicate context-dependent
+                if metric in reference_based_metrics:
+                    metric_label += " 📚"  # Book emoji to indicate reference-based
 
                 cols[i].metric(
                     label=metric_label,
@@ -726,7 +747,18 @@ if st.session_state.results:
                     query_data = {"Query": f"Q{i+1}"}
                     for metric in metric_names:
                         if metric in result and result[metric] is not None:
-                            query_data[metric.replace('_', ' ').title()] = result[metric]
+                            try:
+                                # Handle both individual values and lists
+                                value = result[metric]
+                                if isinstance(value, list):
+                                    if len(value) > 0:
+                                        value = value[0]  # Take first value if it's a list
+                                    else:
+                                        continue  # Skip empty lists
+                                if value is not None:
+                                    query_data[metric.replace('_', ' ').title()] = float(value)
+                            except (TypeError, ValueError) as e:
+                                logger.warning(f"Error processing chart metric {metric} for query {i+1}: {e}")
                     chart_data.append(query_data)
 
                 chart_df = pd.DataFrame(chart_data)
@@ -762,7 +794,21 @@ if st.session_state.results:
             # Add metric scores
             for metric in metric_names:
                 if metric in result and result[metric] is not None:
-                    row[metric.replace('_', ' ').title()] = f"{result[metric]:.3f}"
+                    try:
+                        # Handle both individual values and lists (in case of incomplete RAGAS results)
+                        value = result[metric]
+                        if isinstance(value, list):
+                            if len(value) > 0:
+                                value = value[0]  # Take first value if it's a list
+                            else:
+                                value = None
+                        if value is not None:
+                            row[metric.replace('_', ' ').title()] = f"{float(value):.3f}"
+                        else:
+                            row[metric.replace('_', ' ').title()] = "N/A"
+                    except (TypeError, ValueError) as e:
+                        logger.warning(f"Error formatting metric {metric} for query {i+1}: {e}")
+                        row[metric.replace('_', ' ').title()] = "Error"
                 else:
                     row[metric.replace('_', ' ').title()] = "N/A"
 

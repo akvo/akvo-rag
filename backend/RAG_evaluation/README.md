@@ -7,7 +7,7 @@ A comprehensive system to evaluate RAG (Retrieval-Augmented Generation) response
 ### Interactive Dashboard
 ```bash
 # From the main akvo-rag directory
-../rag-evaluate
+./rag-evaluate
 ```
 
 Then open http://localhost:8501 in your browser.
