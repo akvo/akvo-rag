@@ -7,13 +7,11 @@ COMPOSE_FILES="-f docker-compose.dev.yml -f streamlit-override.yml"
 
 # Create a temporary override file specifically for Streamlit
 cat > streamlit-override.yml << EOL
-version: '3'
-
 services:
   backend:
     ports:
       - "8501:8501"  # Expose Streamlit port
-      - "8000:8000"  # Ensure API port is exposed
+      - "${BACKEND_PORT}:8000"  # Ensure API port is exposed
 EOL
 
 echo "Created temporary Streamlit override configuration"
@@ -29,8 +27,8 @@ docker compose $COMPOSE_FILES -f streamlit-override.yml up -d
 # Check if backend is accessible
 echo "Checking if API is accessible..."
 for i in {1..10}; do
-  if curl -s http://localhost:8000/api/health > /dev/null; then
-    echo "API is accessible at http://localhost:8000/api"
+  if curl -s http://localhost:${BACKEND_PORT}/api/health > /dev/null; then
+    echo "API is accessible at http://localhost:${BACKEND_PORT}/api"
     break
   fi
   echo "Waiting for API to become available... ($i/10)"

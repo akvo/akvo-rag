@@ -69,7 +69,7 @@ st.sidebar.header("Configuration")
 
 # Connection settings
 st.sidebar.subheader("Connection Settings")
-rag_api_url = st.sidebar.text_input("RAG API URL", "http://localhost:8000").strip()
+rag_api_url = st.sidebar.text_input("RAG API URL", "http://backend:8000").strip()
 username = st.sidebar.text_input("Username", placeholder="Enter username").strip()
 password = st.sidebar.text_input("Password", type="password", placeholder="Enter password")
 

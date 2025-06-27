@@ -6,7 +6,7 @@
 
 # Check if Akvo RAG is running
 echo "Checking if Akvo RAG is running..."
-if ! curl -s http://localhost:8000/api/health > /dev/null; then
+if ! curl -s http://localhost:${BACKEND_PORT}/api/health > /dev/null; then
   echo "Akvo RAG doesn't seem to be running. Please ensure it's running with:"
   echo "cd $(dirname $(dirname $(pwd))) && docker compose -f docker-compose.dev.yml -f streamlit-override.yml up -d"
   exit 1

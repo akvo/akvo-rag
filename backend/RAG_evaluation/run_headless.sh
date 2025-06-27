@@ -12,7 +12,7 @@
 # Default values
 USERNAME="admin@example.com"
 PASSWORD="password"
-RAG_API_URL="http://localhost:8000"
+RAG_API_URL="http://localhost:${BACKEND_PORT}"
 KB_NAME="Living Income Benchmark Knowledge Base"
 CSV_FILE=""
 
@@ -34,7 +34,7 @@ shift $((OPTIND-1))
 echo "Checking if Akvo RAG is running at $RAG_API_URL..."
 if ! curl -s "${RAG_API_URL}/api/health" > /dev/null; then
   echo "Akvo RAG doesn't seem to be running at $RAG_API_URL"
-  if [ "$RAG_API_URL" = "http://localhost:8000" ]; then
+  if [ "$RAG_API_URL" = "http://localhost:${BACKEND_PORT}" ]; then
     echo "Please ensure it's running with:"
     echo "cd $(dirname $(dirname $(pwd))) && docker compose -f docker-compose.dev.yml up -d"
   fi
