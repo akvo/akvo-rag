@@ -5,3 +5,9 @@ ragas==0.2.15  # Pinned to a specific version to avoid API changes
 pandas==2.0.0
 plotly==5.18.0
 httpx==0.26.0
+
+# E2E Testing dependencies
+playwright==1.40.0
+pytest==7.4.4
+pytest-asyncio==0.23.2
+python-dotenv==1.0.0

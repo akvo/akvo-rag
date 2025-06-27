@@ -154,3 +154,113 @@ export RAG_API_URL="https://your-rag-api.com"
 export USERNAME="your-username"
 export PASSWORD="your-password"
 ```
+
+## End-to-End Testing
+
+Automated tests verify the complete 8-metric evaluation workflow using Playwright to interact with the Streamlit UI.
+
+### Prerequisites
+
+**PRECONDITION**: From project root, run `./rag-evaluate` to start all containers and Streamlit UI.
+
+```bash
+cd /path/to/akvo-rag
+./rag-evaluate  # This starts all containers including Streamlit on localhost:8501
+```
+
+**Environment**: Set your OpenAI API key
+```bash
+export OPENAI_API_KEY="your-openai-api-key"
+```
+
+### Option 1: Container Testing (Headless)
+
+In bash in the backend container, run `pytest` and end-to-end tests execute headless:
+
+```bash
+# Exec into the backend container
+docker exec -it akvo-rag-backend-1 bash
+
+# Navigate to RAG evaluation directory
+cd RAG_evaluation
+
+# Run E2E tests
+pytest
+
+# Run with verbose output to see detailed test execution
+pytest tests/test_eight_metrics_e2e.py -v -s --tb=long
+```
+
+**What happens:**
+- Tests run headless (no browser window)
+- Uses configuration from `.env.test`
+- Returns pass/fail with detailed output
+- Takes 5-7 minutes to complete
+
+**Verbose Output Options:**
+- `-v`: Verbose test names and status
+- `-s`: Show print statements and real-time output
+- `--tb=long`: Full tracebacks on failures
+- This shows step-by-step progress, metric values, and detailed verification
+
+### Option 2: Host Testing (Headed Browser)
+
+On your host, run the test script with headed browser:
+
+```bash
+./backend/RAG_evaluation/test-RAG-evaluation-ui-e2e.sh
+```
+
+**What happens:**
+- Installs dependencies if needed in local virtual environment
+- Opens browser window on your host
+- Shows real-time automation of the UI
+- Uses configuration from `.env.test`
+- Browser stays open for 10 seconds at end for inspection
+
+### Test Configuration
+
+Edit `backend/RAG_evaluation/.env.test` to customize test parameters:
+
+```bash
+# RAG API Configuration
+RAG_API_URL=http://localhost:8000
+RAG_USERNAME=admin@example.com
+RAG_PASSWORD=password
+RAG_KNOWLEDGE_BASE=Living Income Benchmark Knowledge Base
+
+# Test Data - CSV Upload (overrides individual queries if set)
+# CSV_FILE_HOST=/path/to/your/test_queries.csv          # Path on host machine
+# CSV_FILE_CONTAINER=/app/RAG_evaluation/test_data.csv  # Path inside container
+
+# Test Data - Individual Queries (used if CSV not provided)
+TEST_QUERY_1=What is the living income benchmark?
+TEST_REFERENCE_1=The living income benchmark is a measure of income needed for a decent standard of living.
+
+TEST_QUERY_2=How is the living income benchmark calculated?
+TEST_REFERENCE_2=The living income benchmark is calculated based on cost of basic needs.
+
+# Test Configuration
+EVALUATION_TIMEOUT_SECONDS=420
+BROWSER_SLOW_MO=1000
+```
+
+### Expected Results
+
+**Success Criteria:**
+- All 8 metrics calculated with numerical values (0.0-1.0)
+- No "N/A" values for reference-based metrics  
+- Full Mode (8 metrics) successfully selected
+- Reference answers properly entered and used
+
+**8 Metrics Verified:**
+1. Faithfulness
+2. Answer Relevancy  
+3. Context Precision Without Reference
+4. Context Relevancy
+5. Answer Similarity 📚
+6. Answer Correctness 📚  
+7. Context Precision 📚
+8. Context Recall 📚
+
+*(📚 = Reference-based metrics requiring reference answers)*
