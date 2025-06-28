@@ -287,9 +287,24 @@ cd /path/to/akvo-rag
 export OPENAI_API_KEY="your-openai-api-key"
 ```
 
-### Option 1: Container Testing (Headless)
+### Option 1: Container Testing (Headless) - Recommended
 
-After running ./rag-evaluate on the host, in bash in the backend container, run `pytest` and end-to-end tests execute headless:
+**Why use the automated script?** After container restarts, Playwright browsers and system dependencies are lost due to Docker volume mounting behavior. The script automatically detects and reinstalls missing dependencies.
+
+**Easy Method**: Use the automated script that handles all dependencies:
+
+```bash
+# From the RAG_evaluation directory on the host
+./run_e2e_tests_headless_container.sh
+
+# With custom timeout (default: 10 minutes)
+./run_e2e_tests_headless_container.sh -t 300
+
+# In quiet mode
+./run_e2e_tests_headless_container.sh --quiet
+```
+
+**Manual Method**: If you prefer to run commands manually:
 
 ```bash
 # Exec into the backend container
@@ -301,10 +316,11 @@ cd RAG_evaluation
 # Activate the virtual environment
 source venv/bin/activate
 
-# Run E2E tests
-pytest
+# Install dependencies if missing (after container restart)
+playwright install
+playwright install-deps
 
-# Run with verbose output to see detailed test execution
+# Run E2E tests
 pytest tests/test_eight_metrics_e2e.py -v -s --tb=long
 ```
 
