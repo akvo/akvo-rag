@@ -289,7 +289,7 @@ export OPENAI_API_KEY="your-openai-api-key"
 
 ### Option 1: Container Testing (Headless)
 
-In bash in the backend container, run `pytest` and end-to-end tests execute headless:
+After running ./rag-evaluate on the host, in bash in the backend container, run `pytest` and end-to-end tests execute headless:
 
 ```bash
 # Exec into the backend container
@@ -297,6 +297,9 @@ docker exec -it akvo-rag-backend-1 bash
 
 # Navigate to RAG evaluation directory
 cd RAG_evaluation
+
+# Activate the virtual environment
+source venv/bin/activate
 
 # Run E2E tests
 pytest
