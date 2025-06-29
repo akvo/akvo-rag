@@ -1,0 +1,28 @@
+#!/bin/bash
+# Proper shutdown for RAG evaluation system
+
+cd $(dirname $0)
+
+echo "🛑 Stopping RAG evaluation system gracefully..."
+
+# Stop the Streamlit process in the container first
+CONTAINER_NAME=$(docker ps | grep "akvo-rag.*backend" | awk '{print $NF}' | head -1)
+if [ ! -z "$CONTAINER_NAME" ]; then
+    echo "Stopping Streamlit process in $CONTAINER_NAME..."
+    docker exec $CONTAINER_NAME pkill -f "streamlit" 2>/dev/null || true
+    docker exec $CONTAINER_NAME pkill -f "python.*run_evaluation" 2>/dev/null || true
+fi
+
+# Clean up temporary override file
+if [ -f "streamlit-override.yml" ]; then
+    echo "Cleaning up temporary override file..."
+    rm -f streamlit-override.yml
+fi
+
+# Stop containers but keep them (don't remove)
+echo "Stopping containers (keeping them for reuse)..."
+docker compose -f docker-compose.dev.yml stop
+
+echo "✅ RAG evaluation system stopped cleanly"
+echo "💡 To restart: ./rag-evaluate"
+echo "💡 To fully reset: docker compose -f docker-compose.dev.yml down"
