@@ -17,7 +17,7 @@ window.config_default = {
 // TEST USING ~ 500 docs
 window.config_500 = {
   title: "UNEP Assistant",
-  kb_id: 25,
+  kb_id: 34,
   wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
 };
 
