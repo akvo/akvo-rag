@@ -14,7 +14,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from constants import (
-    CSV_TEMPLATES, CSV_PROMPT_COLUMNS, CSV_REFERENCE_COLUMNS, 
+    CSV_PROMPT_COLUMNS, CSV_REFERENCE_COLUMNS, 
     FILE_PATTERNS, BASIC_METRICS, REFERENCE_METRICS
 )
 
@@ -25,24 +25,19 @@ class CSVProcessor:
     """Handles all CSV-related operations for the RAG evaluation application."""
     
     @staticmethod
-    def load_template(template_name: str, fallback_key: str) -> str:
+    def load_template(template_name: str) -> str:
         """
-        Load template content from templates directory with fallback.
+        Load template content from templates directory.
         
         Args:
             template_name: Name of template file to load
-            fallback_key: Key in CSV_TEMPLATES for fallback content
             
         Returns:
             Template content as string
         """
         template_path = os.path.join(os.path.dirname(__file__), "..", "..", "templates", template_name)
-        try:
-            with open(template_path, 'r', encoding='utf-8') as f:
-                return f.read()
-        except FileNotFoundError:
-            logger.warning(f"Template file not found: {template_path}")
-            return CSV_TEMPLATES.get(fallback_key, "")
+        with open(template_path, 'r', encoding='utf-8') as f:
+            return f.read()
     
     @staticmethod
     def get_template_for_mode(enable_reference_metrics: bool) -> Tuple[str, str, str]:
@@ -56,11 +51,11 @@ class CSVProcessor:
             Tuple of (template_content, filename, help_text)
         """
         if enable_reference_metrics:
-            template_csv = CSVProcessor.load_template("full_template.csv", "full")
+            template_csv = CSVProcessor.load_template("full_template.csv")
             template_filename = FILE_PATTERNS['full_template']
             help_text = "Download a CSV template with reference answers for full evaluation mode"
         else:
-            template_csv = CSVProcessor.load_template("basic_template.csv", "basic")
+            template_csv = CSVProcessor.load_template("basic_template.csv")
             template_filename = FILE_PATTERNS['basic_template']
             help_text = "Download a basic CSV template for queries only"
         

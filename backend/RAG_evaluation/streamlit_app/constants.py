@@ -215,11 +215,6 @@ SHORT_METRICS_EXPLANATIONS: Dict[str, str] = {
 """
 }
 
-# CSV Templates
-CSV_TEMPLATES: Dict[str, str] = {
-    'basic': "prompt\nWhat is your first question?\nWhat is your second question?\nWhat is your third question?",
-    'full': "prompt,reference_answer\nWhat is your first question?,This is the expected answer to the first question.\nWhat is your second question?,This is the expected answer to the second question.\nWhat is your third question?,This is the expected answer to the third question."
-}
 
 # File naming patterns
 FILE_PATTERNS: Dict[str, str] = {
