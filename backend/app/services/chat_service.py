@@ -132,12 +132,12 @@ async def generate_response(
             return
 
         # Use first vector store for now
-        # retriever = vector_stores[0].as_retriever()
+        retriever = vector_stores[0].as_retriever()
         # After creating retriever
-        retriever = vector_stores[0].as_retriever(
-            search_type="similarity_score_threshold",
-            search_kwargs={"score_threshold": 0.7, "k": 5},
-        )
+        # retriever = vector_stores[0].as_retriever(
+        #     search_type="similarity_score_threshold",
+        #     search_kwargs={"score_threshold": 0.7, "k": 5},
+        # )
 
         # Initialize the language model
         llm = LLMFactory.create()
