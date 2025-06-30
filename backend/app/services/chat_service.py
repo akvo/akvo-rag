@@ -77,6 +77,9 @@ async def generate_response(
                         "content": message.content,
                     }
                 )
+            if not all_history_messages:
+                messages["messages"].append({"role": "user", "content": query})
+                print(messages, "generate n last message")
         # EOL generate last n message in backend
 
         # Create user message

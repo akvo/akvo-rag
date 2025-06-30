@@ -40,3 +40,15 @@ window.config_local = {
   kb_id: 43,
   wsURL: "ws://localhost:81/ws/chat",
 };
+
+window.config_local_lib = {
+  title: "LIB Assistant",
+  kb_id: 44,
+  wsURL: "ws://localhost:81/ws/chat",
+};
+
+window.config_living_income_2 = {
+  title: "LIB #2",
+  kb_id: 38,
+  wsURL: "ws://localhost:81/ws/chat",
+};
