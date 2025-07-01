@@ -201,7 +201,8 @@ async def generate_response(
             "1. **Use Context Only**: Do not use any prior knowledge or make assumptions. Use only the provided documents. If the answer is not present in the context, you must say so.\n"
             "2. **Cite Precisely**:\n"
             "   - Use the exact format `[citation:x]` at the end of each sentence that uses information from the context, where `x` is the document number (1, 2, 3...).\n"
-            "   - Do not use `[1]`, `[2]`, or other numeric-only formats. Always include the word `citation`, exactly like this: `[citation:1]`.\n"
+            "   - These numbers are based on the order of the context provided below — the first document is `[citation:1]`, the second is `[citation:2]`, and so on.\n"
+            "   - Do NOT use `[1]`, `(2)`, page numbers, or other metadata for citations. Only use `[citation:x]` based on order.\n"
             "3. **If Information Is Missing**:\n"
             "   - If critical information is not present, respond with:\n"
             "     'Information is missing on [specific topic] based on the provided context.'\n"
@@ -213,7 +214,9 @@ async def generate_response(
             "6. **Token Limit**: Keep your answer under 1024 tokens.\n\n"
             "**Important Reminder**:\n"
             "- You must NOT answer based on external knowledge. Only use what is explicitly stated in the context below. No speculation or hallucination is allowed.\n"
-            "- Do NOT use citation formats like `[1]`, `(2)`, or similar. Only use `[citation:x]`.\n\n"
+            "- Do NOT use citation formats like `[1]`, `(2)`, or similar. Only use `[citation:x]`.\n"
+            "- Remember: Cite based on the order in which documents appear in the context — NOT based on page number, filename, or metadata.\n"
+            "- Do not repeat the context verbatim — always paraphrase.\n\n"
             "### Provided Context:\n{context}\n"
         )
 
