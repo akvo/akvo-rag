@@ -31,7 +31,7 @@ window.config_250 = {
 // TEST USING ~ Living Income Bechmark docs
 window.config_living_income = {
   title: "Living Income Assistant",
-  kb_id: 28,
+  kb_id: 38,
   wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
 };
 
@@ -47,8 +47,8 @@ window.config_local_lib = {
   wsURL: "ws://localhost:81/ws/chat",
 };
 
-window.config_living_income_2 = {
-  title: "LIB #2",
-  kb_id: 38,
+window.config_living_income_1 = {
+  title: "LIB #1",
+  kb_id: 28,
   wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
 };
