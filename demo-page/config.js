@@ -7,7 +7,7 @@ window.config_default = {
       label: "UNEP Knowledge Base",
     },
     {
-      kb_id: 28,
+      kb_id: 38,
       label: "Living Income Benchmark Knowledge Base",
     },
   ],
@@ -50,5 +50,5 @@ window.config_local_lib = {
 window.config_living_income_2 = {
   title: "LIB #2",
   kb_id: 38,
-  wsURL: "ws://localhost:81/ws/chat",
+  wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
 };
