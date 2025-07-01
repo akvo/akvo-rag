@@ -1,6 +1,20 @@
 #!/bin/bash
 # Set up the environment for RAG evaluation with Streamlit
 
+# Navigate to script's parent directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
+
+# Load .env from root
+if [ -f "$ROOT_DIR/.env" ]; then
+  export $(grep -v '^#' "$ROOT_DIR/.env" | xargs)
+else
+  echo "⚠️ .env file not found at $ROOT_DIR/.env"
+fi
+
+# Fallback port if not defined
+BACKEND_PORT=${BACKEND_PORT:-8000}
+
 # Check Docker Compose configuration
 echo "Using development configuration"
 COMPOSE_FILES="-f docker-compose.dev.yml -f streamlit-override.yml"

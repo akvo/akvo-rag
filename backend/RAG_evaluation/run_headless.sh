@@ -9,6 +9,20 @@
 #   -k KB_NAME     Knowledge base name (default: Living Income Benchmark Knowledge Base)
 #   -c CSV_FILE    CSV file with 'prompt' column (optional, uses default prompts if not provided)
 
+# Navigate to script's parent directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
+
+# Load .env from root
+if [ -f "$ROOT_DIR/.env" ]; then
+  export $(grep -v '^#' "$ROOT_DIR/.env" | xargs)
+else
+  echo "⚠️ .env file not found at $ROOT_DIR/.env"
+fi
+
+# Fallback port if not defined
+BACKEND_PORT=${BACKEND_PORT:-8000}
+
 # Default values
 USERNAME="admin@example.com"
 PASSWORD="password"
