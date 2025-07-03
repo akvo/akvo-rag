@@ -3,8 +3,37 @@
 
 cd $(dirname $0)
 
+# Cleanup function for graceful shutdown
+cleanup() {
+    echo ""
+    echo "🛑 Received interrupt signal, cleaning up..."
+    
+    # Stop the Streamlit process gracefully
+    CONTAINER_NAME=$(docker ps | grep "akvo-rag.*backend" | awk '{print $NF}' | head -1)
+    if [ ! -z "$CONTAINER_NAME" ]; then
+        echo "Stopping Streamlit process in $CONTAINER_NAME..."
+        docker exec $CONTAINER_NAME pkill -f "streamlit" 2>/dev/null || true
+        docker exec $CONTAINER_NAME pkill -f "python.*run_evaluation" 2>/dev/null || true
+    fi
+    
+    # Clean up temporary override file
+    if [ -f "streamlit-override.yml" ]; then
+        echo "Cleaning up temporary override file..."
+        rm -f streamlit-override.yml
+    fi
+    
+    echo "✅ Cleanup completed"
+    echo "💡 Containers are still running. Use './rag-evaluate-stop' to stop them completely."
+    exit 0
+}
+
+# Set up trap for SIGINT (Ctrl-C) and SIGTERM
+trap cleanup SIGINT SIGTERM
+
 echo "Ensuring Streamlit setup is correct..."
 ./backend/RAG_evaluation/setup_for_streamlit.sh
 
 echo "Starting RAG evaluation system..."
+echo "💡 Use Ctrl-C to stop gracefully, or run './rag-evaluate-stop' in another terminal"
+
 ./backend/RAG_evaluation/run_evaluation.sh "$@"

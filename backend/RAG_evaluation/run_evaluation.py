@@ -176,7 +176,7 @@ def main():
     else:
         # Start Streamlit - ensure it listens on all interfaces for Docker access
         cmd = [
-            "streamlit", "run", "app.py",
+            "streamlit", "run", "streamlit_app/main.py",
             "--server.port", str(args.port),
             "--server.address", "0.0.0.0",
             "--server.enableCORS", "false",

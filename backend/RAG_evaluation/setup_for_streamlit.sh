@@ -30,13 +30,21 @@ EOL
 
 echo "Created temporary Streamlit override configuration"
 
-# Stop any running containers
-echo "Stopping any running containers..."
-docker compose $COMPOSE_FILES down
-
-# Start with the Streamlit override
-echo "Starting containers with Streamlit support..."
-docker compose $COMPOSE_FILES -f streamlit-override.yml up -d
+# Check if containers are already running with correct configuration
+if docker compose $COMPOSE_FILES ps | grep -q "Up"; then
+    echo "Containers already running, checking if restart is needed..."
+    # Only restart if the override file changed or containers aren't healthy
+    if ! docker compose $COMPOSE_FILES -f streamlit-override.yml ps | grep -q "Up.*healthy\|Up.*running"; then
+        echo "Restarting containers with Streamlit support..."
+        docker compose $COMPOSE_FILES stop
+        docker compose $COMPOSE_FILES -f streamlit-override.yml up -d
+    else
+        echo "Containers already running with correct configuration"
+    fi
+else
+    echo "Starting containers with Streamlit support..."
+    docker compose $COMPOSE_FILES -f streamlit-override.yml up -d
+fi
 
 # Check if backend is accessible
 echo "Checking if API is accessible..."

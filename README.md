@@ -16,6 +16,7 @@
   <p>
     <a href="#features">Features</a> •
     <a href="#quick-start">Quick Start</a> •
+    <a href="#rag-evaluation">RAG Evaluation</a> •
     <a href="#deployment-guide">Deployment</a> •
     <a href="#architecture">Architecture</a> •
     <a href="#development">Development</a> •
@@ -67,6 +68,23 @@ It also provides OpenAPI interfaces for convenient knowledge base access via API
   <img src="./docs/images/screenshot6.png" alt="Analytics Dashboard" width="800">
   <p><em>API Reference</em></p>
 </div>
+
+## 🔬 RAG Evaluation
+
+Evaluate your RAG pipeline performance using RAGAS metrics with the built-in evaluation system.
+
+```bash
+# Start evaluation dashboard
+./rag-evaluate
+
+# Proper shutdown (prevents disk space issues)
+./rag-evaluate-stop
+# or use Ctrl-C (now handles cleanup automatically)
+```
+
+**⚠️ Important**: Always use proper shutdown methods. Improper termination can accumulate 1-2GB of Docker artifacts per session.
+
+For complete evaluation documentation: [`backend/RAG_evaluation/README.md`](backend/RAG_evaluation/README.md)
 
  ##  Project Flowchart
  

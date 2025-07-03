@@ -44,7 +44,6 @@ Thumbs.db
 *.temp
 
 # Downloaded/test template files
-*_template.csv
 test_*.csv
 downloaded_*.csv
 
