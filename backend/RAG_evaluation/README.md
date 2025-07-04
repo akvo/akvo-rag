@@ -4,6 +4,8 @@ A comprehensive system to evaluate RAG (Retrieval-Augmented Generation) response
 
 ## Quick Start
 
+Ensure you have copied .env.example in the project root to .env and added your `OPENAI_API_KEY`
+
 ### Interactive Dashboard
 ```bash
 # From the main akvo-rag directory
@@ -15,7 +17,7 @@ Then open http://localhost:8501 in your browser.
 ### Headless Evaluation
 ```bash
 # From the backend/RAG_evaluation directory
-./run_headless.sh -u "username" -p "password" -a "https://your-rag-api.com" -k "Your Knowledge Base" -c "your_prompts.csv"
+./run_headless.sh -u "username" -p "password" -a "https://your-rag-api.com" -k "Your Knowledge Base" -c "path/to/csv/from/root/of/RAG_evaluation/dir/your_prompts.csv"
 ```
 
 ## How It Works
@@ -26,16 +28,24 @@ The evaluation system provides two modes of operation:
 1. Sets up Docker to ensure both the API and Streamlit ports are exposed
 2. Creates a dedicated virtual environment to avoid dependency conflicts
 3. Installs required dependencies in the isolated environment
-4. Runs the evaluation dashboard in the virtual environment
+4. Runs the evaluation dashboard in the virtual environment (communication from the streamlit app happens from within a container - not the host)
+5. Outputs comprehensive evaluation results in the dashboard with a csv results download option
 
 ### Headless Mode
 1. Connects to your RAG API using provided credentials
-2. Reads evaluation prompts from CSV file or uses defaults
+2. Reads evaluation prompts from CSV file
 3. Generates responses and retrieves context for each prompt
 4. Evaluates responses using RAGAS metrics
 5. Outputs comprehensive evaluation results in JSON format
 
-This approach keeps the evaluation dependencies separate from the main system to prevent conflicts and ensures both the API and Streamlit are accessible.
+Both approaches return:
+
+- Individual query responses and contexts
+- RAGAS metric scores for each query
+- Response times and system metadata
+- Detailed logs for debugging
+
+This approach keeps the evaluation dependencies separate from the main system to prevent conflicts and ensures both the normal Akvo Rag application stack and Streamlit are accessible.
 
 ## RAGAS Evaluation Metrics
 
@@ -156,13 +166,10 @@ This is a composite metric that considers both factual and semantic alignment wi
 - 🧠 = Context-dependent metrics (require retrieved context)
 - 📚 = Reference-based metrics (require reference answers)
 
-## Headless Evaluation
+## Headless Evaluation - Additional Information
 
 ### Basic Usage
 ```bash
-# Evaluate with default prompts
-./run_headless.sh -u "your_username" -p "your_password" -a "https://your-rag-api.com" -k "Your Knowledge Base Name"
-
 # Evaluate with custom CSV prompts
 ./run_headless.sh -u "admin" -p "password" -a "http://localhost:8000" -k "My Knowledge Base" -c "custom_prompts.csv"
 ```
@@ -177,12 +184,14 @@ prompt
 "What are the main challenges for farmers?"
 ```
 
+Currently headless evaluation doesn't support 8 metric evaluation with reference answers in the CSV.
+
 ### Command Line Options
 - `-u USERNAME`: Authentication username
 - `-p PASSWORD`: Authentication password  
 - `-a API_URL`: RAG API URL (e.g., https://your-rag-api.com)
 - `-k KB_NAME`: Knowledge base name to evaluate against
-- `-c CSV_FILE`: Optional CSV file with custom prompts
+- `-c CSV_FILE`: Optional CSV file with custom prompts. Must be a path from the RAG_evaluation folder.
 
 ### Output
 The headless evaluation outputs comprehensive JSON results including:
@@ -191,16 +200,19 @@ The headless evaluation outputs comprehensive JSON results including:
 - Response times and system metadata
 - Detailed logs for debugging
 
+The development of headless evaluation was largely intended as a way to test the system without a UI to enable faster iteration.
+
 ## Configuration
 
 ### Required Setup
 
 Before running the evaluation, ensure:
 
-1. Docker is installed and running
+1. Docker is installed and running (handled automatically with ./rag-evaluate)
 2. Your RAG API is accessible and running
-3. Knowledge base exists with the specified name
+3. Knowledge base exists with the specified name in the RAG API you are testing against
 4. OpenAI API key is set in environment variable `OPENAI_API_KEY`
+5. Your user exists with the correct permissions in the RAG API system you are testing against
 
 ### Dashboard Settings
 
@@ -245,10 +257,8 @@ The evaluation system uses **RAGAS v0.2.15** which automatically selects embeddi
 - **CSV format errors**: Ensure your CSV file has a `prompt` column with valid queries
 - **Docker issues**: For local evaluation, ensure the RAG API container is running:
   ```bash
-  cd /path/to/akvo-rag
-  docker compose -f docker-compose.dev.yml up -d
+,.rag-evaluate
   ```
-- **Dependency conflicts**: The system uses isolated virtual environments to prevent conflicts
 
 ## Advanced Usage
 
@@ -268,8 +278,9 @@ export RAG_API_URL="https://your-rag-api.com"
 export USERNAME="your-username"
 export PASSWORD="your-password"
 ```
+The RAG_API_URL, username and password can also be passed as arguments.
 
-## End-to-End Testing
+## End-to-End Testing via Streamlit Dashboard
 
 Automated tests verify the complete 8-metric evaluation workflow using Playwright to interact with the Streamlit UI.
 
@@ -286,6 +297,8 @@ cd /path/to/akvo-rag
 ```bash
 export OPENAI_API_KEY="your-openai-api-key"
 ```
+
+Set up your environment variables by copying `backend/RAG_evaluation/.env.test.example` to `backend/RAG_evaluation/.env.test` and make appropriate edits.
 
 ### Option 1: Container Testing (Headless) - Recommended
 
@@ -338,7 +351,7 @@ pytest tests/test_eight_metrics_e2e.py -v -s --tb=long
 
 ### Option 2: Host Testing (Headed Browser)
 
-On your host, run the test script with headed browser:
+This can help you see if something is going wrong. On your host, run the test script with headed browser:
 
 ```bash
 ./backend/RAG_evaluation/test-RAG-evaluation-ui-e2e.sh
