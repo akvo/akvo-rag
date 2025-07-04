@@ -2,9 +2,19 @@
 
 A comprehensive system to evaluate RAG (Retrieval-Augmented Generation) responses using RAGAS metrics and iterate on settings that might affect quality. Supports both interactive dashboard evaluation and headless command-line evaluation.
 
+## Features
+
+- **Up to eight RAGAS metrics**: Comprehensive evaluation including context-dependent, reference answer dependent, and response-only metrics
+- **Dual Mode Operation**: Interactive dashboard and headless command-line evaluation
+- **CSV Input**: Evaluate with your own test prompts defined in a standard format CSV with optional reference answers for the full 8 metrics
+- **Context Analysis**: Inspect retrieved contexts and citations for each query
+- **Performance Metrics**: Visualize response times
+- **Detailed Logging**: View system logs for debugging and analysis of RAG pipeline steps
+- **External API Support**: Evaluate any Akvo RAG API, not just local instances
+
 ## Quick Start
 
-Ensure you have copied .env.example in the project root to .env and added your `OPENAI_API_KEY`
+Ensure you have copied `.env.example` in the project root to `.env` and added your `OPENAI_API_KEY`
 
 ### Interactive Dashboard
 ```bash
@@ -29,14 +39,16 @@ The evaluation system provides two modes of operation:
 2. Creates a dedicated virtual environment to avoid dependency conflicts
 3. Installs required dependencies in the isolated environment
 4. Runs the evaluation dashboard in the virtual environment (communication from the streamlit app happens from within a container - not the host)
-5. Outputs comprehensive evaluation results in the dashboard with a csv results download option
+5. User inputs configuration. Clicks to start evaluation.
+6. Outputs comprehensive evaluation results in the dashboard with a csv results download option
 
 ### Headless Mode
-1. Connects to your RAG API using provided credentials
-2. Reads evaluation prompts from CSV file
-3. Generates responses and retrieves context for each prompt
-4. Evaluates responses using RAGAS metrics
-5. Outputs comprehensive evaluation results in JSON format
+1. Assume the evaluation system is running (`./rag-evaluate` is best)
+2. Connects to your RAG API using provided credentials
+3. Reads evaluation prompts from CSV file
+4. Generates responses and retrieves context for each prompt
+5. Evaluates responses using RAGAS metrics
+6. Outputs comprehensive evaluation results in JSON format
 
 Both approaches return:
 
@@ -47,7 +59,7 @@ Both approaches return:
 
 This approach keeps the evaluation dependencies separate from the main system to prevent conflicts and ensures both the normal Akvo Rag application stack and Streamlit are accessible.
 
-## RAGAS Evaluation Metrics
+## RAGAS Evaluation Metrics explained
 
 The system evaluates RAG responses using comprehensive RAGAS v0.2.15 metrics. All metrics return scores between 0.0 and 1.0, with higher scores indicating better performance.
 
@@ -166,7 +178,29 @@ This is a composite metric that considers both factual and semantic alignment wi
 - 🧠 = Context-dependent metrics (require retrieved context)
 - 📚 = Reference-based metrics (require reference answers)
 
-## Headless Evaluation - Additional Information
+## Configuration Details
+
+### Required Setup
+
+Before running the evaluation, ensure:
+
+1. Docker is installed and running (handled automatically with ./rag-evaluate)
+2. Your RAG API is accessible and running if you are running against a remote system
+3. The knowledge base exists with the specified name in the Akvo RAG system you are testing against
+4. OpenAI API key is set in environment variable `OPENAI_API_KEY` (required if testing against a local instance of Akvo RAG but can be configured in the UI for a remote instance)
+5. Your user exists with the correct permissions in the Akvo RAG system you are testing against
+
+### Dashboard Settings
+
+In the Streamlit UI, configure:
+
+- **Connection Settings**: API URL, username, and password
+- **Knowledge Base**: Name of the knowledge base to evaluate
+- **Evaluation LLM**: OpenAI API key and model (required for RAGAS metrics)
+- **Test Queries**: Modify or add queries for evaluation manually or upload a CSV
+- **Template Input CSVs**: Available to download for 4 and 8 metric evaluation
+
+## Headless Evaluation
 
 ### Basic Usage
 ```bash
@@ -202,62 +236,15 @@ The headless evaluation outputs comprehensive JSON results including:
 
 The development of headless evaluation was largely intended as a way to test the system without a UI to enable faster iteration.
 
-## Configuration
-
-### Required Setup
-
-Before running the evaluation, ensure:
-
-1. Docker is installed and running (handled automatically with ./rag-evaluate)
-2. Your RAG API is accessible and running
-3. Knowledge base exists with the specified name in the RAG API you are testing against
-4. OpenAI API key is set in environment variable `OPENAI_API_KEY`
-5. Your user exists with the correct permissions in the RAG API system you are testing against
-
-### Dashboard Settings
-
-In the Streamlit UI, configure:
-
-- **Connection Settings**: API URL, username, and password
-- **Knowledge Base**: Name of the knowledge base to evaluate
-- **Evaluation LLM**: OpenAI API key and model (required for RAGAS metrics)
-- **Test Queries**: Modify or add queries for evaluation
-
-### Embedding Model Selection
-
-The evaluation system uses **RAGAS v0.2.15** which automatically selects embedding models for similarity calculations in metrics like Answer Similarity:
-
-**Primary (Default)**: **OpenAI `text-embedding-ada-002`**
-- Used when `OPENAI_API_KEY` is available
-- Handles semantic similarity calculations between generated and reference answers
-- Shares the same API rate limits as the evaluation LLM
-
-**Fallback**: **`BAAI/bge-small-en-v1.5`** (Hugging Face)
-- Local sentence-transformers model used when OpenAI embeddings are unavailable
-- Reduces API costs but requires local compute resources
-
-**Rate Limiting**: When using OpenAI embeddings with OpenAI LLMs (like `gpt-4o`), you may encounter 429 rate limiting errors as both services share API quotas. The system automatically retries with exponential backoff, but evaluations may take longer during high usage periods.
-
-## Features
-
-- **Four RAGAS Metrics**: Comprehensive evaluation including context-dependent and response-only metrics
-- **Dual Mode Operation**: Interactive dashboard and headless command-line evaluation
-- **Custom CSV Input**: Evaluate with your own test prompts
-- **Context Analysis**: Inspect retrieved contexts and citations for each query
-- **Performance Metrics**: Visualize response times and quality metrics
-- **Detailed Logging**: View system logs for debugging and analysis
-- **External API Support**: Evaluate any RAG API, not just local instances
-
 ## Troubleshooting
 
-- **RAGAS metrics not showing**: Ensure you've set the `OPENAI_API_KEY` environment variable
 - **Context-based metrics failing**: Verify your RAG API returns proper context/citations in responses
 - **Connection errors**: Ensure your RAG API is running and accessible at the specified URL
-- **Authentication issues**: Verify username and password are correct for your RAG API
-- **CSV format errors**: Ensure your CSV file has a `prompt` column with valid queries
+- **Authentication issues**: Manually verify username and password are correct for your RAG API
+- **CSV format errors**: Ensure follow the template structures in `backend/RAG_evaluation/templates`. Examples with queries/prompts can be found in `backend/RAG_evaluation/example_csv_inputs`
 - **Docker issues**: For local evaluation, ensure the RAG API container is running:
   ```bash
-,.rag-evaluate
+  ./rag-evaluate
   ```
 
 ## Advanced Usage
@@ -267,7 +254,6 @@ The evaluation system uses **RAGAS v0.2.15** which automatically selects embeddi
 # From the main akvo-rag directory, use different options
 ../rag-evaluate --kb "Your Knowledge Base Name"
 ../rag-evaluate --port 8502
-../rag-evaluate --skip-checks
 ```
 
 ### Environment Variables
@@ -410,3 +396,18 @@ BROWSER_SLOW_MO=1000
 8. Context Recall 📚
 
 *(📚 = Reference-based metrics requiring reference answers)*
+
+### How RAGAS Embedding Model Selection Works
+
+The evaluation system uses **RAGAS v0.2.15** which automatically selects embedding models for similarity calculations in metrics like Answer Similarity:
+
+**Primary (Default)**: **OpenAI `text-embedding-ada-002`**
+- Used when `OPENAI_API_KEY` is available
+- Handles semantic similarity calculations between generated and reference answers
+- Shares the same API rate limits as the evaluation LLM
+
+**Fallback**: **`BAAI/bge-small-en-v1.5`** (Hugging Face)
+- Local sentence-transformers model used when OpenAI embeddings are unavailable
+- Reduces API costs but requires local compute resources
+
+**Rate Limiting**: When using OpenAI embeddings with OpenAI LLMs (like `gpt-4o`), you may encounter 429 rate limiting errors as both services share API quotas. The system automatically retries with exponential backoff, but evaluations may take longer during high usage periods.
