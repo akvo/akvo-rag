@@ -59,3 +59,5 @@ backend/media/
 frontend/.env
 backend/.env
 backend/RAG_evaluation/.env.test
+
+streamlit-override.yml

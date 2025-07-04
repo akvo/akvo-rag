@@ -4,9 +4,23 @@
 # The streamlit-override.yml is already set up by the rag-evaluate script
 # No need to run setup_for_streamlit.sh again, just check if API is running
 
+# Navigate to script's parent directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
+
+# Load .env from root
+if [ -f "$ROOT_DIR/.env" ]; then
+  export $(grep -v '^#' "$ROOT_DIR/.env" | xargs)
+else
+  echo "⚠️ .env file not found at $ROOT_DIR/.env"
+fi
+
+# Fallback port if not defined
+BACKEND_PORT=${BACKEND_PORT:-8000}
+
 # Check if Akvo RAG is running
 echo "Checking if Akvo RAG is running..."
-if ! curl -s http://localhost:8000/api/health > /dev/null; then
+if ! curl -s http://localhost:${BACKEND_PORT}/api/health > /dev/null; then
   echo "Akvo RAG doesn't seem to be running. Please ensure it's running with:"
   echo "cd $(dirname $(dirname $(pwd))) && docker compose -f docker-compose.dev.yml -f streamlit-override.yml up -d"
   exit 1
