@@ -32,7 +32,9 @@ class ConfigurationManager:
         # Connection settings
         st.sidebar.subheader("Connection Settings")
         rag_api_url = st.sidebar.text_input(
-            "RAG API URL", DEFAULT_CONFIG["rag_api_url"]
+            "RAG API URL",
+            DEFAULT_CONFIG["rag_api_url"],
+            help="If 'localhost' doesn't work (e.g., in Docker on macOS), try:\n- http://host.docker.internal:[YOUR_ENV_BACKEND_PORT]\n- or http://backend:8000",
         ).strip()
 
         username = st.sidebar.text_input(
