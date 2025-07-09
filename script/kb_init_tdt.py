@@ -10,20 +10,14 @@ from utils.rag_util import (
     rag_process_documents,
 )
 
-
-# TODO :: implement same logic like collect_pdf_urls in tdt.py
-# to avoid lost of pdfs when collect_pdf_urls is meet the max_pdfs
-# but in current active page still have more pdfs
-
-BASE_LIST_API = "https://globalplasticshub.org/api/resources"
-BASE_DETAIL_API = "https://globalplasticshub.org/api/detail"
-SAVE_DIR = "./downloads/unep"
-CSV_PATH = "./downloads/unep/unep_files.csv"
-KB_TITLE = "UNEP Library"
+BASE_LIST_API = "https://tdt.akvotest.org/cms/api/knowledge-hubs"
+SAVE_DIR = "./downloads/tdt"
+CSV_PATH = "./downloads/tdt/tdt_files.csv"
+KB_TITLE = "TDT Library"
 
 
 def ask_user_mode():
-    print("=== UNEP Knowledge Import Script ===")
+    print("=== TDT Knowledge Import Script ===")
     while True:
         try:
             mode = int(
@@ -57,15 +51,16 @@ def ask_user_input():
         except ValueError:
             print("Invalid input. Please enter a number.")
 
-    kb_description = input("Enter a description for this Knowledge Base: ")
-    kb_description = kb_description.strip()
+    kb_description = input(
+        "Enter a description for this Knowledge Base: "
+    ).strip()
     return max_pdfs, kb_description
 
 
-def safe_request_get(url, max_retries=5, delay=5):
+def safe_request_get(url, params=None, max_retries=5, delay=5):
     for attempt in range(1, max_retries + 1):
         try:
-            response = requests.get(url)
+            response = requests.get(url, params=params)
             response.raise_for_status()
             return response
         except requests.exceptions.RequestException as e:
@@ -78,66 +73,61 @@ def safe_request_get(url, max_retries=5, delay=5):
                 return None
 
 
-def fetch_pdf_attachments(resource):
-    r_type = resource["type"]
-    r_id = resource["id"]
-    url = f"{BASE_DETAIL_API}/{r_type}/{r_id}"
-    print(f"Fetching detail: {url}")
-    r = safe_request_get(url)
-    if not r:
-        print(f"❌ Failed to fetch detail for resource {resource['id']}")
-        return []
-    data = r.json()
-    attachments = data.get("attachments") or []
-    return [
-        a
-        for a in attachments
-        if isinstance(a, str) and a.lower().endswith(".pdf")
-    ]
-
-
-def collect_pdf_urls(max_pdfs):
+def collect_pdf_urls(max_pdfs, seen_urls=None):
     print("\n🔍 Collecting PDF URLs...")
     pdf_records = []
-    offset = get_last_offset_from_csv()
-    limit = 20
+    seen_urls = seen_urls or set()
+    page = get_last_page_from_csv()
+    page_size = 20
     total_pdfs = 0
 
     while total_pdfs < max_pdfs:
-        url = f"{BASE_LIST_API}?incBadges=true&limit={limit}&offset={offset}"
-        url += "&orderBy=created&descending=true"
-        print(f"Fetching: {url}")
-        r = safe_request_get(url)
+        params = {
+            "pagination[page]": page,
+            "pagination[pageSize]": page_size,
+            "sort[0]": "publication_date:desc",
+            "populate[0]": "topic",
+            "populate[1]": "regions",
+            "populate[2]": "file",
+            "populate[3]": "image",
+        }
+
+        print(f"Fetching page {page}...")
+        r = safe_request_get(BASE_LIST_API, params=params)
         if not r:
-            print(f"❌ Skipping offset {offset} due to repeated failure.")
-            offset += limit
-            print(f"➡️ Continue to offset {offset}.")
+            print(f"❌ Skipping page {page} due to failure.")
+            page += 1
             continue
 
-        resources = r.json().get("results", [])
+        resources = r.json().get("data", [])
         if not resources:
             print("No more resources found.")
             break
 
         for res in resources:
-            title = res.get("title", "document")
-            pdf_links = fetch_pdf_attachments(res)
-            for link in pdf_links:
-                if total_pdfs >= max_pdfs:
-                    break
-                pdf_records.append((title, link, offset))
+            file = res.get("file", {})
+            title = file.get("name", "document") if file else "document"
+            if file and file.get("url", "").lower().endswith(".pdf"):
+                pdf_url = file["url"]
+                if pdf_url in seen_urls:
+                    continue
+                seen_urls.add(pdf_url)
+                pdf_records.append((title, pdf_url, page))
                 total_pdfs += 1
 
-        offset += limit
-        time.sleep(5)
+        if total_pdfs >= max_pdfs:
+            break
 
-    print(f"\n✅ Collected {total_pdfs} PDF URLs.")
+        page += 1
+        time.sleep(2)
+
+    print(f"\n✅ Collected {total_pdfs} new PDF URLs.")
     return pdf_records
 
 
 def save_pdfs_to_csv(pdf_records, csv_path=CSV_PATH):
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-    df = pd.DataFrame(pdf_records, columns=["title", "url", "offset"])
+    df = pd.DataFrame(pdf_records, columns=["title", "url", "page"])
     df.to_csv(csv_path, index=False)
     print(f"📁 Saved {len(df)} PDF URLs to {csv_path}")
 
@@ -149,15 +139,15 @@ def read_pdfs_from_csv(csv_path=CSV_PATH, limit=None):
     return list(df.itertuples(index=False, name=None))
 
 
-def get_last_offset_from_csv(csv_path=CSV_PATH, limit=20):
+def get_last_page_from_csv(csv_path=CSV_PATH):
     if not os.path.exists(csv_path):
-        return 0
+        return 1
     try:
         df = pd.read_csv(csv_path)
-        last_offset = int(df["offset"].max())
-        return last_offset + limit
+        last_page = int(df["page"].max())
+        return last_page + 1
     except Exception:
-        return 0
+        return 1
 
 
 def download_pdf(url, save_dir, title_hint="document"):
@@ -184,7 +174,7 @@ def download_pdf(url, save_dir, title_hint="document"):
 
 def chunk_files(file_list, chunk_size):
     for i in range(0, len(file_list), chunk_size):
-        yield file_list[i : i + chunk_size]  # noqa
+        yield file_list[i : i + chunk_size]
 
 
 def get_pdf_files_from_directory(directory: str):
@@ -202,7 +192,7 @@ def download_pdfs_from_csv(
     pdf_records = read_pdfs_from_csv(csv_path, limit=max_files)
     downloaded_files = []
 
-    for title, url, offset in pdf_records:
+    for title, url, page in pdf_records:
         filepath = download_pdf(url, save_dir, title_hint=title)
         if filepath:
             downloaded_files.append(filepath)
@@ -266,7 +256,10 @@ def main():
         print("\n✅ Process uploaded documents success.")
         return
 
-    pdf_records = collect_pdf_urls(remaining_to_fetch)
+    seen_urls = (
+        set(existing_df["url"].tolist()) if not existing_df.empty else set()
+    )
+    pdf_records = collect_pdf_urls(remaining_to_fetch, seen_urls=seen_urls)
     save_pdfs_to_csv(existing_df.values.tolist() + pdf_records)
 
     if mode == 1:

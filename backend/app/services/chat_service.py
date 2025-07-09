@@ -1,8 +1,9 @@
 import json
 import base64
-from typing import List, AsyncGenerator
+import uuid
+
+from typing import List, AsyncGenerator, Optional
 from sqlalchemy.orm import Session
-from langchain_openai import ChatOpenAI
 from langchain.chains import (
     create_history_aware_retriever,
     create_retrieval_chain,
@@ -32,8 +33,55 @@ async def generate_response(
     knowledge_base_ids: List[int],
     chat_id: int,
     db: Session,
+    max_history_length: Optional[int] = 10,
+    generate_last_n_messages: Optional[bool] = False,
+    strict_mode: Optional[bool] = True,
 ) -> AsyncGenerator[str, None]:
     try:
+        """
+        Since the RAG frontend sent all chat history on FE
+        into generate_response, we need to reduce the length of the messages
+        otherwise, the model will throw an error
+
+        ### handle error
+        This model's maximum context length is 8192 tokens.
+        However, your messages resulted in 38669 tokens.
+        Please reduce the length of the messages
+        ### eol handle error
+        """
+        if not generate_last_n_messages and not messages.get("id", None):
+            messages_id = uuid.uuid4()
+            messages["id"] = messages_id
+
+        # Get the only last 10 messages
+        if not generate_last_n_messages and messages.get("messages", None):
+            messages_tmp = messages["messages"]
+            messages["messages"] = messages_tmp[-max_history_length:]
+
+        # Generate last n message in backend
+        if generate_last_n_messages:
+            new_messages_id = uuid.uuid4()
+            messages = {"id": new_messages_id, "messages": []}
+            # limit last n messages
+            all_history_messages = (
+                db.query(Message)
+                .filter(Message.chat_id == chat_id)
+                .order_by(Message.created_at.desc())
+                .limit(max_history_length)
+                .all()
+            )
+            for message in all_history_messages:
+                messages["messages"].append(
+                    {
+                        "role": message.role,
+                        "content": message.content,
+                    }
+                )
+            if not all_history_messages:
+                messages["messages"].append({"role": "user", "content": query})
+                print(messages, "generate n last message")
+        # EOL generate last n message in backend
+
         # Create user message
         user_message = Message(content=query, role="user", chat_id=chat_id)
         db.add(user_message)
@@ -65,7 +113,8 @@ async def generate_response(
             if documents:
                 # Use the factory to create the appropriate vector store
                 vector_store = VectorStoreFactory.create(
-                    store_type=settings.VECTOR_STORE_TYPE,  # 'chroma' or other supported types
+                    # 'chroma' or other supported types
+                    store_type=settings.VECTOR_STORE_TYPE,
                     collection_name=f"kb_{kb.id}",
                     embedding_function=embeddings,
                 )
@@ -87,18 +136,37 @@ async def generate_response(
 
         # Use first vector store for now
         retriever = vector_stores[0].as_retriever()
+        # After creating retriever
+        # retriever = vector_stores[0].as_retriever(
+        #     search_type="similarity_score_threshold",
+        #     search_kwargs={"score_threshold": 0.7, "k": 5},
+        # )
 
         # Initialize the language model
         llm = LLMFactory.create()
 
         # Create contextualize question prompt
         contextualize_q_system_prompt = (
-            "Given a chat history and the latest user question "
-            "which might reference context in the chat history, "
-            "formulate a standalone question which can be understood "
-            "without the chat history. Do NOT answer the question, just "
-            "reformulate it if needed and otherwise return it as is."
+            "You are given a chat history and the user's latest question. Your task is to rewrite the user's input as a clear, "
+            "standalone question that fully captures their intent. The reformulated question must be understandable on its own, "
+            "without requiring access to earlier parts of the conversation.\n\n"
+            "If the user refers to earlier messages or prior context (e.g., 'what did we talk about?', 'summarize our chat', "
+            "'what was your last response?', or 'can you remind me what I said before?'), incorporate the relevant details from the "
+            "chat history into the rewritten question. Be precise—do not omit specific topics, facts, or tools mentioned earlier.\n\n"
+            "Your reformulated question should:\n"
+            "1. Retain the user's original language and tone.\n"
+            "2. Be specific and context-aware.\n"
+            "3. Be suitable for use in retrieval or question-answering over a knowledge base.\n\n"
+            "Examples:\n"
+            "- User: 'Can you summarize what we’ve discussed so far?'\n"
+            "  Reformulated: 'Summarize our conversation so far about fine-tuning a language model.'\n"
+            "- User: 'What was the tool you mentioned before?'\n"
+            "  Reformulated: 'What was the name of the tool you mentioned earlier for data labeling in NLP pipelines?'\n"
+            "- User: 'What did I ask you in the beginning?'\n"
+            "  Reformulated: 'What was my first question regarding LangChain integration?'\n\n"
+            "Focus on maintaining the intent while making the question precise and independently interpretable."
         )
+
         contextualize_q_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", contextualize_q_system_prompt),
@@ -113,7 +181,7 @@ async def generate_response(
         )
 
         # Create QA prompt
-        qa_system_prompt = (
+        qa_flexible_prompt = (
             "You are given a user question, and please write clean, concise and accurate answer to the question. "
             "You will be given a set of related contexts to the question, which are numbered sequentially starting from 1. "
             "Each context has an implicit reference number based on its position in the array (first context is 1, second is 2, etc.). "
@@ -127,6 +195,45 @@ async def generate_response(
             "Remember: Cite contexts by their position number (1 for first context, 2 for second, etc.) and don't blindly "
             "repeat the contexts verbatim."
         )
+        qa_strict_prompt = (
+            "You are a highly knowledgeable and factual AI assistant. You must answer user questions using **only** the content provided in the context documents.\n\n"
+            "### Strict Answering Rules:\n"
+            "1. **Use Context Only**:\n"
+            "   - Do not use any prior knowledge or make assumptions.\n"
+            "   - Use only the documents provided in this prompt.\n"
+            "   - **Do NOT use information or citations from previous chat turns or history.**\n"
+            "   - If the answer is not present in the context, you must say so.\n"
+            "2. **Cite Precisely**:\n"
+            "   - Use the exact format `[citation:x]` at the end of each sentence that uses information from the context, where `x` is the document number (1, 2, 3...).\n"
+            "   - These numbers are based on the order of the context provided below — the first document is `[citation:1]`, the second is `[citation:2]`, and so on.\n"
+            "   - Do NOT use `[1]`, `(2)`, page numbers, or metadata for citations. Only use `[citation:x]` based on order.\n"
+            "3. **If Information Is Missing**:\n"
+            "   - If critical information is not present, respond with:\n"
+            "     'Information is missing on [specific topic] based on the provided context.'\n"
+            "   - If partial information exists, summarize what is known and explain what's missing.\n"
+            "4. **Language & Style**:\n"
+            "   - Answer in the same language as the user's question.\n"
+            "   - Be concise, clear, and formal. Do not copy the context directly—paraphrase when possible.\n"
+            "5. **Multiple Sources**:\n"
+            "   - If a sentence is supported by multiple documents, include all applicable citations, like `[citation:1][citation:3]`.\n"
+            "6. **Token Limit**:\n"
+            "   - Keep your answer under 1024 tokens.\n\n"
+            "**Important Reminder**:\n"
+            "- You must NOT answer based on external knowledge, prior chat context, or assumptions.\n"
+            "- Only use what is explicitly stated in the current provided context. No speculation or hallucination is allowed.\n"
+            "- Do NOT use citation formats like `[1]`, `(2)`, or similar. Only use `[citation:x]`.\n"
+            "- Remember: Cite based on the order in which documents appear in the context — NOT based on page number, filename, or metadata.\n"
+            "- Do not repeat the context verbatim — always paraphrase.\n\n"
+            "### Provided Context:\n{context}\n"
+        )
+
+        if strict_mode:
+            qa_system_prompt = qa_strict_prompt
+        else:
+            qa_system_prompt = (
+                qa_flexible_prompt  # your original or a looser version
+            )
+
         qa_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", qa_system_prompt),
@@ -172,8 +279,9 @@ async def generate_response(
             {"input": query, "chat_history": chat_history}
         ):
             if "context" in chunk:
+                retrieved_docs = chunk["context"]
                 serializable_context = []
-                for context in chunk["context"]:
+                for context in retrieved_docs:
                     serializable_doc = {
                         "page_content": context.page_content.replace(
                             '"', '\\"'
