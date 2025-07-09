@@ -222,10 +222,11 @@ Currently headless evaluation doesn't support 8 metric evaluation with reference
 
 ### Command Line Options
 - `-u USERNAME`: Authentication username
-- `-p PASSWORD`: Authentication password  
+- `-p PASSWORD`: Authentication password
 - `-a API_URL`: RAG API URL (e.g., https://your-rag-api.com)
 - `-k KB_NAME`: Knowledge base name to evaluate against
 - `-c CSV_FILE`: Optional CSV file with custom prompts. Must be a path from the RAG_evaluation folder.
+- `--docker-host-gateway`: Optional flag to replace `localhost` in the `API URL` with `host.docker.internal`. Use this if your Docker container cannot reach services via `localhost` (e.g., on macOS).
 
 ### Output
 The headless evaluation outputs comprehensive JSON results including:
@@ -381,17 +382,17 @@ BROWSER_SLOW_MO=1000
 
 **Success Criteria:**
 - All 8 metrics calculated with numerical values (0.0-1.0)
-- No "N/A" values for reference-based metrics  
+- No "N/A" values for reference-based metrics
 - Full Mode (8 metrics) successfully selected
 - Reference answers properly entered and used
 
 **8 Metrics Verified:**
 1. Faithfulness
-2. Answer Relevancy  
+2. Answer Relevancy
 3. Context Precision Without Reference
 4. Context Relevancy
 5. Answer Similarity 📚
-6. Answer Correctness 📚  
+6. Answer Correctness 📚
 7. Context Precision 📚
 8. Context Recall 📚
 

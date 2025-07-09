@@ -58,3 +58,6 @@ templates/test_*.csv
 !example_csv_inputs/
 example_csv_inputs/*_temp.csv
 example_csv_inputs/test_*.csv
+
+# ignore e2e test result
+*.html

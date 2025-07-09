@@ -2,7 +2,7 @@
 
 # RAG Evaluation E2E Test Runner - Headless Container Mode
 # This script runs end-to-end tests inside the Docker container in headless mode.
-# It automatically installs missing Playwright browsers and system dependencies 
+# It automatically installs missing Playwright browsers and system dependencies
 # that are lost when containers restart due to volume mounting behavior.
 
 set -e  # Exit on any error
@@ -61,15 +61,15 @@ check_venv() {
 # Function to check and install Python dependencies
 check_python_deps() {
     print_status "Checking Python dependencies..."
-    
+
     # Check if pytest and playwright are installed in venv
     if docker exec "$CONTAINER_NAME" bash -c "cd /app/RAG_evaluation && source venv/bin/activate && python -c 'import pytest, playwright' 2>/dev/null"; then
         print_success "Python dependencies are installed"
     else
         print_warning "Installing missing Python dependencies..."
         docker exec "$CONTAINER_NAME" bash -c "
-            cd /app/RAG_evaluation && 
-            source venv/bin/activate && 
+            cd /app/RAG_evaluation &&
+            source venv/bin/activate &&
             pip install pytest pytest-asyncio playwright
         "
         print_success "Python dependencies installed"
@@ -79,15 +79,15 @@ check_python_deps() {
 # Function to check and install Playwright browsers
 check_playwright_browsers() {
     print_status "Checking Playwright browsers..."
-    
+
     # Check if Chromium browser exists
     if docker exec "$CONTAINER_NAME" bash -c "[ -f /root/.cache/ms-playwright/chromium-*/chrome-linux/chrome ] 2>/dev/null"; then
         print_success "Playwright browsers are installed"
     else
         print_warning "Installing Playwright browsers..."
         docker exec "$CONTAINER_NAME" bash -c "
-            cd /app/RAG_evaluation && 
-            source venv/bin/activate && 
+            cd /app/RAG_evaluation &&
+            source venv/bin/activate &&
             playwright install
         "
         print_success "Playwright browsers installed"
@@ -97,15 +97,15 @@ check_playwright_browsers() {
 # Function to check and install system dependencies
 check_system_deps() {
     print_status "Checking system dependencies for Playwright..."
-    
+
     # Check if essential system libraries exist
     if docker exec "$CONTAINER_NAME" bash -c "dpkg -l | grep -q libgtk-3-0 && dpkg -l | grep -q libasound2" 2>/dev/null; then
         print_success "System dependencies are installed"
     else
         print_warning "Installing system dependencies for Playwright..."
         docker exec "$CONTAINER_NAME" bash -c "
-            cd /app/RAG_evaluation && 
-            source venv/bin/activate && 
+            cd /app/RAG_evaluation &&
+            source venv/bin/activate &&
             playwright install-deps
         "
         print_success "System dependencies installed"
@@ -115,16 +115,16 @@ check_system_deps() {
 # Function to run the actual tests
 run_tests() {
     print_status "Running E2E tests..."
-    
+
     # Prepare pytest command
     local pytest_cmd="cd /app/RAG_evaluation && source venv/bin/activate && timeout ${TEST_TIMEOUT}s pytest tests/test_eight_metrics_e2e.py"
-    
+
     if [ "$VERBOSE" = "true" ]; then
         pytest_cmd="$pytest_cmd -v -s --tb=long"
     else
         pytest_cmd="$pytest_cmd --tb=short"
     fi
-    
+
     # Run the test with proper error handling
     if docker exec "$CONTAINER_NAME" bash -c "$pytest_cmd"; then
         print_success "🎉 E2E tests PASSED!"
@@ -198,29 +198,29 @@ main() {
     print_status "Timeout: ${TEST_TIMEOUT}s"
     print_status "Verbose: $VERBOSE"
     echo ""
-    
+
     # Run all checks and installations
     check_container
     check_venv
     check_python_deps
     check_playwright_browsers
     check_system_deps
-    
+
     echo ""
     print_status "🧪 All dependencies verified, running tests..."
     echo ""
-    
+
     # Run the tests
     run_tests
     local test_result=$?
-    
+
     echo ""
     if [ $test_result -eq 0 ]; then
         print_success "✅ E2E test execution completed successfully!"
     else
         print_error "❌ E2E test execution failed!"
     fi
-    
+
     exit $test_result
 }
 
