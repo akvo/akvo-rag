@@ -52,22 +52,30 @@ It also provides OpenAPI interfaces for convenient knowledge base access via API
 <div align="center">
   <img src="./docs/images/screenshot1.png" alt="Knowledge Base Management" width="800">
   <p><em>Knowledge Base Management Dashboard</em></p>
-  
+
   <img src="./docs/images/screenshot2.png" alt="Chat Interface" width="800">
   <p><em>Document Processing Dashboard</em></p>
-  
+
   <img src="./docs/images/screenshot3.png" alt="Document Processing" width="800">
   <p><em>Document List</em></p>
-  
+
   <img src="./docs/images/screenshot4.png" alt="System Settings" width="800">
   <p><em>Intelligent Chat Interface with References</em></p>
-  
+
   <img src="./docs/images/screenshot5.png" alt="Analytics Dashboard" width="800">
   <p><em>API Key Management</em></p>
 
   <img src="./docs/images/screenshot6.png" alt="Analytics Dashboard" width="800">
   <p><em>API Reference</em></p>
 </div>
+
+
+## ✨ Prompt Service & Dynamic Prompt Support
+
+We’ve introduced a dynamic Prompt Service that centralizes and simplifies prompt management. Prompts are now stored in the database, versioned, and editable without code changes—enabling flexible tuning, fallback defaults, and future admin support.
+
+👉 See full prompt service documentation » [PROMPT_SERVICE.md](PROMPT_SERVICE.md)
+
 
 ## 🔬 RAG Evaluation
 
@@ -87,46 +95,46 @@ Evaluate your RAG pipeline performance using RAGAS metrics with the built-in eva
 For complete evaluation documentation: [`backend/RAG_evaluation/README.md`](backend/RAG_evaluation/README.md)
 
  ##  Project Flowchart
- 
+
 ```mermaid
 graph TB
     %% Role Definitions
     client["Caller/User"]
     open_api["Open API"]
-    
+
     subgraph import_process["Document Ingestion Process"]
         direction TB
         %% File Storage and Document Processing Flow
         docs["Document Input<br/>(PDF/MD/TXT/DOCX)"]
         job_id["Return Job ID"]
-        
+
         nfs["NFS"]
 
         subgraph async_process["Asynchronous Document Processing"]
             direction TB
             preprocess["Document Preprocessing<br/>(Text Extraction/Cleaning)"]
             split["Text Splitting<br/>(Segmentation/Overlap)"]
-            
+
             subgraph embedding_process["Embedding Service"]
                 direction LR
                 embedding_api["Embedding API"] --> embedding_server["Embedding Server"]
             end
-            
+
             store[(Vector Database)]
-            
+
             %% Internal Flow of Asynchronous Processing
             preprocess --> split
             split --> embedding_api
             embedding_server --> store
         end
-        
+
         subgraph job_query["Job Status Query"]
             direction TB
             job_status["Job Status<br/>(Processing/Completed/Failed)"]
         end
     end
-    
-    %% Query Service Flow  
+
+    %% Query Service Flow
     subgraph query_process["Query Service"]
         direction LR
         user_history["User History"] --> query["User Query<br/>(Based on User History)"]
@@ -138,7 +146,7 @@ graph TB
         llm --> response["Final Response"]
         query -.-> rerank
     end
-    
+
     %% Main Flow Connections
     client --> |"1.Upload Document"| docs
     docs --> |"2.Generate"| job_id
@@ -155,7 +163,7 @@ graph TB
     %% Status Query Flow
     client --> |"4.Poll"| job_status
     job_status --> |"5.Return Progress"| client
-    
+
     %% Database connects to Query Service
     store --> retrieve
 
