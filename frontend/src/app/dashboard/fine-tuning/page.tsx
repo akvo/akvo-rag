@@ -98,6 +98,18 @@ export default function FineTuningPage() {
     }
   };
 
+  const handleActivateVersion = async (promptName: string, versionId: number, versionNumber: number) => {
+    try {
+      await api.put(`/api/prompt/${promptName}/reactivate/${versionId}`);
+      setStatus({ type: 'success', message: `Version v${versionNumber} activated for ${promptName}` });
+      setExpandedHistories({});
+      fetchPrompts();
+    } catch (err: any) {
+      setStatus({ type: 'error', message: err.message || 'Failed to activate version' });
+    }
+  };
+
+
   return (
     <DashboardLayout>
       <div className="my-10">
@@ -164,23 +176,40 @@ export default function FineTuningPage() {
                     </div>
 
                     {versions.slice(1).map((version) => (
-                      <div key={version.id} className="p-4 text-sm bg-white">
+                      <div
+                        key={version.id}
+                        className="rounded-md border border-gray-200 bg-white p-4 mb-4 shadow-sm mx-5 my-5"
+                      >
                         <div className="flex justify-between items-center mb-2">
-                          <span className="font-semibold text-gray-800">
-                            v{version.version_number}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-gray-800">
+                              v{version.version_number}
+                            </span>
+                            <span className="text-xs text-gray-500 italic">Historical Version</span>
+                          </div>
                           <span className="text-xs text-gray-500">
                             {new Date(version.updated_at || version.created_at).toLocaleString()}
                           </span>
                         </div>
-                        <pre className="whitespace-pre-wrap text-gray-700 text-sm">{version.content}</pre>
+
+                        <pre className="whitespace-pre-wrap text-gray-700 text-sm mb-2">{version.content}</pre>
+
                         {version.activation_reason && (
-                          <p className="text-xs italic text-gray-500 mt-2">
+                          <p className="text-xs italic text-gray-500 mb-3">
                             Reason: {version.activation_reason}
                           </p>
                         )}
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleActivateVersion(promptName, version.id, version.version_number)}
+                        >
+                          Activate this version: v{version.version_number}
+                        </Button>
                       </div>
                     ))}
+
                   </div>
                 )}
 
