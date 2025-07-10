@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from app.models.prompt import PromptNameEnum
+from datetime import datetime
 
 
 class PromptVersionBase(BaseModel):
@@ -20,6 +21,7 @@ class PromptVersionResponse(BaseModel):
     version_number: int
     content: str
     is_active: bool
+    updated_at: datetime
     activation_reason: Optional[str]
 
     class Config:
