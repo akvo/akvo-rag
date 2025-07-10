@@ -84,3 +84,21 @@ class PromptNameEnum(str, Enum):
 ```
 
 Using enums ensures type safety and consistency across code and database.
+
+## ⚙️ Initial Setup
+
+To initialize default prompt values into the database, run the following command inside the backend container:
+
+```bash
+# From your backend container
+python -m app.seeder.seed_prompts
+```
+
+or from your terminal:
+
+```bash
+# From your terminal
+docker compose exec backend python -m app.seeder.seed_prompts
+```
+
+This will insert default PromptDefinition and PromptVersion entries into your database.
