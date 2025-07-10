@@ -134,28 +134,56 @@ export default function FineTuningPage() {
             <div key={promptName} className="mb-10">
               <h2 className="text-lg font-medium mb-2 text-gray-900">{promptName}</h2>
 
-              <div className={`rounded-lg border border-gray-200 divide-y ${versions.length > 1 ? 'max-h-64 overflow-y-auto' : ''}`}>
-                {versions.map((version) => (
-                  <div
-                    key={version.id}
-                    className={`p-4 text-sm ${
-                      version.is_active ? 'bg-gray-50 border-l-4 border-blue-500' : 'bg-white'
-                    }`}
-                  >
+              <div className="rounded-lg border border-gray-200">
+                {/* Active Version */}
+                {versions.length > 0 && (
+                  <div className="p-4 bg-gray-50 border-b">
                     <div className="flex justify-between items-center mb-2">
                       <span className="font-semibold text-gray-800">
-                        v{version.version_number} {version.is_active && <span className="text-blue-600">(Active)</span>}
+                        🟦 v{versions[0].version_number} <span className="text-blue-600">(Active)</span>
                       </span>
                       <span className="text-xs text-gray-500">
-                        {new Date(version.updated_at || version.created_at).toLocaleString()}
+                        {new Date(versions[0].updated_at || versions[0].created_at).toLocaleString()}
                       </span>
                     </div>
-                    <pre className="whitespace-pre-wrap text-gray-700">{version.content}</pre>
-                    {version.activation_reason && (
-                      <p className="text-xs italic text-gray-500 mt-2">Reason: {version.activation_reason}</p>
+                    <pre className="whitespace-pre-wrap text-gray-700 text-sm">{versions[0].content}</pre>
+                    {versions[0].activation_reason && (
+                      <p className="text-xs italic text-gray-500 mt-2">
+                        Reason: {versions[0].activation_reason}
+                      </p>
                     )}
                   </div>
-                ))}
+                )}
+
+                {/* History */}
+                {versions.length > 1 && (
+                  <div className="max-h-64 overflow-y-auto divide-y">
+                    {/* Sticky Header */}
+                    <div className="sticky top-0 bg-white px-4 py-2 text-sm font-medium text-gray-700 border-b z-10">
+                      🔁 Prompt History
+                    </div>
+
+                    {versions.slice(1).map((version) => (
+                      <div key={version.id} className="p-4 text-sm bg-white">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-semibold text-gray-800">
+                            v{version.version_number}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(version.updated_at || version.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                        <pre className="whitespace-pre-wrap text-gray-700 text-sm">{version.content}</pre>
+                        {version.activation_reason && (
+                          <p className="text-xs italic text-gray-500 mt-2">
+                            Reason: {version.activation_reason}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
               </div>
 
               <Button
