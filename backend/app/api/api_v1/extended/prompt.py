@@ -78,6 +78,50 @@ def create_prompt(
     }
 
 
+@router.put(
+    "/{name}/reactivate/{version_id}", response_model=schema.PromptResponse
+)
+def reactivate_prompt_version(
+    name: PromptNameEnum,
+    version_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    prompt = get_prompt_by_name(db, name)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    version_to_activate = (
+        db.query(PromptVersion).filter_by(id=version_id).first()
+    )
+    if (
+        not version_to_activate
+        or version_to_activate.prompt_definition_id != prompt.id
+    ):
+        raise HTTPException(
+            status_code=404, detail="Version not found for this prompt"
+        )
+
+    # Deactivate current active version
+    db.query(PromptVersion).filter_by(
+        prompt_definition_id=prompt.id, is_active=True
+    ).update({"is_active": False})
+
+    # Activate selected version
+    version_to_activate.is_active = True
+    version_to_activate.activated_by_user_id = current_user.id
+    version_to_activate.activation_reason = (
+        version_to_activate.activation_reason or "Reactivated from history"
+    )
+    db.commit()
+
+    return {
+        "name": prompt.name,
+        "active_version": version_to_activate,
+        "all_versions": prompt.versions,
+    }
+
+
 @router.put("/{name}", response_model=schema.PromptResponse)
 def update_prompt(
     prompt_in: schema.PromptUpdate,

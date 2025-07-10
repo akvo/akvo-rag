@@ -18,11 +18,13 @@ class PromptUpdate(PromptVersionBase):
 
 
 class PromptVersionResponse(BaseModel):
+    id: int
     version_number: int
     content: str
     is_active: bool
     updated_at: datetime
     activation_reason: Optional[str]
+    activated_by_user_id: Optional[int]
 
     class Config:
         orm_mode = True
