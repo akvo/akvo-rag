@@ -101,7 +101,7 @@ def update_prompt(
     }
 
 
-@router.get("/", response_model=List[schema.PromptResponse])
+@router.get("", response_model=List[schema.PromptResponse])
 def list_prompts(db: Session = Depends(get_db)):
     definitions = list_all_prompts(db)
     return [
