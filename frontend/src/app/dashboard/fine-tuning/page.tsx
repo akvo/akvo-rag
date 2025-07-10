@@ -29,6 +29,13 @@ export default function FineTuningPage() {
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [expandedHistories, setExpandedHistories] = useState<Record<string, boolean>>({});
 
+  const [showModal, setShowModal] = useState(false);
+  const [selectedVersion, setSelectedVersion] = useState<{
+    promptName: string;
+    versionId: number;
+    versionNumber: number;
+  } | null>(null);
+
   useEffect(() => {
     fetchPrompts();
   }, []);
@@ -98,14 +105,29 @@ export default function FineTuningPage() {
     }
   };
 
-  const handleActivateVersion = async (promptName: string, versionId: number, versionNumber: number) => {
+  const handleActivateVersion = async ({
+    promptName,
+    versionId,
+    versionNumber,
+  }: {
+    promptName: string;
+    versionId: number;
+    versionNumber: number;
+  }) => {
     try {
       await api.put(`/api/prompt/${promptName}/reactivate/${versionId}`);
-      setStatus({ type: 'success', message: `Version v${versionNumber} activated for ${promptName}` });
+      setStatus({
+        type: 'success',
+        message: `Version v${versionNumber} activated for ${promptName}`,
+      });
+      setShowModal(false);
+      setSelectedVersion(null);
       setExpandedHistories({});
       fetchPrompts();
     } catch (err: any) {
       setStatus({ type: 'error', message: err.message || 'Failed to activate version' });
+      setShowModal(false);
+      setSelectedVersion(null);
     }
   };
 
@@ -203,7 +225,10 @@ export default function FineTuningPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => handleActivateVersion(promptName, version.id, version.version_number)}
+                          onClick={() =>
+                            setSelectedVersion({ promptName, versionId: version.id, versionNumber: version.version_number }) ||
+                            setShowModal(true)
+                          }
                         >
                           Activate this version: v{version.version_number}
                         </Button>
@@ -269,6 +294,36 @@ export default function FineTuningPage() {
           ))
         )}
       </div>
+
+      {showModal && selectedVersion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-lg">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">Confirm Activation</h2>
+            <p className="text-sm text-gray-700 mb-6">
+              Are you sure you want to activate <span className="font-semibold">v{selectedVersion.versionNumber}</span> for prompt <span className="font-semibold">{selectedVersion.promptName}</span>?
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowModal(false);
+                  setSelectedVersion(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => handleActivateVersion({...selectedVersion})}
+              >
+                Confirm
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </DashboardLayout>
   );
 }
