@@ -1,4 +1,3 @@
-// ...all existing imports
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -14,6 +13,7 @@ interface PromptVersion {
   activated_by_user_id?: number;
   activation_reason?: string;
   created_at: string;
+  updated_at?: string;
 }
 
 interface PromptResponse {
@@ -27,25 +27,26 @@ export default function FineTuningPage() {
   const [loading, setLoading] = useState(false);
   const [formState, setFormState] = useState<Record<string, { content: string; reason: string }>>({});
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [expandedHistories, setExpandedHistories] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchPrompts();
   }, []);
 
+  useEffect(() => {
+    if (status) {
+      const timer = setTimeout(() => setStatus(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [status]);
+
   const fetchPrompts = async () => {
     setLoading(true);
     try {
       const definitions: PromptResponse[] = await api.get('/api/prompt');
-      console.log(definitions)
       const groups: Record<string, PromptVersion[]> = {};
       for (const def of definitions) {
-        /*
-          TODO ::
-          currently the qa_flexible_prompt only as a backup of RAG original prompt
-          and not being used, so we hide it from the UI
-        */
-        if (def.name === "qa_flexible_prompt") continue;
-        // EOL of filter out qa_flexible_prompt
+        if (def.name === 'qa_flexible_prompt') continue;
         if (!def.active_version) continue;
         groups[def.name] = [def.active_version];
       }
@@ -58,14 +59,25 @@ export default function FineTuningPage() {
   };
 
   const fetchPromptHistory = async (name: string) => {
-    try {
-      const detail: PromptResponse = await api.get(`/api/prompt/${name}`);
+    const currentlyExpanded = expandedHistories[name];
+    if (currentlyExpanded) {
+      // collapse
       setPromptGroups((prev) => ({
         ...prev,
-        [name]: [detail.active_version!, ...detail.all_versions.filter(v => !v.is_active)],
+        [name]: prev[name].filter((v) => v.is_active),
       }));
-    } catch (err: any) {
-      setStatus({ type: 'error', message: err.message || 'Failed to load history' });
+      setExpandedHistories((prev) => ({ ...prev, [name]: false }));
+    } else {
+      try {
+        const detail: PromptResponse = await api.get(`/api/prompt/${name}`);
+        setPromptGroups((prev) => ({
+          ...prev,
+          [name]: [detail.active_version!, ...detail.all_versions.filter((v) => !v.is_active)],
+        }));
+        setExpandedHistories((prev) => ({ ...prev, [name]: true }));
+      } catch (err: any) {
+        setStatus({ type: 'error', message: err.message || 'Failed to load history' });
+      }
     }
   };
 
@@ -91,25 +103,23 @@ export default function FineTuningPage() {
       <div className="my-10">
         <h1 className="text-3xl font-semibold mb-6 tracking-tight">Fine Tuning</h1>
 
-        {/* Prompt Types Info Section */}
         <div className="mb-10 p-4 rounded-md border border-gray-200 bg-gray-50 text-sm text-gray-700">
           <h2 className="text-lg font-semibold mb-2">💡 Prompt Types Explained</h2>
           <p className="mb-2">
-            <strong>📌 Contextual Prompt:</strong> Helps the AI rewrite the user’s query using previous chat messages (chat history).
-            This makes search more accurate by adding context to follow-up questions.
+            <strong>📌 Contextual Prompt:</strong> Helps the AI rewrite the user’s query using previous chat messages.
           </p>
           <p className="mb-2">
-            <strong>📌 QA Prompt:</strong> Guides the AI to generate the answer using retrieved knowledge base documents.
+            <strong>📌 QA Prompt:</strong> Guides the AI to generate answers from the knowledge base.
           </p>
           <ul className="list-disc list-inside ml-4">
-            <li><strong>Strict:</strong> Only responds using retrieved content. (Used in production)</li>
-            <li><strong>Flexible:</strong> Allows more creative or free-form responses. (Used as backup)</li>
+            <li><strong>Strict:</strong> Responds using only retrieved content.</li>
+            <li><strong>Flexible:</strong> Allows free-form responses (used as backup).</li>
           </ul>
         </div>
 
         {status && (
           <div
-            className={`mb-6 rounded-md p-4 text-sm ${
+            className={`mb-6 rounded-md p-4 text-sm transition-opacity duration-300 ${
               status.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
             }`}
           >
@@ -124,7 +134,7 @@ export default function FineTuningPage() {
             <div key={promptName} className="mb-10">
               <h2 className="text-lg font-medium mb-2 text-gray-900">{promptName}</h2>
 
-              <div className="rounded-lg border border-gray-200 overflow-hidden divide-y">
+              <div className={`rounded-lg border border-gray-200 divide-y ${versions.length > 1 ? 'max-h-64 overflow-y-auto' : ''}`}>
                 {versions.map((version) => (
                   <div
                     key={version.id}
@@ -137,29 +147,25 @@ export default function FineTuningPage() {
                         v{version.version_number} {version.is_active && <span className="text-blue-600">(Active)</span>}
                       </span>
                       <span className="text-xs text-gray-500">
-                        {new Date(version.created_at).toLocaleString()}
+                        {new Date(version.updated_at || version.created_at).toLocaleString()}
                       </span>
                     </div>
                     <pre className="whitespace-pre-wrap text-gray-700">{version.content}</pre>
                     {version.activation_reason && (
-                      <p className="text-xs italic text-gray-500 mt-2">
-                        Reason: {version.activation_reason}
-                      </p>
+                      <p className="text-xs italic text-gray-500 mt-2">Reason: {version.activation_reason}</p>
                     )}
                   </div>
                 ))}
               </div>
 
-              {versions.length === 1 && (
-                <Button
-                  variant="link"
-                  size="sm"
-                  onClick={() => fetchPromptHistory(promptName)}
-                  className="mt-2"
-                >
-                  Load History
-                </Button>
-              )}
+              <Button
+                variant="link"
+                size="sm"
+                onClick={() => fetchPromptHistory(promptName)}
+                className="mt-2"
+              >
+                {expandedHistories[promptName] ? 'Hide History' : 'Load History'}
+              </Button>
 
               {/* New Version Form */}
               <div className="mt-6 space-y-2">
