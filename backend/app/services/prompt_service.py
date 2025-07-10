@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy.orm import Session
 from app.models.prompt import PromptDefinition, PromptNameEnum, PromptVersion
 from app.constants import (
@@ -6,14 +8,30 @@ from app.constants import (
     DEFAULT_QA_FLEXIBLE_PROMPT,
 )
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 class PromptService:
     def __init__(self, db: Session):
         self.db = db
 
     def get_active_prompt_content(self, prompt_name: PromptNameEnum) -> str:
-        # Stub: implement actual DB access logic if needed
-        raise ValueError(f"Prompt not found for {prompt_name}")
+        prompt = (
+            self.db.query(PromptVersion.content)
+            .join(PromptDefinition)
+            .filter(PromptDefinition.name == prompt_name.value)
+            .filter(PromptVersion.is_active is True)
+            .order_by(PromptVersion.version_number.desc())
+            .first()
+        )
+
+        if not prompt:
+            raise ValueError(
+                f"Prompt not found or not active for: {prompt_name}"
+            )
+
+        return prompt[0]
 
     def build_full_prompt(
         self, dynamic: str, static: str, closing: str = ""
@@ -23,10 +41,10 @@ class PromptService:
     def get_full_contextualize_prompt(self) -> str:
         try:
             dynamic_content = self.get_active_prompt_content(
-                PromptNameEnum.contextualize_q_system_prompt
+                prompt_name=PromptNameEnum.contextualize_q_system_prompt
             )
         except ValueError:
-            print(
+            logger.error(
                 "Warning: contextualize_q_system_prompt not found in DB, using fallback."
             )
             dynamic_content = DEFAULT_CONTEXTUALIZE_PROMPT
@@ -56,10 +74,10 @@ class PromptService:
     ) -> str:
         try:
             dynamic_content = self.get_active_prompt_content(
-                PromptNameEnum.qa_flexible_prompt
+                prompt_name=PromptNameEnum.qa_flexible_prompt
             )
         except ValueError:
-            print(
+            logger.error(
                 "Warning: qa_flexible_prompt not found in DB, using fallback."
             )
             dynamic_content = DEFAULT_QA_FLEXIBLE_PROMPT
@@ -79,10 +97,12 @@ class PromptService:
     ) -> str:
         try:
             dynamic_content = self.get_active_prompt_content(
-                PromptNameEnum.qa_strict_prompt
+                prompt_name=PromptNameEnum.qa_strict_prompt
             )
         except ValueError:
-            print("Warning: qa_strict_prompt not found in DB, using fallback.")
+            logger.error(
+                "Warning: qa_strict_prompt not found in DB, using fallback."
+            )
             dynamic_content = DEFAULT_QA_STRICT_PROMPT
 
         suffix = (

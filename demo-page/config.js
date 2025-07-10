@@ -41,6 +41,12 @@ window.config_local = {
   wsURL: "ws://localhost:81/ws/chat",
 };
 
+window.config_local_tdt4 = {
+  title: "TDT #4",
+  kb_id: 46,
+  wsURL: "ws://localhost:81/ws/chat",
+};
+
 window.config_local_lib = {
   title: "LIB Assistant",
   kb_id: 44,
