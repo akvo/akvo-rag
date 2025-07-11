@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import DashboardLayout from '@/components/layout/dashboard-layout';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface PromptVersion {
   id: number;
@@ -29,13 +31,13 @@ export default function FineTuningPage() {
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [expandedHistories, setExpandedHistories] = useState<Record<string, boolean>>({});
   const [noHistoryAvailable, setNoHistoryAvailable] = useState<Record<string, boolean>>({});
-
   const [showModal, setShowModal] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<{
     promptName: string;
     versionId: number;
     versionNumber: number;
   } | null>(null);
+  const [reactivationReason, setReactivationReason] = useState('');
 
   useEffect(() => {
     fetchPrompts();
@@ -69,7 +71,6 @@ export default function FineTuningPage() {
   const fetchPromptHistory = async (name: string) => {
     const currentlyExpanded = expandedHistories[name];
     if (currentlyExpanded) {
-      // collapse
       setPromptGroups((prev) => ({
         ...prev,
         [name]: prev[name].filter((v) => v.is_active),
@@ -119,19 +120,23 @@ export default function FineTuningPage() {
     versionNumber: number;
   }) => {
     try {
-      await api.put(`/api/prompt/${promptName}/reactivate/${versionId}`);
+      await api.put(`/api/prompt/${promptName}/reactivate/${versionId}`, {
+        reactivation_reason: reactivationReason,
+      });
       setStatus({
         type: 'success',
         message: `Version v${versionNumber} activated for ${promptName}`,
       });
       setShowModal(false);
       setSelectedVersion(null);
+      setReactivationReason('');
       setExpandedHistories({});
       fetchPrompts();
     } catch (err: any) {
       setStatus({ type: 'error', message: err.message || 'Failed to activate version' });
       setShowModal(false);
       setSelectedVersion(null);
+      setReactivationReason('');
     }
   };
 
@@ -172,7 +177,6 @@ export default function FineTuningPage() {
               <h2 className="text-lg font-medium mb-2 text-gray-900">{promptName}</h2>
 
               <div className="rounded-lg border border-gray-200">
-                {/* Active Version */}
                 {versions.length > 0 && (
                   <div className="p-4 bg-gray-50 border-b">
                     <div className="flex justify-between items-center mb-2">
@@ -192,10 +196,8 @@ export default function FineTuningPage() {
                   </div>
                 )}
 
-                {/* History */}
                 {versions.length > 1 && (
                   <div className="max-h-64 overflow-y-auto divide-y">
-                    {/* Sticky Header */}
                     <div className="sticky top-0 bg-white px-4 py-2 text-sm font-medium text-gray-700 border-b z-10">
                       🔁 Prompt History
                     </div>
@@ -245,7 +247,6 @@ export default function FineTuningPage() {
                     No history available for this prompt.
                   </div>
                 )}
-                {/* EOL History */}
               </div>
 
               <Button
@@ -257,7 +258,6 @@ export default function FineTuningPage() {
                 {expandedHistories[promptName] ? 'Hide History' : 'Load History'}
               </Button>
 
-              {/* New Version Form */}
               <div className="mt-6 space-y-2">
                 <h3 className="text-sm font-medium text-gray-700">Submit New Version</h3>
                 <textarea
@@ -275,10 +275,11 @@ export default function FineTuningPage() {
                     }))
                   }
                 />
-                <input
+                <Label htmlFor={`reason-${promptName}`}>Activation Reason</Label>
+                <Input
+                  id={`reason-${promptName}`}
                   type="text"
                   placeholder="Activation reason"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   value={formState[promptName]?.reason || ''}
                   onChange={(e) =>
                     setFormState((prev) => ({
@@ -290,11 +291,7 @@ export default function FineTuningPage() {
                     }))
                   }
                 />
-                <Button
-                  onClick={() => handleSubmit(promptName)}
-                  size="sm"
-                  className="mt-1"
-                >
+                <Button onClick={() => handleSubmit(promptName)} size="sm" className="mt-1">
                   Save New Version
                 </Button>
               </div>
@@ -305,11 +302,22 @@ export default function FineTuningPage() {
 
       {showModal && selectedVersion && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-lg">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg shadow-lg">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">Confirm Activation</h2>
-            <p className="text-sm text-gray-700 mb-6">
+            <p className="text-sm text-gray-700 mb-4">
               Are you sure you want to activate <span className="font-semibold">v{selectedVersion.versionNumber}</span> for prompt <span className="font-semibold">{selectedVersion.promptName}</span>?
             </p>
+
+            <Label htmlFor="reactivation-reason" className="mb-1">Reactivation Reason (Optional)</Label>
+            <Input
+              id="reactivation-reason"
+              type="text"
+              placeholder="e.g., rollback due to bug"
+              value={reactivationReason}
+              onChange={(e) => setReactivationReason(e.target.value)}
+              className="mb-4"
+            />
+
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
@@ -317,13 +325,14 @@ export default function FineTuningPage() {
                 onClick={() => {
                   setShowModal(false);
                   setSelectedVersion(null);
+                  setReactivationReason('');
                 }}
               >
                 Cancel
               </Button>
               <Button
                 size="sm"
-                onClick={() => handleActivateVersion({...selectedVersion})}
+                onClick={() => handleActivateVersion({ ...selectedVersion })}
               >
                 Confirm
               </Button>
@@ -331,7 +340,6 @@ export default function FineTuningPage() {
           </div>
         </div>
       )}
-
     </DashboardLayout>
   );
 }
