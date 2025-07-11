@@ -6,6 +6,10 @@ import DashboardLayout from '@/components/layout/dashboard-layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
+import { useToast } from '@/components/ui/use-toast';
+import { Divider } from '@/components/ui/divider';
 
 interface PromptVersion {
   id: number;
@@ -28,27 +32,19 @@ export default function FineTuningPage() {
   const [promptGroups, setPromptGroups] = useState<Record<string, PromptVersion[]>>({});
   const [loading, setLoading] = useState(false);
   const [formState, setFormState] = useState<Record<string, { content: string; reason: string }>>({});
-  const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [expandedHistories, setExpandedHistories] = useState<Record<string, boolean>>({});
   const [noHistoryAvailable, setNoHistoryAvailable] = useState<Record<string, boolean>>({});
-  const [showModal, setShowModal] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<{
     promptName: string;
     versionId: number;
     versionNumber: number;
   } | null>(null);
   const [reactivationReason, setReactivationReason] = useState('');
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchPrompts();
   }, []);
-
-  useEffect(() => {
-    if (status) {
-      const timer = setTimeout(() => setStatus(null), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [status]);
 
   const fetchPrompts = async () => {
     setLoading(true);
@@ -62,7 +58,7 @@ export default function FineTuningPage() {
       }
       setPromptGroups(groups);
     } catch (err: any) {
-      setStatus({ type: 'error', message: err.message || 'Failed to fetch prompts' });
+      toast({ title: 'Error', description: err.message || 'Failed to fetch prompts', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -88,7 +84,7 @@ export default function FineTuningPage() {
         setExpandedHistories((prev) => ({ ...prev, [name]: true }));
         setNoHistoryAvailable((prev) => ({ ...prev, [name]: history.length === 0 }));
       } catch (err: any) {
-        setStatus({ type: 'error', message: err.message || 'Failed to load history' });
+        toast({ title: 'Error', description: err.message || 'Failed to load history', variant: 'destructive' });
       }
     }
   };
@@ -102,41 +98,28 @@ export default function FineTuningPage() {
         content,
         activation_reason: reason,
       });
-      setStatus({ type: 'success', message: `Prompt updated for ${promptName}` });
+      toast({ title: 'Success', description: `Prompt updated for ${promptName}` });
       setFormState((prev) => ({ ...prev, [promptName]: { content: '', reason: '' } }));
       fetchPrompts();
     } catch (err: any) {
-      setStatus({ type: 'error', message: err.message || 'Failed to update prompt' });
+      toast({ title: 'Error', description: err.message || 'Failed to update prompt', variant: 'destructive' });
     }
   };
 
-  const handleActivateVersion = async ({
-    promptName,
-    versionId,
-    versionNumber,
-  }: {
-    promptName: string;
-    versionId: number;
-    versionNumber: number;
-  }) => {
+  const handleActivateVersion = async () => {
+    if (!selectedVersion) return;
+    const { promptName, versionId, versionNumber } = selectedVersion;
     try {
       await api.put(`/api/prompt/${promptName}/reactivate/${versionId}`, {
         reactivation_reason: reactivationReason,
       });
-      setStatus({
-        type: 'success',
-        message: `Version v${versionNumber} activated for ${promptName}`,
-      });
-      setShowModal(false);
+      toast({ title: 'Success', description: `Version v${versionNumber} activated for ${promptName}` });
       setSelectedVersion(null);
       setReactivationReason('');
       setExpandedHistories({});
       fetchPrompts();
     } catch (err: any) {
-      setStatus({ type: 'error', message: err.message || 'Failed to activate version' });
-      setShowModal(false);
-      setSelectedVersion(null);
-      setReactivationReason('');
+      toast({ title: 'Error', description: err.message || 'Failed to activate version', variant: 'destructive' });
     }
   };
 
@@ -145,107 +128,108 @@ export default function FineTuningPage() {
       <div className="my-10">
         <h1 className="text-3xl font-semibold mb-6 tracking-tight">Fine Tuning</h1>
 
-        <div className="mb-10 p-4 rounded-md border border-gray-200 bg-gray-50 text-sm text-gray-700">
+        <div className="mb-10 p-4 rounded-md border bg-muted text-sm">
           <h2 className="text-lg font-semibold mb-2">💡 Prompt Types Explained</h2>
-          <p className="mb-2">
-            <strong>📌 Contextual Prompt:</strong> Helps the AI rewrite the user’s query using previous chat messages.
-          </p>
-          <p className="mb-2">
-            <strong>📌 QA Prompt:</strong> Guides the AI to generate answers from the knowledge base.
-          </p>
+          <p><strong>📌 Contextual Prompt:</strong> Helps the AI rewrite the user’s query using previous chat messages.</p>
+          <p><strong>📌 QA Prompt:</strong> Guides the AI to generate answers from the knowledge base.</p>
           <ul className="list-disc list-inside ml-4">
             <li><strong>Strict:</strong> Responds using only retrieved content.</li>
             <li><strong>Flexible:</strong> Allows free-form responses (used as backup).</li>
           </ul>
         </div>
 
-        {status && (
-          <div
-            className={`mb-6 rounded-md p-4 text-sm transition-opacity duration-300 ${
-              status.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-            }`}
-          >
-            {status.message}
-          </div>
-        )}
-
         {loading ? (
-          <div className="text-gray-500 text-sm">Loading prompts...</div>
+          <p className="text-sm text-muted-foreground">Loading prompts...</p>
         ) : (
           Object.entries(promptGroups).map(([promptName, versions]) => (
-            <div key={promptName} className="mb-10">
+            <div key={promptName} className="mb-12">
               <h2 className="text-lg font-medium mb-2 text-gray-900">{promptName}</h2>
 
-              <div className="rounded-lg border border-gray-200">
-                {versions.length > 0 && (
-                  <div className="p-4 bg-gray-50 border-b">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="font-semibold text-gray-800">
-                        🟦 v{versions[0].version_number} <span className="text-blue-600">(Active)</span>
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {new Date(versions[0].updated_at || versions[0].created_at).toLocaleString()}
-                      </span>
-                    </div>
-                    <pre className="whitespace-pre-wrap text-gray-700 text-sm">{versions[0].content}</pre>
-                    {versions[0].activation_reason && (
-                      <p className="text-xs italic text-gray-500 mt-2">
-                        Reason: {versions[0].activation_reason}
-                      </p>
-                    )}
+              <div className="rounded-lg border">
+                <div className="p-4 bg-gray-50 border-b">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-semibold text-gray-800">
+                      🟦 v{versions[0].version_number} <span className="text-blue-600">(Active)</span>
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {new Date(versions[0].updated_at || versions[0].created_at).toLocaleString()}
+                    </span>
                   </div>
-                )}
+                  <pre className="whitespace-pre-wrap text-sm text-gray-700">{versions[0].content}</pre>
+                  {versions[0].activation_reason && (
+                    <p className="text-xs italic text-muted-foreground mt-2">Reason: {versions[0].activation_reason}</p>
+                  )}
+                </div>
 
-                {versions.length > 1 && (
-                  <div className="max-h-64 overflow-y-auto divide-y">
-                    <div className="sticky top-0 bg-white px-4 py-2 text-sm font-medium text-gray-700 border-b z-10">
-                      🔁 Prompt History
-                    </div>
+                {expandedHistories[promptName] && (
+                  <Accordion type="single" collapsible defaultValue="history">
+                    <AccordionItem value="history">
+                      <AccordionTrigger className="px-4 text-sm font-medium">🔁 Prompt History</AccordionTrigger>
+                      <AccordionContent className="space-y-4 px-4 py-2">
+                        {versions.slice(1).map((version) => (
+                          <div
+                            key={version.id}
+                            className="rounded-md border bg-white p-4 shadow-sm"
+                          >
+                            <div className="flex justify-between mb-1">
+                              <span className="text-sm font-semibold">v{version.version_number}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(version.updated_at || version.created_at).toLocaleString()}
+                              </span>
+                            </div>
+                            <pre className="whitespace-pre-wrap text-sm mb-2">{version.content}</pre>
+                            {version.activation_reason && (
+                              <p className="text-xs italic text-muted-foreground mb-2">
+                                Reason: {version.activation_reason}
+                              </p>
+                            )}
 
-                    {versions.slice(1).map((version) => (
-                      <div
-                        key={version.id}
-                        className="rounded-md border border-gray-200 bg-white p-4 mb-4 shadow-sm mx-5 my-5"
-                      >
-                        <div className="flex justify-between items-center mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-gray-800">
-                              v{version.version_number}
-                            </span>
-                            <span className="text-xs text-gray-500 italic">Historical Version</span>
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    setSelectedVersion({
+                                      promptName,
+                                      versionId: version.id,
+                                      versionNumber: version.version_number,
+                                    })
+                                  }
+                                >
+                                  Activate this version: v{version.version_number}
+                                </Button>
+                              </DialogTrigger>
+                              {selectedVersion?.versionId === version.id && (
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Confirm Activation</DialogTitle>
+                                  </DialogHeader>
+                                  <p className="text-sm">
+                                    Are you sure you want to activate version <strong>v{version.version_number}</strong> for prompt <strong>{promptName}</strong>?
+                                  </p>
+                                  <Label htmlFor="reactivation-reason" className="mt-4">Reactivation Reason</Label>
+                                  <Input
+                                    id="reactivation-reason"
+                                    placeholder="e.g., rollback due to bug"
+                                    value={reactivationReason}
+                                    onChange={(e) => setReactivationReason(e.target.value)}
+                                  />
+                                  <DialogFooter className="mt-4">
+                                    <Button variant="outline" onClick={() => setSelectedVersion(null)}>Cancel</Button>
+                                    <Button onClick={handleActivateVersion}>Confirm</Button>
+                                  </DialogFooter>
+                                </DialogContent>
+                              )}
+                            </Dialog>
                           </div>
-                          <span className="text-xs text-gray-500">
-                            {new Date(version.updated_at || version.created_at).toLocaleString()}
-                          </span>
-                        </div>
-
-                        <pre className="whitespace-pre-wrap text-gray-700 text-sm mb-2">{version.content}</pre>
-
-                        {version.activation_reason && (
-                          <p className="text-xs italic text-gray-500 mb-3">
-                            Reason: {version.activation_reason}
-                          </p>
+                        ))}
+                        {noHistoryAvailable[promptName] && (
+                          <p className="text-sm italic text-muted-foreground">No history available.</p>
                         )}
-
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            setSelectedVersion({ promptName, versionId: version.id, versionNumber: version.version_number }) ||
-                            setShowModal(true)
-                          }
-                        >
-                          Activate this version: v{version.version_number}
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {expandedHistories[promptName] && noHistoryAvailable[promptName] && (
-                  <div className="px-4 py-2 text-sm text-gray-500 italic bg-orange-100">
-                    No history available for this prompt.
-                  </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
                 )}
               </div>
 
@@ -258,12 +242,14 @@ export default function FineTuningPage() {
                 {expandedHistories[promptName] ? 'Hide History' : 'Load History'}
               </Button>
 
-              <div className="mt-6 space-y-2">
+              <Divider className="my-4" />
+
+              <div className="space-y-2">
                 <h3 className="text-sm font-medium text-gray-700">Submit New Version</h3>
                 <textarea
                   rows={4}
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   placeholder="New prompt content..."
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   value={formState[promptName]?.content || ''}
                   onChange={(e) =>
                     setFormState((prev) => ({
@@ -278,7 +264,6 @@ export default function FineTuningPage() {
                 <Label htmlFor={`reason-${promptName}`}>Activation Reason</Label>
                 <Input
                   id={`reason-${promptName}`}
-                  type="text"
                   placeholder="Activation reason"
                   value={formState[promptName]?.reason || ''}
                   onChange={(e) =>
@@ -291,7 +276,7 @@ export default function FineTuningPage() {
                     }))
                   }
                 />
-                <Button onClick={() => handleSubmit(promptName)} size="sm" className="mt-1">
+                <Button onClick={() => handleSubmit(promptName)} size="sm">
                   Save New Version
                 </Button>
               </div>
@@ -299,47 +284,6 @@ export default function FineTuningPage() {
           ))
         )}
       </div>
-
-      {showModal && selectedVersion && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-lg shadow-lg">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Confirm Activation</h2>
-            <p className="text-sm text-gray-700 mb-4">
-              Are you sure you want to activate <span className="font-semibold">v{selectedVersion.versionNumber}</span> for prompt <span className="font-semibold">{selectedVersion.promptName}</span>?
-            </p>
-
-            <Label htmlFor="reactivation-reason" className="mb-1">Reactivation Reason (Optional)</Label>
-            <Input
-              id="reactivation-reason"
-              type="text"
-              placeholder="e.g., rollback due to bug"
-              value={reactivationReason}
-              onChange={(e) => setReactivationReason(e.target.value)}
-              className="mb-4"
-            />
-
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setShowModal(false);
-                  setSelectedVersion(null);
-                  setReactivationReason('');
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => handleActivateVersion({ ...selectedVersion })}
-              >
-                Confirm
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </DashboardLayout>
   );
 }
