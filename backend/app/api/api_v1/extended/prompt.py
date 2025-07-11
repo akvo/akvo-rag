@@ -84,6 +84,7 @@ def create_prompt(
 def reactivate_prompt_version(
     name: PromptNameEnum,
     version_id: int,
+    data: schema.ReactivatePromptRequest,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -111,8 +112,11 @@ def reactivate_prompt_version(
     version_to_activate.is_active = True
     version_to_activate.activated_by_user_id = current_user.id
     version_to_activate.activation_reason = (
-        version_to_activate.activation_reason or "Reactivated from history"
+        data.reactivation_reason
+        or version_to_activate.activation_reason
+        or "Reactivated from history"
     )
+    
     db.commit()
 
     return {

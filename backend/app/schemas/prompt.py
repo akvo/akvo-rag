@@ -17,6 +17,10 @@ class PromptUpdate(PromptVersionBase):
     pass
 
 
+class ReactivatePromptRequest(BaseModel):
+    reactivation_reason: Optional[str] = None
+
+
 class PromptVersionResponse(BaseModel):
     id: int
     version_number: int
