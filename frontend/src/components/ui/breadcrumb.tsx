@@ -3,6 +3,7 @@
 import { ChevronRight, Home } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { toTitleCase } from "@/lib/utils";
 
 const Breadcrumb = () => {
   const pathname = usePathname();
@@ -20,7 +21,7 @@ const Breadcrumb = () => {
 
       return {
         href,
-        label: displayLabel,
+        label: toTitleCase(displayLabel),
         isLast,
       };
     });
