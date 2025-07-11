@@ -12,12 +12,17 @@ import { useToast } from '@/components/ui/use-toast';
 import { Divider } from '@/components/ui/divider';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
+interface UserInfo {
+  id: number;
+  email: string;
+}
+
 interface PromptVersion {
   id: number;
   content: string;
   version_number: number;
   is_active: boolean;
-  activated_by_user_id?: number;
+  activated_by_user?: UserInfo;
   activation_reason?: string;
   created_at: string;
   updated_at?: string;
@@ -184,6 +189,14 @@ export default function FineTuningPage() {
                       {versions[0].activation_reason && (
                         <p className="text-xs italic text-muted-foreground mt-2">Reason: {versions[0].activation_reason}</p>
                       )}
+                      {versions[0].activated_by_user && (
+                        <div>
+                          <Divider className="my-2" />
+                          <p className="text-xs italic text-muted-foreground">
+                            Activated by: {versions[0].activated_by_user.email}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <Accordion
@@ -223,6 +236,14 @@ export default function FineTuningPage() {
                                   <p className="text-xs italic text-muted-foreground mb-2">
                                     Reason: {version.activation_reason}
                                   </p>
+                                )}
+                                {version.activated_by_user && (
+                                  <div className="mb-6">
+                                    <Divider className="my-2" />
+                                    <p className="text-xs italic text-muted-foreground">
+                                      Created by: {version.activated_by_user.email}
+                                    </p>
+                                  </div>
                                 )}
 
                                 <Dialog>
