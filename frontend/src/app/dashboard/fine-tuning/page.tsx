@@ -161,11 +161,31 @@ export default function FineTuningPage() {
                   )}
                 </div>
 
-                {expandedHistories[promptName] && (
-                  <Accordion type="single" collapsible defaultValue="history">
-                    <AccordionItem value="history">
-                      <AccordionTrigger className="px-4 text-sm font-medium">🔁 Prompt History</AccordionTrigger>
-                      <AccordionContent className="space-y-4 px-4 py-2">
+                <Accordion
+                  type="single"
+                  collapsible
+                  value={expandedHistories[promptName] ? 'history' : undefined}
+                  onValueChange={(value) => {
+                    if (value === 'history') {
+                      fetchPromptHistory(promptName);
+                    } else {
+                      // Collapsing
+                      setPromptGroups((prev) => ({
+                        ...prev,
+                        [promptName]: prev[promptName].filter((v) => v.is_active),
+                      }));
+                      setExpandedHistories((prev) => ({ ...prev, [promptName]: false }));
+                      setNoHistoryAvailable((prev) => ({ ...prev, [promptName]: false }));
+                    }
+                  }}
+                >
+                  <AccordionItem value="history">
+                    <AccordionTrigger className="px-4 text-sm font-medium">
+                      🔁 {expandedHistories[promptName] ? 'Hide History' : 'Load History'}
+                    </AccordionTrigger>
+
+                    {expandedHistories[promptName] && (
+                      <AccordionContent className="space-y-4 px-4 py-2 max-h-96 overflow-y-auto">
                         {versions.slice(1).map((version) => (
                           <div
                             key={version.id}
@@ -228,19 +248,10 @@ export default function FineTuningPage() {
                           <p className="text-sm italic text-muted-foreground">No history available.</p>
                         )}
                       </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                )}
+                    )}
+                  </AccordionItem>
+                </Accordion>
               </div>
-
-              <Button
-                variant="link"
-                size="sm"
-                onClick={() => fetchPromptHistory(promptName)}
-                className="mt-2"
-              >
-                {expandedHistories[promptName] ? 'Hide History' : 'Load History'}
-              </Button>
 
               <Divider className="my-4" />
 
