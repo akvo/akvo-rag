@@ -21,7 +21,7 @@ class PromptService:
             self.db.query(PromptVersion.content)
             .join(PromptDefinition)
             .filter(PromptDefinition.name == prompt_name.value)
-            .filter(PromptVersion.is_active is True)
+            .filter(PromptVersion.is_active == True)
             .order_by(PromptVersion.version_number.desc())
             .first()
         )
