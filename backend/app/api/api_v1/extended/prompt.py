@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from app.schemas import prompt as schema
 from app.models.prompt import PromptDefinition, PromptVersion, PromptNameEnum
@@ -11,11 +11,28 @@ router = APIRouter()
 
 # Utility/service logic
 def get_prompt_by_name(db: Session, name: PromptNameEnum):
-    return db.query(PromptDefinition).filter_by(name=name).first()
+    return (
+        db.query(PromptDefinition)
+        .options(
+            joinedload(PromptDefinition.versions).joinedload(
+                PromptVersion.activated_by_user
+            )
+        )
+        .filter_by(name=name)
+        .first()
+    )
 
 
 def list_all_prompts(db: Session):
-    return db.query(PromptDefinition).all()
+    return (
+        db.query(PromptDefinition)
+        .options(
+            joinedload(PromptDefinition.versions).joinedload(
+                PromptVersion.activated_by_user
+            )
+        )
+        .all()
+    )
 
 
 def create_or_update_prompt(
@@ -37,14 +54,18 @@ def create_or_update_prompt(
         prompt_definition_id=definition.id, is_active=True
     ).update({"is_active": False})
 
+    # Get next version number safely
+    current_versions = sorted(
+        definition.versions or [], key=lambda v: v.version_number, reverse=True
+    )
+    next_version_number = (
+        current_versions[0].version_number + 1 if current_versions else 1
+    )
+
     new_version = PromptVersion(
         prompt_definition_id=definition.id,
         content=content,
-        version_number=(
-            (definition.versions[0].version_number + 1)
-            if definition.versions
-            else 1
-        ),
+        version_number=next_version_number,
         is_active=True,
         activated_by_user_id=user_id,
         activation_reason=reason,
@@ -116,8 +137,9 @@ def reactivate_prompt_version(
         or version_to_activate.activation_reason
         or "Reactivated from history"
     )
-    
+
     db.commit()
+    db.refresh(version_to_activate)  # Refresh to get user relationship
 
     return {
         "name": prompt.name,

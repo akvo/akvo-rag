@@ -4,6 +4,14 @@ from app.models.prompt import PromptNameEnum
 from datetime import datetime
 
 
+class UserInfo(BaseModel):
+    id: int
+    email: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+
+
 class PromptVersionBase(BaseModel):
     content: str = Field(..., example="Your system prompt here")
     activation_reason: Optional[str] = None
@@ -28,7 +36,7 @@ class PromptVersionResponse(BaseModel):
     is_active: bool
     updated_at: datetime
     activation_reason: Optional[str]
-    activated_by_user_id: Optional[int]
+    activated_by_user: Optional[UserInfo]
 
     class Config:
         orm_mode = True
