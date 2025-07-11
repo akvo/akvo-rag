@@ -173,7 +173,7 @@ export default function FineTuningPage() {
               {loading ? (
                 <p className="text-sm text-muted-foreground">Loading prompts...</p>
               ) : (
-                <div className="mb-12">
+                <div>
                   <h2 className="text-lg font-medium mb-2 text-gray-900">{promptName}</h2>
 
                   <div className="rounded-lg border">
@@ -315,6 +315,7 @@ export default function FineTuningPage() {
                         }))
                       }
                     />
+                    <Divider className="my-4 bg-white" />
                     <Label htmlFor={`reason-${promptName}`}>Activation Reason</Label>
                     <Input
                       id={`reason-${promptName}`}
@@ -330,6 +331,7 @@ export default function FineTuningPage() {
                         }))
                       }
                     />
+                    <Divider className="my-4 bg-white" />
                     <Button onClick={() => handleSubmit(promptName)} size="sm">
                       Save New Version
                     </Button>
