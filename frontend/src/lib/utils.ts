@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function toTitleCase(str) {
+export function toTitleCase(str: string): string {
   // Array of words that should not be capitalized unless they are the first word
   const minorWords = [
     "a",
