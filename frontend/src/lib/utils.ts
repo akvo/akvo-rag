@@ -46,3 +46,15 @@ export function toTitleCase(str: string): string {
       return txt.charAt(0) + txt.charAt(1).toUpperCase() + txt.substr(2);
     });
 }
+
+export function formatDateTime(dateInput: string | Date): string {
+  const date = new Date(dateInput);
+  return date.toLocaleString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}

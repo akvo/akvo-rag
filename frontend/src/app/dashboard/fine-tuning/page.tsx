@@ -11,6 +11,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/
 import { useToast } from '@/components/ui/use-toast';
 import { Divider } from '@/components/ui/divider';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { formatDateTime } from '@/lib/utils';
 
 interface UserInfo {
   id: number;
@@ -182,7 +183,7 @@ export default function FineTuningPage() {
                           🟦 v{versions[0].version_number} <span className="text-blue-600">(Active)</span>
                         </span>
                         <span className="text-xs text-gray-500">
-                          {new Date(versions[0].updated_at || versions[0].created_at).toLocaleString()}
+                          {formatDateTime(versions[0].updated_at || versions[0].created_at)}
                         </span>
                       </div>
                       <pre className="whitespace-pre-wrap text-sm text-gray-700">{versions[0].content}</pre>
@@ -228,7 +229,7 @@ export default function FineTuningPage() {
                                 <div className="flex justify-between mb-1">
                                   <span className="text-sm font-semibold">v{version.version_number}</span>
                                   <span className="text-xs text-muted-foreground">
-                                    {new Date(version.updated_at || version.created_at).toLocaleString()}
+                                    {formatDateTime(version.updated_at || version.created_at).toLocaleString()}
                                   </span>
                                 </div>
                                 <pre className="whitespace-pre-wrap text-sm mb-2">{version.content}</pre>
