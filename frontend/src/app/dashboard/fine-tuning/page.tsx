@@ -28,6 +28,7 @@ export default function FineTuningPage() {
   const [formState, setFormState] = useState<Record<string, { content: string; reason: string }>>({});
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [expandedHistories, setExpandedHistories] = useState<Record<string, boolean>>({});
+  const [noHistoryAvailable, setNoHistoryAvailable] = useState<Record<string, boolean>>({});
 
   const [showModal, setShowModal] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<{
@@ -74,14 +75,17 @@ export default function FineTuningPage() {
         [name]: prev[name].filter((v) => v.is_active),
       }));
       setExpandedHistories((prev) => ({ ...prev, [name]: false }));
+      setNoHistoryAvailable((prev) => ({ ...prev, [name]: false }));
     } else {
       try {
         const detail: PromptResponse = await api.get(`/api/prompt/${name}`);
+        const history = detail.all_versions.filter((v) => !v.is_active);
         setPromptGroups((prev) => ({
           ...prev,
-          [name]: [detail.active_version!, ...detail.all_versions.filter((v) => !v.is_active)],
+          [name]: [detail.active_version!, ...history],
         }));
         setExpandedHistories((prev) => ({ ...prev, [name]: true }));
+        setNoHistoryAvailable((prev) => ({ ...prev, [name]: history.length === 0 }));
       } catch (err: any) {
         setStatus({ type: 'error', message: err.message || 'Failed to load history' });
       }
@@ -130,7 +134,6 @@ export default function FineTuningPage() {
       setSelectedVersion(null);
     }
   };
-
 
   return (
     <DashboardLayout>
@@ -234,10 +237,15 @@ export default function FineTuningPage() {
                         </Button>
                       </div>
                     ))}
-
                   </div>
                 )}
 
+                {expandedHistories[promptName] && noHistoryAvailable[promptName] && (
+                  <div className="px-4 py-2 text-sm text-gray-500 italic bg-orange-100">
+                    No history available for this prompt.
+                  </div>
+                )}
+                {/* EOL History */}
               </div>
 
               <Button
