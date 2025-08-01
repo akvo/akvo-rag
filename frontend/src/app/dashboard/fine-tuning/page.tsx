@@ -39,6 +39,8 @@ export default function FineTuningPage() {
   const [promptGroups, setPromptGroups] = useState<Record<string, PromptVersion[]>>({});
   const [loading, setLoading] = useState(false);
   const [formState, setFormState] = useState<Record<string, { content: string; reason: string }>>({});
+  const [globalTopK, setGlobalTopK] = useState<number>(4);
+  const [topKInputValue, setTopKInputValue] = useState<string>('4');
   const [expandedHistories, setExpandedHistories] = useState<Record<string, boolean>>({});
   const [noHistoryAvailable, setNoHistoryAvailable] = useState<Record<string, boolean>>({});
   const [selectedVersion, setSelectedVersion] = useState<{
@@ -52,6 +54,7 @@ export default function FineTuningPage() {
 
   useEffect(() => {
     fetchPrompts();
+    fetchGlobalTopK();
   }, []);
 
   useEffect(() => {
@@ -75,6 +78,19 @@ export default function FineTuningPage() {
       toast({ title: 'Error', description: err.message || 'Failed to fetch prompts', variant: 'destructive' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchGlobalTopK = async (): Promise<void> => {
+    try {
+      const response = await api.get('/api/system-settings/top_k');
+      const valueStr: string = response.data?.value || response.value;
+      const newValue = parseInt(valueStr, 10);
+      setGlobalTopK(newValue);
+      setTopKInputValue(valueStr);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch retrieval setting.';
+      toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
     }
   };
 
@@ -117,6 +133,25 @@ export default function FineTuningPage() {
       fetchPrompts();
     } catch (err: any) {
       toast({ title: 'Error', description: err.message || 'Failed to update prompt', variant: 'destructive' });
+    }
+  };
+
+  const handleUpdateGlobalTopK = async (): Promise<void> => {
+    // Validate the input value before sending
+    const numValue = parseInt(topKInputValue, 10);
+    if (isNaN(numValue) || numValue < 1) {
+      toast({ title: 'Error', description: 'Please enter a valid number greater than 0', variant: 'destructive' });
+      return;
+    }
+    
+    try {
+      await api.put('/api/system-settings/top_k', { top_k: numValue });
+      setGlobalTopK(numValue);
+      toast({ title: 'Success', description: 'Retrieval setting updated.' });
+      await fetchGlobalTopK();
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update retrieval setting';
+      toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
     }
   };
 
@@ -166,6 +201,15 @@ export default function FineTuningPage() {
                 {promptName}
               </TabsTrigger>
             ))}
+            <TabsTrigger
+              value="retrieval_settings"
+              className="border border-b-0 px-4 py-2 text-sm font-medium -mb-px
+                  rounded-t-md rounded-b-none
+                  data-[state=active]:bg-white data-[state=active]:border-gray-300 data-[state=active]:text-primary
+                  data-[state=inactive]:bg-muted data-[state=inactive]:text-muted-foreground hover:bg-white"
+            >
+              Retrieval Settings
+            </TabsTrigger>
           </TabsList>
 
           {Object.entries(promptGroups).map(([promptName, versions]) => (
@@ -340,6 +384,27 @@ export default function FineTuningPage() {
               )}
             </TabsContent>
           ))}
+          <TabsContent value="retrieval_settings" className="border border-gray-300 rounded-b-md rounded-tr-md bg-white p-6 mt-0">
+            <h2 className="text-lg font-medium mb-4 text-gray-900">Retrieval Settings</h2>
+            <div className="space-y-4 max-w-md">
+              <div>
+                <Label htmlFor="global-top-k" className="font-semibold">Documents to Retrieve (Top K)</Label>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Set the number of documents the AI should retrieve from the knowledge base to answer a question.
+                </p>
+                <Input
+                  id="global-top-k"
+                  type="number"
+                  value={topKInputValue}
+                  onChange={(e) => setTopKInputValue(e.target.value)}
+                  className="w-32"
+                />
+              </div>
+              <Button onClick={handleUpdateGlobalTopK}>
+                Save Setting
+              </Button>
+            </div>
+          </TabsContent>
         </Tabs>
       </div>
     </DashboardLayout>

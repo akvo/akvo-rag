@@ -329,6 +329,39 @@ docker compose -f docker-compose.dev.yml up -d --build
 | --------- | ---------------- | ------------- | -------- |
 | TZ        | Timezone Setting | Asia/Shanghai | ❌        |
 
+## Testing
+
+### Backend Testing
+
+The backend uses pytest for testing. All test commands run inside the Docker container and automatically install test dependencies as needed.
+
+#### Prerequisites
+
+Ensure Docker containers are running:
+
+#### Test Commands
+
+**Run All Tests**
+```bash
+cd backend
+./test.sh
+```
+Runs the complete test suite with verbose output.
+
+**Run Unit Tests Only**
+```bash
+cd backend  
+./test-unit.sh
+```
+Runs only unit tests, excluding integration and end-to-end tests.
+
+**Run Tests in Watch Mode**
+```bash
+cd backend
+./test-watch.sh
+```
+Continuously runs tests when files change.
+
 ## 🤝 Contributing
 
 We welcome community contributions!

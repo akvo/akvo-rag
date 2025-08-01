@@ -23,6 +23,7 @@ from app.services.vector_store import VectorStoreFactory
 from app.services.embedding.embedding_factory import EmbeddingsFactory
 from app.services.llm.llm_factory import LLMFactory
 from app.services.prompt_service import PromptService
+from app.services.system_settings_service import SystemSettingsService
 
 set_verbose(True)
 set_debug(True)
@@ -52,6 +53,7 @@ async def generate_response(
         """
 
         prompt_service = PromptService(db=db)
+        settings_service = SystemSettingsService(db=db)
 
         if not generate_last_n_messages and not messages.get("id", None):
             messages_id = uuid.uuid4()
@@ -138,13 +140,9 @@ async def generate_response(
             db.commit()
             return
 
-        # Use first vector store for now
-        retriever = vector_stores[0].as_retriever()
-        # After creating retriever
-        # retriever = vector_stores[0].as_retriever(
-        #     search_type="similarity_score_threshold",
-        #     search_kwargs={"score_threshold": 0.7, "k": 5},
-        # )
+        # Get global top_k setting and use it for vector retrieval
+        top_k = settings_service.get_top_k()
+        retriever = vector_stores[0].as_retriever(search_kwargs={"k": top_k})
 
         # Initialize the language model
         llm = LLMFactory.create()
