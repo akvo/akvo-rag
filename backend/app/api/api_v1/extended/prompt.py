@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from typing import List
-
+from app.schemas import prompt as schema
+from app.models.prompt import PromptDefinition, PromptVersion, PromptNameEnum
 from app.api.api_v1.auth import get_current_user
 from app.db.session import get_db
-from app.models.prompt import PromptDefinition, PromptVersion, PromptNameEnum
-from app.schemas import prompt as schema
 
 router = APIRouter()
 
