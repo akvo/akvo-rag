@@ -83,7 +83,7 @@ export default function FineTuningPage() {
 
   const fetchGlobalTopK = async (): Promise<void> => {
     try {
-      const response = await api.get('/api/prompt/settings/top_k');
+      const response = await api.get('/api/system-settings/top_k');
       const valueStr: string = response.data?.value || response.value;
       const newValue = parseInt(valueStr, 10);
       setGlobalTopK(newValue);
@@ -145,7 +145,7 @@ export default function FineTuningPage() {
     }
     
     try {
-      await api.put('/api/prompt/settings/top_k', { top_k: numValue });
+      await api.put('/api/system-settings/top_k', { top_k: numValue });
       setGlobalTopK(numValue);
       toast({ title: 'Success', description: 'Retrieval setting updated.' });
       await fetchGlobalTopK();

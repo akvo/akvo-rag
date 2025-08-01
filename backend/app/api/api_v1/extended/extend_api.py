@@ -6,6 +6,7 @@ from app.api.api_v1.extended import (
     extend_auth,
     extend_knowledge_base,
     prompt,
+    system_settings,
 )
 
 api_router = APIRouter()
@@ -21,3 +22,5 @@ api_router.include_router(
     extend_api_keys.router, prefix="/api-keys", tags=["api-keys"]
 )
 api_router.include_router(prompt.router, prefix="/prompt", tags=["prompt"])
+api_router.include_router(system_settings.router, prefix="/system-settings",
+                          tags=["system-settings"])
