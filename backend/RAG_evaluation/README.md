@@ -387,14 +387,14 @@ BROWSER_SLOW_MO=1000
 - Reference answers properly entered and used
 
 **8 Metrics Verified:**
-1. Faithfulness
-2. Answer Relevancy
-3. Context Precision Without Reference
-4. Context Relevancy
-5. Answer Similarity 📚
-6. Answer Correctness 📚
-7. Context Precision 📚
-8. Context Recall 📚
+1.🧠 Faithfulness
+2.🧠 Context Relevancy
+3.Answer Relevancy
+4.🧠 Context Precision Without Reference
+5.🧠📚 Context Recall
+6.🧠📚 Context Precision
+7.📚 Answer Similarity
+8.📚 Answer Correctness
 
 *(📚 = Reference-based metrics requiring reference answers)*
 

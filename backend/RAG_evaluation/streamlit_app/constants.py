@@ -19,16 +19,16 @@ DEFAULT_TEST_QUERIES: List[str] = [
 # Metric categories
 BASIC_METRICS: List[str] = [
     'faithfulness', 
+    'context_relevancy',
     'answer_relevancy', 
-    'context_precision_without_reference', 
-    'context_relevancy'
+    'context_precision_without_reference'
 ]
 
 REFERENCE_METRICS: List[str] = [
+    'context_recall',
+    'context_precision',
     'answer_similarity', 
-    'answer_correctness', 
-    'context_precision', 
-    'context_recall'
+    'answer_correctness'
 ]
 
 ALL_METRICS: List[str] = BASIC_METRICS + REFERENCE_METRICS
@@ -189,24 +189,24 @@ This is a composite metric that considers both factual and semantic alignment wi
 SHORT_METRICS_EXPLANATIONS: Dict[str, str] = {
     'reference_free': """
 **Reference-Free Metrics** (work without reference answers):
-- **Faithfulness** 🧠: How well grounded the response is in the retrieved context
+- **🧠 Faithfulness**: How well grounded the response is in the retrieved context
+- **🧠 Context Relevancy**: How relevant the retrieved context is to the query
 - **Answer Relevancy**: How relevant the response is to the original query
-- **Context Relevancy** 🧠: How relevant the retrieved context is to the query
-- **Context Precision Without Reference** 🧠: Precision of context retrieval without reference answers
+- **🧠 Context Precision Without Reference**: Precision of context retrieval without reference answers
 
 **Reference-Based Metrics** (require reference answers for comparison):
-- **Answer Similarity** 📚: Semantic similarity between generated and reference answers
-- **Answer Correctness** 📚: Factual accuracy against reference answers
-- **Context Precision** 🧠📚: More accurate precision using reference answers
-- **Context Recall** 🧠📚: How well retrieved contexts cover the reference answer
+- **🧠📚 Context Recall**: How well retrieved contexts cover the reference answer
+- **🧠📚 Context Precision**: More accurate precision using reference answers
+- **📚 Answer Similarity**: Semantic similarity between generated and reference answers
+- **📚 Answer Correctness**: Factual accuracy against reference answers
 
 🧠 = Context-dependent | 📚 = Reference-based | *All metrics range from 0.0 to 1.0, with higher scores indicating better performance.*
 """,
     'basic_only': """
 **Context-dependent metrics** 🧠 require retrieved context/documents:
-- **Faithfulness**: How well grounded the response is in the retrieved context
-- **Context Relevancy**: How relevant the retrieved context is to the query
-- **Context Precision Without Reference**: Precision of context retrieval without reference answers
+- **🧠 Faithfulness**: How well grounded the response is in the retrieved context
+- **🧠 Context Relevancy**: How relevant the retrieved context is to the query
+- **🧠 Context Precision Without Reference**: Precision of context retrieval without reference answers
 
 **Response-only metrics** evaluate the generated response quality:
 - **Answer Relevancy**: How relevant the response is to the original query
