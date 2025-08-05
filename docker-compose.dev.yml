@@ -142,8 +142,13 @@ services:
       dockerfile: Dockerfile.dev
     ports:
       - "8600:8600"
+    env_file:
+      - ./image-rag-mcp/.env
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEBUG=1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./image-rag-mcp:/app
     depends_on:
       - chromadb
     networks:
