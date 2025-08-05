@@ -136,6 +136,20 @@ services:
     networks:
       - app_network
 
+  image-rag-mcp:
+    build:
+      context: ./image-rag-mcp
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8600:8600"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - chromadb
+    networks:
+      - app_network
+
+
 volumes:
   mysql_data:
   chroma_data:
