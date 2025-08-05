@@ -109,13 +109,13 @@ class MetricsExplanationManager:
         """
         descriptions = {
             'faithfulness': "How well grounded the response is in the retrieved context",
-            'answer_relevancy': "How relevant the response is to the original query",
             'context_relevancy': "How relevant the retrieved context is to the query",
+            'answer_relevancy': "How relevant the response is to the original query",
             'context_precision_without_reference': "Precision of context retrieval without reference answers",
-            'answer_similarity': "Semantic similarity between generated and reference answers",
-            'answer_correctness': "Factual accuracy against reference answers",
+            'context_recall': "How well retrieved contexts cover the reference answer",
             'context_precision': "More accurate precision using reference answers",
-            'context_recall': "How well retrieved contexts cover the reference answer"
+            'answer_similarity': "Semantic similarity between generated and reference answers",
+            'answer_correctness': "Factual accuracy against reference answers"
         }
         
         return descriptions.get(metric_name, "Evaluation metric")
@@ -154,13 +154,13 @@ class MetricsExplanationManager:
         """
         help_texts = {
             'faithfulness': "Measures how well the generated answer is supported by the retrieved context. Higher scores indicate better factual consistency.",
-            'answer_relevancy': "Evaluates how well the answer addresses the original question. Higher scores indicate more relevant responses.",
             'context_relevancy': "Assesses the relevance of retrieved context to the query. Higher scores indicate better context retrieval.",
+            'answer_relevancy': "Evaluates how well the answer addresses the original question. Higher scores indicate more relevant responses.",
             'context_precision_without_reference': "Measures precision of context retrieval without requiring reference answers. Higher scores indicate more precise retrieval.",
-            'answer_similarity': "Compares semantic similarity between generated and reference answers. Higher scores indicate closer alignment.",
-            'answer_correctness': "Evaluates factual accuracy against reference answers. Higher scores indicate better correctness.",
+            'context_recall': "Measures how well retrieved contexts cover information in the reference answer. Higher scores indicate better coverage.",
             'context_precision': "More accurate precision measurement using reference answers for comparison. Higher scores indicate better precision.",
-            'context_recall': "Measures how well retrieved contexts cover information in the reference answer. Higher scores indicate better coverage."
+            'answer_similarity': "Compares semantic similarity between generated and reference answers. Higher scores indicate closer alignment.",
+            'answer_correctness': "Evaluates factual accuracy against reference answers. Higher scores indicate better correctness."
         }
         
         return help_texts.get(metric_name, "RAGAS evaluation metric")
