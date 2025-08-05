@@ -66,6 +66,22 @@ class ChromaVectorStore:
         """Search for similar documents with scores."""
         return self._store.similarity_search_with_score(query, k=k, **kwargs)
 
+    def similarity_search_by_vector(
+        self,
+        embedding: List[float],
+        k: int = 4,
+        include: Optional[List[str]] = None,
+    ) -> dict:
+        """
+        Search for similar items using an embedding vector directly.
+        Returns raw query result from Chroma.
+        """
+        return self._store._collection.query(
+            query_embeddings=[embedding],
+            n_results=k,
+            include=include or ["distances", "metadatas"],
+        )
+
     def delete_collection(self) -> None:
         """Delete the entire collection."""
         self._chroma_client.delete_collection(self._store._collection.name)

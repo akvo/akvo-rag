@@ -1,9 +1,10 @@
+import os
 import clip
 import torch
-from PIL import Image
 import logging
 import numpy as np
-
+from pathlib import Path
+from PIL import Image
 from transformers import (
     BlipProcessor,
     BlipForConditionalGeneration,
@@ -15,20 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 class ImageCaptioning:
-    """
-    Image captioning and embedding service.
-
-    This class:
-    - Generates image captions using BLIP.
-    - Produces image and text embeddings using CLIP.
-    - Optionally fuses image and text embeddings for multimodal search.
-
-    Intended for tasks like:
-    - Image search
-    - Multimodal RAG (image + text queries)
-    - Dataset labeling / enrichment
-    """
-
     def __init__(
         self,
         clip_model_name="ViT-B/32",
@@ -41,28 +28,39 @@ class ImageCaptioning:
         )
         logger.info(f"Using device: {self.device}")
 
+        self.cache_dir = Path(os.getenv("MODEL_CACHE_DIR", "/app/models"))
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+        self.clip_model_path = str(self.cache_dir)
+        self.text_clip_model_path = str(self.cache_dir / text_clip_model_name)
+        self.blip_model_path = str(self.cache_dir / blip_model_name)
+
         self._load_clip(clip_model_name)
         self._load_text_clip(text_clip_model_name)
         self._load_blip(blip_model_name)
 
     def _load_clip(self, model_name):
         try:
-            self.clip_model, self.preprocess = clip.load(model_name)
+            logger.info(f"Loading CLIP model: {model_name}")
+            self.clip_model, self.preprocess = clip.load(
+                model_name, download_root=self.clip_model_path
+            )
             self.clip_model.to(self.device)
-            logger.info(f"CLIP model '{model_name}' loaded successfully.")
+            logger.info(f"CLIP model '{model_name}' loaded.")
         except Exception as e:
             logger.exception(f"Failed to load CLIP model '{model_name}': {e}")
             raise
 
     def _load_text_clip(self, model_name):
         try:
-            self.text_clip_model = CLIPModel.from_pretrained(model_name).to(
-                self.device
-            )
+            logger.info(f"Loading Text CLIP model: {model_name}")
+            self.text_clip_model = CLIPModel.from_pretrained(
+                model_name, cache_dir=self.cache_dir
+            ).to(self.device)
             self.text_clip_tokenizer = CLIPTokenizer.from_pretrained(
-                model_name
+                model_name, cache_dir=self.cache_dir
             )
-            logger.info(f"Text CLIP model '{model_name}' loaded successfully.")
+            logger.info(f"Text CLIP model '{model_name}' loaded.")
         except Exception as e:
             logger.exception(
                 f"Failed to load text CLIP model '{model_name}': {e}"
@@ -71,11 +69,14 @@ class ImageCaptioning:
 
     def _load_blip(self, model_name):
         try:
-            self.blip_processor = BlipProcessor.from_pretrained(model_name)
+            logger.info(f"Loading BLIP model: {model_name}")
+            self.blip_processor = BlipProcessor.from_pretrained(
+                model_name, cache_dir=self.cache_dir
+            )
             self.blip_model = BlipForConditionalGeneration.from_pretrained(
-                model_name
+                model_name, cache_dir=self.cache_dir
             ).to(self.device)
-            logger.info(f"BLIP model '{model_name}' loaded successfully.")
+            logger.info(f"BLIP model '{model_name}' loaded.")
         except Exception as e:
             logger.exception(f"Failed to load BLIP model '{model_name}': {e}")
             raise
