@@ -2,7 +2,7 @@ import asyncio
 from fastmcp import Client
 
 
-client = Client("http://host.docker.internal:8600/mcp")
+client = Client("http://image-rag-mcp:8600/mcp")
 
 
 async def main():
@@ -13,4 +13,5 @@ async def main():
         print(tools)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
