@@ -55,7 +55,8 @@ def main():
     st.subheader("Test Queries")
     
     # Evaluation mode selection
-    enable_reference_metrics = ConfigurationManager.render_mode_selection()
+    evaluation_mode = ConfigurationManager.render_mode_selection()
+    enable_reference_metrics = evaluation_mode in ['full', 'reference-only']
     
     # Initialize RAGAS if needed
     initialize_ragas_if_needed(enable_reference_metrics)
@@ -105,8 +106,8 @@ def render_evaluation_controls(config, queries, reference_answers):
 
 def render_download_button():
     """Render the download results button."""
-    enable_ref_metrics = st.session_state.get('enable_reference_metrics', False)
-    csv_data = CSVProcessor.generate_results_csv(st.session_state.results, enable_ref_metrics)
+    evaluation_mode = st.session_state.get('evaluation_mode', 'full')
+    csv_data = CSVProcessor.generate_results_csv(st.session_state.results, metrics_mode=evaluation_mode)
     
     if csv_data:
         filename = CSVProcessor.get_results_filename()
@@ -133,19 +134,28 @@ def handle_evaluation_execution(config, queries, reference_answers):
         error_msg = UI_MESSAGES['missing_fields'].format(fields=', '.join(missing_fields))
         logger.error(error_msg)
         st.error(error_msg)
-    else:
-        try:
-            # Set up environment
-            ConfigurationManager.setup_openai_environment(config['openai_api_key'])
-            
-            # Run evaluation
-            asyncio.run(run_evaluation_async(config, queries, reference_answers))
-        except Exception as e:
-            logger.error(f"Error in evaluation execution: {str(e)}")
-            st.error(f"Evaluation failed: {str(e)}")
-        finally:
-            st.session_state.evaluation_running = False
-            st.rerun()
+        return
+    
+    # Validate reference-only mode requirements
+    evaluation_mode = st.session_state.get('evaluation_mode', 'full')
+    if evaluation_mode == 'reference-only':
+        if not reference_answers or not any(ref.strip() for ref in reference_answers if ref):
+            st.error("❌ Reference-only mode requires reference answers. Please upload a CSV with reference answers or switch to a different evaluation mode.")
+            return
+    
+    # Proceed with evaluation
+    try:
+        # Set up environment
+        ConfigurationManager.setup_openai_environment(config['openai_api_key'])
+        
+        # Run evaluation
+        asyncio.run(run_evaluation_async(config, queries, reference_answers))
+    except Exception as e:
+        logger.error(f"Error in evaluation execution: {str(e)}")
+        st.error(f"Evaluation failed: {str(e)}")
+    finally:
+        st.session_state.evaluation_running = False
+        st.rerun()
 
 async def run_evaluation_async(config, queries, reference_answers):
     """Run the actual evaluation asynchronously."""
@@ -180,6 +190,9 @@ async def run_evaluation_async(config, queries, reference_answers):
         logger.info(f"RAGAS Status: {message}")
     
     try:
+        # Get evaluation mode from session state
+        evaluation_mode = st.session_state.get('evaluation_mode', 'full')
+        
         # Run evaluation
         eval_results = await evaluate_queries(
             queries=queries,
@@ -190,6 +203,7 @@ async def run_evaluation_async(config, queries, reference_answers):
             username=config['username'],
             password=config['password'],
             reference_answers=reference_answers,
+            metrics_mode=evaluation_mode,
             progress_callback=update_progress,
             ragas_status_callback=update_ragas_status
         )

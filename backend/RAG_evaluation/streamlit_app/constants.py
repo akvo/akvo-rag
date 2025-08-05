@@ -31,7 +31,18 @@ REFERENCE_METRICS: List[str] = [
     'answer_correctness'
 ]
 
+# Reference-only metrics (same as REFERENCE_METRICS for consistency)
+REFERENCE_ONLY_METRICS: List[str] = REFERENCE_METRICS
+
 ALL_METRICS: List[str] = BASIC_METRICS + REFERENCE_METRICS
+
+# Evaluation modes
+EVALUATION_MODES: List[str] = ['basic', 'full', 'reference-only']
+MODE_DESCRIPTIONS: Dict[str, str] = {
+    'basic': 'Basic (4 metrics) - No reference answers required',
+    'full': 'Full (8 metrics) - Uses reference answers if available', 
+    'reference-only': 'Reference-Only (4 metrics) - Requires reference answers'
+}
 
 # Context-dependent and reference-based metric categorization
 CONTEXT_DEPENDENT_METRICS: set = {
@@ -67,6 +78,8 @@ UI_MESSAGES: Dict[str, str] = {
     'full_mode_enabled': "🎯 Full evaluation mode enabled with reference answers!",
     'full_mode_no_refs': "⚠️ Full mode selected but no reference answers found in CSV. Only basic metrics will be available.",
     'basic_mode_with_refs': "⚠️ Reference answers found but Basic mode selected. Switch to Full mode to use reference-based metrics.",
+    'reference_only_enabled': "📚 Reference-only mode enabled - will evaluate only reference-based metrics!",
+    'reference_only_no_refs': "❌ Reference-only mode requires reference answers in CSV file.",
     'queries_prepared_with_refs': "✅ {query_count} queries prepared with {ref_count} reference answers",
     'queries_missing_refs': "⚠️ {missing_count} queries missing reference answers",
     'queries_prepared_basic': "✅ {query_count} queries prepared for basic evaluation",

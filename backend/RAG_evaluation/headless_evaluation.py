@@ -713,7 +713,8 @@ def run_ragas_evaluation(
     evaluation_data: List[Dict[str, Any]], 
     openai_model: str = "gpt-4o",
     openai_api_key: Optional[str] = None,
-    enable_reference_metrics: bool = False
+    enable_reference_metrics: bool = False,
+    metrics_mode: str = "full"
 ) -> Dict[str, Any]:
     """Run RAGAS evaluation on the given data
     
@@ -722,11 +723,29 @@ def run_ragas_evaluation(
         openai_model: OpenAI model to use for evaluation
         openai_api_key: OpenAI API key (will use env var if None)
         enable_reference_metrics: If True, enable metrics that require reference answers
+        metrics_mode: Metrics evaluation mode - 'basic', 'full', or 'reference-only'
         
     Returns:
         Dictionary with evaluation results or error
     """
-    logger.info(f"Starting RAGAS evaluation with enable_reference_metrics={enable_reference_metrics}...")
+    logger.info(f"Starting RAGAS evaluation with enable_reference_metrics={enable_reference_metrics}, metrics_mode={metrics_mode}...")
+    
+    # Define metrics for each mode
+    BASIC_METRICS = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
+    REFERENCE_METRICS = ['answer_similarity', 'answer_correctness', 'context_precision', 'context_recall']
+    
+    # Determine which metrics to evaluate based on mode
+    if metrics_mode == 'basic':
+        target_metrics = BASIC_METRICS
+        logger.info(f"Basic mode: evaluating {len(target_metrics)} metrics")
+    elif metrics_mode == 'reference-only':
+        target_metrics = REFERENCE_METRICS
+        logger.info(f"Reference-only mode: evaluating {len(target_metrics)} metrics")
+    else:  # metrics_mode == 'full'
+        target_metrics = BASIC_METRICS + (REFERENCE_METRICS if enable_reference_metrics else [])
+        logger.info(f"Full mode: evaluating {len(target_metrics)} metrics (reference metrics: {enable_reference_metrics})")
+    
+    logger.info(f"Target metrics: {target_metrics}")
     
     # Check for OpenAI API key
     if openai_api_key:
@@ -787,153 +806,166 @@ def run_ragas_evaluation(
         successful_metrics = []
         errors = []
         
-        # Evaluate faithfulness (doesn't require contexts)
-        logger.info("Evaluating faithfulness metric...")
-        faithfulness_result, error_msg = evaluate_faithfulness(eval_dataset, eval_llm)
-        if error_msg:
-            errors.append(f"faithfulness: {error_msg}")
-        else:
-            results["faithfulness"] = faithfulness_result
-            successful_metrics.append("faithfulness")
+        # Evaluate faithfulness (doesn't require contexts) - only if in target metrics
+        if 'faithfulness' in target_metrics:
+            logger.info("Evaluating faithfulness metric...")
+            faithfulness_result, error_msg = evaluate_faithfulness(eval_dataset, eval_llm)
+            if error_msg:
+                errors.append(f"faithfulness: {error_msg}")
+            else:
+                results["faithfulness"] = faithfulness_result
+                successful_metrics.append("faithfulness")
         
-        # Evaluate answer relevancy (doesn't require contexts)
-        logger.info("Evaluating answer relevancy metric...")
-        relevancy_result, error_msg = evaluate_answer_relevancy(eval_dataset, eval_llm)
-        if error_msg:
-            errors.append(f"answer_relevancy: {error_msg}")
-        else:
-            results["answer_relevancy"] = relevancy_result
-            successful_metrics.append("answer_relevancy")
+        # Evaluate answer relevancy (doesn't require contexts) - only if in target metrics
+        if 'answer_relevancy' in target_metrics:
+            logger.info("Evaluating answer relevancy metric...")
+            relevancy_result, error_msg = evaluate_answer_relevancy(eval_dataset, eval_llm)
+            if error_msg:
+                errors.append(f"answer_relevancy: {error_msg}")
+            else:
+                results["answer_relevancy"] = relevancy_result
+                successful_metrics.append("answer_relevancy")
         
         # Evaluate context-based metrics only if contexts are available
         if has_contexts:
-            logger.info("Evaluating context precision metric...")
-            precision_result, error_msg = evaluate_context_precision(eval_dataset, eval_llm)
-            if error_msg:
-                errors.append(f"context_precision_without_reference: {error_msg}")
-            else:
-                results["context_precision_without_reference"] = precision_result
-                successful_metrics.append("context_precision_without_reference")
+            # Context precision without reference (basic metric)
+            if 'context_precision_without_reference' in target_metrics:
+                logger.info("Evaluating context precision metric...")
+                precision_result, error_msg = evaluate_context_precision(eval_dataset, eval_llm)
+                if error_msg:
+                    errors.append(f"context_precision_without_reference: {error_msg}")
+                else:
+                    results["context_precision_without_reference"] = precision_result
+                    successful_metrics.append("context_precision_without_reference")
             
-            logger.info("Evaluating context relevancy metric...")
-            context_relevancy_result, error_msg = evaluate_context_relevancy(eval_dataset, eval_llm)
-            if error_msg:
-                errors.append(f"context_relevancy: {error_msg}")
-            else:
-                results["context_relevancy"] = context_relevancy_result
-                successful_metrics.append("context_relevancy")
+            # Context relevancy (basic metric)
+            if 'context_relevancy' in target_metrics:
+                logger.info("Evaluating context relevancy metric...")
+                context_relevancy_result, error_msg = evaluate_context_relevancy(eval_dataset, eval_llm)
+                if error_msg:
+                    errors.append(f"context_relevancy: {error_msg}")
+                else:
+                    results["context_relevancy"] = context_relevancy_result
+                    successful_metrics.append("context_relevancy")
         else:
-            logger.info("Skipping context-based metrics - no contexts available")
-            errors.append("context_precision_without_reference: No contexts available")
-            errors.append("context_relevancy: No contexts available")
+            # Add errors for context-based metrics that are requested but not available
+            context_based_in_target = [m for m in target_metrics if m in ['context_precision_without_reference', 'context_relevancy', 'context_precision', 'context_recall']]
+            if context_based_in_target:
+                logger.info(f"Skipping context-based metrics - no contexts available: {context_based_in_target}")
+                for metric in context_based_in_target:
+                    errors.append(f"{metric}: No contexts available")
         
         # Evaluate reference-based metrics if enabled and references are available
+        reference_metrics_in_target = [m for m in target_metrics if m in REFERENCE_METRICS]
         logger.info(f"DEBUG: Reference metrics check - enable_reference_metrics: {enable_reference_metrics}, has_references: {has_references}")
-        if enable_reference_metrics and has_references:
+        logger.info(f"DEBUG: Reference metrics in target: {reference_metrics_in_target}")
+        if reference_metrics_in_target and has_references:
             logger.info("DEBUG: Starting evaluation of reference-based metrics...")
             
-            # Answer Similarity - try multiple import approaches for RAGAS v0.2.15
-            answer_sim_success = False
-            try:
-                # First try standard AnswerSimilarity
+            # Answer Similarity - only evaluate if in target metrics
+            if 'answer_similarity' in target_metrics:
+                answer_sim_success = False
                 try:
-                    from ragas.metrics import AnswerSimilarity
-                    answer_sim_metric = AnswerSimilarity()
-                    metric_name = "AnswerSimilarity"
-                    logger.info("DEBUG: Using AnswerSimilarity metric")
-                except ImportError:
-                    # Fallback to SemanticSimilarity if AnswerSimilarity doesn't exist
-                    from ragas.metrics import SemanticSimilarity
-                    answer_sim_metric = SemanticSimilarity()
-                    metric_name = "SemanticSimilarity"
-                    logger.info("DEBUG: Using SemanticSimilarity metric as fallback")
-                
-                from ragas import evaluate
-                logger.info(f"DEBUG: Evaluating {metric_name} metric...")
-                logger.info(f"DEBUG: Created {metric_name} metric, evaluating on dataset with {len(eval_dataset)} samples")
-                
-                # Check if dataset has required columns before evaluation
-                dataset_df = eval_dataset.to_pandas()
-                logger.info(f"DEBUG: Dataset columns before answer similarity evaluation: {list(dataset_df.columns)}")
-                logger.info(f"DEBUG: Dataset has 'reference' column: {'reference' in dataset_df.columns}")
-                if 'reference' in dataset_df.columns:
-                    non_empty_refs = dataset_df['reference'].apply(lambda x: bool(str(x).strip())).sum()
-                    logger.info(f"DEBUG: Non-empty references in dataset: {non_empty_refs}/{len(dataset_df)}")
-                    logger.info(f"DEBUG: Sample reference value: {dataset_df['reference'].iloc[0] if len(dataset_df) > 0 else 'None'}")
-                
-                answer_sim_result = evaluate(eval_dataset, metrics=[answer_sim_metric], llm=eval_llm)
-                logger.info(f"DEBUG: {metric_name} result type: {type(answer_sim_result)}")
-                
-                # Extract from pandas DataFrame
-                df_result = answer_sim_result.to_pandas()
-                logger.info(f"DEBUG: {metric_name} result columns: {list(df_result.columns)}")
-                logger.info(f"DEBUG: {metric_name} result shape: {df_result.shape}")
-                logger.info(f"DEBUG: {metric_name} result sample: {df_result.head().to_dict()}")
-                
-                # Try multiple possible column names based on metric type
-                if metric_name == "SemanticSimilarity":
-                    possible_columns = ['semantic_similarity', 'answer_similarity', 'similarity']
-                else:
-                    possible_columns = ['answer_similarity', 'semantic_similarity', 'similarity']
-                
-                found_column = None
-                for col in possible_columns:
-                    if col in df_result.columns:
-                        found_column = col
-                        break
-                
-                if found_column:
-                    sim_values = df_result[found_column].tolist()
-                    results["answer_similarity"] = sim_values
-                    successful_metrics.append("answer_similarity")
-                    answer_sim_success = True
-                    logger.info(f"DEBUG: {metric_name} evaluation completed with values from column '{found_column}': {sim_values}")
-                else:
-                    # Try to find similar column names
-                    sim_columns = [col for col in df_result.columns if 'similarity' in col.lower()]
-                    logger.error(f"DEBUG: No similarity columns found in {metric_name} result. Available similarity columns: {sim_columns}")
-                    logger.error(f"DEBUG: All available columns: {list(df_result.columns)}")
-                    errors.append(f"answer_similarity: No similarity column found. Available: {list(df_result.columns)}")
+                    # First try standard AnswerSimilarity
+                    try:
+                        from ragas.metrics import AnswerSimilarity
+                        answer_sim_metric = AnswerSimilarity()
+                        metric_name = "AnswerSimilarity"
+                        logger.info("DEBUG: Using AnswerSimilarity metric")
+                    except ImportError:
+                        # Fallback to SemanticSimilarity if AnswerSimilarity doesn't exist
+                        from ragas.metrics import SemanticSimilarity
+                        answer_sim_metric = SemanticSimilarity()
+                        metric_name = "SemanticSimilarity"
+                        logger.info("DEBUG: Using SemanticSimilarity metric as fallback")
                     
-            except Exception as e:
-                error_msg = f"answer_similarity: {str(e)}"
-                errors.append(error_msg)
-                logger.error(f"Answer similarity evaluation error: {str(e)}")
-                logger.error(f"DEBUG: Full error traceback for answer similarity:")
-                import traceback
-                logger.error(traceback.format_exc())
+                    from ragas import evaluate
+                    logger.info(f"DEBUG: Evaluating {metric_name} metric...")
+                    logger.info(f"DEBUG: Created {metric_name} metric, evaluating on dataset with {len(eval_dataset)} samples")
+                    
+                    # Check if dataset has required columns before evaluation
+                    dataset_df = eval_dataset.to_pandas()
+                    logger.info(f"DEBUG: Dataset columns before answer similarity evaluation: {list(dataset_df.columns)}")
+                    logger.info(f"DEBUG: Dataset has 'reference' column: {'reference' in dataset_df.columns}")
+                    if 'reference' in dataset_df.columns:
+                        non_empty_refs = dataset_df['reference'].apply(lambda x: bool(str(x).strip())).sum()
+                        logger.info(f"DEBUG: Non-empty references in dataset: {non_empty_refs}/{len(dataset_df)}")
+                        logger.info(f"DEBUG: Sample reference value: {dataset_df['reference'].iloc[0] if len(dataset_df) > 0 else 'None'}")
+                    
+                    answer_sim_result = evaluate(eval_dataset, metrics=[answer_sim_metric], llm=eval_llm)
+                    logger.info(f"DEBUG: {metric_name} result type: {type(answer_sim_result)}")
+                    
+                    # Extract from pandas DataFrame
+                    df_result = answer_sim_result.to_pandas()
+                    logger.info(f"DEBUG: {metric_name} result columns: {list(df_result.columns)}")
+                    logger.info(f"DEBUG: {metric_name} result shape: {df_result.shape}")
+                    logger.info(f"DEBUG: {metric_name} result sample: {df_result.head().to_dict()}")
+                    
+                    # Try multiple possible column names based on metric type
+                    if metric_name == "SemanticSimilarity":
+                        possible_columns = ['semantic_similarity', 'answer_similarity', 'similarity']
+                    else:
+                        possible_columns = ['answer_similarity', 'semantic_similarity', 'similarity']
+                    
+                    found_column = None
+                    for col in possible_columns:
+                        if col in df_result.columns:
+                            found_column = col
+                            break
+                    
+                    if found_column:
+                        sim_values = df_result[found_column].tolist()
+                        results["answer_similarity"] = sim_values
+                        successful_metrics.append("answer_similarity")
+                        answer_sim_success = True
+                        logger.info(f"DEBUG: {metric_name} evaluation completed with values from column '{found_column}': {sim_values}")
+                    else:
+                        # Try to find similar column names
+                        sim_columns = [col for col in df_result.columns if 'similarity' in col.lower()]
+                        logger.error(f"DEBUG: No similarity columns found in {metric_name} result. Available similarity columns: {sim_columns}")
+                        logger.error(f"DEBUG: All available columns: {list(df_result.columns)}")
+                        errors.append(f"answer_similarity: No similarity column found. Available: {list(df_result.columns)}")
+                        
+                except Exception as e:
+                    error_msg = f"answer_similarity: {str(e)}"
+                    errors.append(error_msg)
+                    logger.error(f"Answer similarity evaluation error: {str(e)}")
+                    logger.error(f"DEBUG: Full error traceback for answer similarity:")
+                    import traceback
+                    logger.error(traceback.format_exc())
             
-            # Answer Correctness - using correct RAGAS v0.2.15 API
-            try:
-                from ragas.metrics import AnswerCorrectness
-                from ragas import evaluate
-                logger.info("DEBUG: Evaluating answer correctness metric...")
-                answer_corr_metric = AnswerCorrectness()  # No llm parameter needed
-                answer_corr_result = evaluate(eval_dataset, metrics=[answer_corr_metric], llm=eval_llm)
-                
-                # Extract from pandas DataFrame
-                df_result = answer_corr_result.to_pandas()
-                logger.info(f"DEBUG: Answer correctness result columns: {list(df_result.columns)}")
-                logger.info(f"DEBUG: Answer correctness result shape: {df_result.shape}")
-                
-                if 'answer_correctness' in df_result.columns:
-                    corr_values = df_result['answer_correctness'].tolist()
-                    results["answer_correctness"] = corr_values
-                    successful_metrics.append("answer_correctness")
-                    logger.info(f"DEBUG: Answer correctness evaluation completed with values: {corr_values}")
-                else:
-                    # Try to find similar column names
-                    corr_columns = [col for col in df_result.columns if 'correctness' in col.lower()]
-                    logger.error(f"DEBUG: answer_correctness column not found. Available correctness columns: {corr_columns}")
-                    logger.error(f"DEBUG: All available columns: {list(df_result.columns)}")
-                    errors.append(f"answer_correctness: Column not found. Available: {list(df_result.columns)}")
-            except Exception as e:
-                error_msg = f"answer_correctness: {str(e)}"
-                errors.append(error_msg)
-                logger.error(f"Answer correctness evaluation error: {str(e)}")
+            # Answer Correctness - only evaluate if in target metrics
+            if 'answer_correctness' in target_metrics:
+                try:
+                    from ragas.metrics import AnswerCorrectness
+                    from ragas import evaluate
+                    logger.info("DEBUG: Evaluating answer correctness metric...")
+                    answer_corr_metric = AnswerCorrectness()  # No llm parameter needed
+                    answer_corr_result = evaluate(eval_dataset, metrics=[answer_corr_metric], llm=eval_llm)
+                    
+                    # Extract from pandas DataFrame
+                    df_result = answer_corr_result.to_pandas()
+                    logger.info(f"DEBUG: Answer correctness result columns: {list(df_result.columns)}")
+                    logger.info(f"DEBUG: Answer correctness result shape: {df_result.shape}")
+                    
+                    if 'answer_correctness' in df_result.columns:
+                        corr_values = df_result['answer_correctness'].tolist()
+                        results["answer_correctness"] = corr_values
+                        successful_metrics.append("answer_correctness")
+                        logger.info(f"DEBUG: Answer correctness evaluation completed with values: {corr_values}")
+                    else:
+                        # Try to find similar column names
+                        corr_columns = [col for col in df_result.columns if 'correctness' in col.lower()]
+                        logger.error(f"DEBUG: answer_correctness column not found. Available correctness columns: {corr_columns}")
+                        logger.error(f"DEBUG: All available columns: {list(df_result.columns)}")
+                        errors.append(f"answer_correctness: Column not found. Available: {list(df_result.columns)}")
+                except Exception as e:
+                    error_msg = f"answer_correctness: {str(e)}"
+                    errors.append(error_msg)
+                    logger.error(f"Answer correctness evaluation error: {str(e)}")
             
-            # Context Precision (with reference) - using correct RAGAS v0.2.15 API
-            if has_contexts:
+            # Context Precision (with reference) - only evaluate if in target metrics and contexts available
+            if 'context_precision' in target_metrics and has_contexts:
                 try:
                     from ragas.metrics import ContextPrecision
                     from ragas import evaluate
@@ -962,7 +994,8 @@ def run_ragas_evaluation(
                     errors.append(error_msg)
                     logger.error(f"Context precision evaluation error: {str(e)}")
                 
-                # Context Recall - using correct RAGAS v0.2.15 API
+            # Context Recall - only evaluate if in target metrics and contexts available
+            if 'context_recall' in target_metrics and has_contexts:
                 try:
                     from ragas.metrics import ContextRecall
                     from ragas import evaluate
@@ -990,16 +1023,17 @@ def run_ragas_evaluation(
                     error_msg = f"context_recall: {str(e)}"
                     errors.append(error_msg)
                     logger.error(f"Context recall evaluation error: {str(e)}")
-            else:
-                logger.info("Skipping context-based reference metrics - no contexts available")
-                errors.append("context_precision: No contexts available")
-                errors.append("context_recall: No contexts available")
-        elif enable_reference_metrics:
-            logger.info("Reference metrics requested but no reference answers available")
-            errors.append("answer_similarity: No reference answers available")
-            errors.append("answer_correctness: No reference answers available")
-            errors.append("context_precision: No reference answers available")
-            errors.append("context_recall: No reference answers available")
+        
+        # Add errors for reference metrics that were requested but couldn't be evaluated
+        reference_metrics_requested_but_failed = [m for m in target_metrics if m in REFERENCE_METRICS and m not in successful_metrics]
+        if reference_metrics_requested_but_failed:
+            if not has_references:
+                for metric in reference_metrics_requested_but_failed:
+                    errors.append(f"{metric}: No reference answers available")
+            elif not has_contexts and any(m in ['context_precision', 'context_recall'] for m in reference_metrics_requested_but_failed):
+                for metric in reference_metrics_requested_but_failed:
+                    if metric in ['context_precision', 'context_recall']:
+                        errors.append(f"{metric}: No contexts available")
         
         # Check if any metrics succeeded
         if not successful_metrics:
@@ -1036,6 +1070,7 @@ async def evaluate_queries(
     username: str = "admin@example.com",
     password: str = "password",
     reference_answers: Optional[List[str]] = None,
+    metrics_mode: str = "full",
     progress_callback=None,
     ragas_status_callback=None
 ) -> Dict[str, Any]:
@@ -1050,6 +1085,7 @@ async def evaluate_queries(
         username: Username for authentication
         password: Password for authentication
         reference_answers: Optional list of reference answers for enhanced metrics
+        metrics_mode: Metrics evaluation mode - 'basic', 'full', or 'reference-only'
         progress_callback: Optional callback for query progress updates
         ragas_status_callback: Optional callback for RAGAS status updates
         
@@ -1061,9 +1097,23 @@ async def evaluate_queries(
     if not is_valid:
         return {"error": error_msg}
     
-    # Determine if we should enable reference metrics
-    enable_reference_metrics = reference_answers is not None and any(ref.strip() for ref in reference_answers)
-    logger.info(f"DEBUG: Reference metrics decision - reference_answers: {reference_answers is not None}, enable_reference_metrics: {enable_reference_metrics}")
+    # Determine metrics evaluation mode
+    if metrics_mode == 'reference-only':
+        # Reference-only mode requires reference answers
+        if not reference_answers or not any(ref.strip() for ref in reference_answers):
+            return {"error": "reference-only mode requires reference answers"}
+        enable_reference_metrics = True
+        logger.info("DEBUG: Reference-only mode - will evaluate only reference-based metrics")
+    elif metrics_mode == 'basic':
+        # Basic mode never uses reference metrics
+        enable_reference_metrics = False
+        logger.info("DEBUG: Basic mode - will evaluate only basic metrics (no reference required)")
+    else:  # metrics_mode == 'full'
+        # Full mode uses reference metrics if available
+        enable_reference_metrics = reference_answers is not None and any(ref.strip() for ref in reference_answers)
+        logger.info(f"DEBUG: Full mode - reference metrics enabled: {enable_reference_metrics}")
+    
+    logger.info(f"DEBUG: Metrics mode: {metrics_mode}, enable_reference_metrics: {enable_reference_metrics}")
     if reference_answers:
         logger.info(f"DEBUG: Reference answers count: {len(reference_answers)}, non-empty: {sum(1 for ref in reference_answers if ref.strip())}")
     
@@ -1091,12 +1141,13 @@ async def evaluate_queries(
             ragas_status_callback("Skipping RAGAS evaluation: OpenAI API key not provided")
             
     if openai_api_key or os.environ.get("OPENAI_API_KEY"):
-        logger.info(f"DEBUG: Calling run_ragas_evaluation with enable_reference_metrics={enable_reference_metrics}")
+        logger.info(f"DEBUG: Calling run_ragas_evaluation with enable_reference_metrics={enable_reference_metrics}, metrics_mode={metrics_mode}")
         ragas_results = run_ragas_evaluation(
             evaluation_data=rag_results,
             openai_model=openai_model,
             openai_api_key=openai_api_key,
-            enable_reference_metrics=enable_reference_metrics
+            enable_reference_metrics=enable_reference_metrics,
+            metrics_mode=metrics_mode
         )
         logger.info(f"DEBUG: RAGAS evaluation completed, results keys: {list(ragas_results.keys()) if isinstance(ragas_results, dict) else 'Not a dict'}")
         
@@ -1146,6 +1197,7 @@ def run_headless_evaluation(
     rag_api_url: str = "http://localhost:8000",
     username: str = "admin@example.com",
     password: str = "password",
+    metrics_mode: str = "full",
     progress_callback=None,
     ragas_status_callback=None
 ) -> Dict[str, Any]:
@@ -1160,6 +1212,7 @@ def run_headless_evaluation(
         rag_api_url: URL of the RAG API
         username: Username for authentication
         password: Password for authentication
+        metrics_mode: Metrics evaluation mode - 'basic', 'full', or 'reference-only'
         progress_callback: Optional callback for query progress updates
         ragas_status_callback: Optional callback for RAGAS status updates
         
@@ -1181,6 +1234,7 @@ def run_headless_evaluation(
             username=username,
             password=password,
             reference_answers=reference_answers,
+            metrics_mode=metrics_mode,
             progress_callback=progress_callback,
             ragas_status_callback=ragas_status_callback
         ))

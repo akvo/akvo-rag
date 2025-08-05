@@ -112,38 +112,51 @@ class ConfigurationManager:
             st.sidebar.success("✅ RAGAS evaluation ready")
 
     @staticmethod
-    def render_mode_selection() -> bool:
+    def render_mode_selection() -> str:
         """
-        Render evaluation mode selection and return whether reference metrics are enabled.
+        Render evaluation mode selection and return the selected mode.
 
         Returns:
-            bool: True if reference metrics are enabled (Full mode)
+            str: Selected evaluation mode ('basic', 'full', or 'reference-only')
         """
         col1, col2 = st.columns([1, 3])
 
         with col1:
             evaluation_mode = st.radio(
                 "Evaluation Mode",
-                ["Basic (4 metrics)", "Full (8 metrics)"],
-                help="Basic: Uses 4 reference-free metrics. Full: Uses 8 metrics including reference-based ones.",
+                ["Basic (4 metrics)", "Full (8 metrics)", "Reference-Only (4 metrics)"],
+                help="Basic: 4 reference-free metrics. Full: 8 metrics including reference-based ones. Reference-Only: Only reference-based metrics.",
             )
 
         with col2:
             if evaluation_mode == "Full (8 metrics)":
                 st.info(
-                    "💡 Full mode requires reference answers for enhanced metrics like Answer Similarity and Answer Correctness."
+                    "💡 Full mode includes all metrics. Reference answers enable enhanced metrics like Answer Similarity and Answer Correctness."
+                )
+            elif evaluation_mode == "Reference-Only (4 metrics)":
+                st.info(
+                    "📚 Reference-only mode evaluates only reference-based metrics. Reference answers are required."
                 )
             else:
                 st.info(
-                    "ℹ️ Basic mode evaluates responses without requiring reference answers."
+                    "ℹ️ Basic mode evaluates responses using reference-free metrics only."
                 )
 
-        enable_reference_metrics = evaluation_mode == "Full (8 metrics)"
+        # Map display names to internal mode names
+        mode_mapping = {
+            "Basic (4 metrics)": "basic",
+            "Full (8 metrics)": "full", 
+            "Reference-Only (4 metrics)": "reference-only"
+        }
+        
+        selected_mode = mode_mapping[evaluation_mode]
+        enable_reference_metrics = selected_mode in ['full', 'reference-only']
 
         # Update session state
         SessionStateManager.update_ragas_mode(enable_reference_metrics)
+        st.session_state.evaluation_mode = selected_mode
 
-        return enable_reference_metrics
+        return selected_mode
 
     @staticmethod
     def get_current_config() -> Dict[str, Any]:

@@ -1,0 +1,4 @@
+Query_ID,Query,Response,Response_Time_Seconds,Context_Count,Has_Error,Error_Message,Faithfulness,Context_Relevancy,Answer_Relevancy,Context_Precision_Without_Reference,Retrieved_Contexts
+Q1,What is a living income benchmark?,Error: Knowledge base 'Living Income Benchmark Knowledge Base' not found,0.09768366813659668,0,Yes,Knowledge base 'Living Income Benchmark Knowledge Base' not found,nan,N/A,nan,N/A,
+Q2,How is living income calculated?,Error: Knowledge base 'Living Income Benchmark Knowledge Base' not found,0.006630420684814453,0,Yes,Knowledge base 'Living Income Benchmark Knowledge Base' not found,nan,N/A,nan,N/A,
+Q3,What factors influence living income?,Error: Knowledge base 'Living Income Benchmark Knowledge Base' not found,0.006516933441162109,0,Yes,Knowledge base 'Living Income Benchmark Knowledge Base' not found,nan,N/A,nan,N/A,
