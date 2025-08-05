@@ -37,6 +37,10 @@ jobs:
           # Test backend health
           curl -v http://localhost:80/api/health
 
+      - name: Run backend tests
+        run: |
+          ./backend/test.sh
+
       - name: Show logs if failure
         if: failure()
         run: docker compose logs
