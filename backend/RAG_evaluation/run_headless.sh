@@ -11,6 +11,7 @@
 #   -o OUTPUT                   CSV output file path (optional, saves to output/ by default)
 #   -m METRICS_MODE             Metrics mode: basic (4), full (8), reference-only (4) (default: full)
 #   --docker-host-gateway       Replace localhost with host.docker.internal (for Mac users etc.)
+#   --save-performance-report   Save performance report to JSON file (default: false)
 
 # Navigate to script's parent directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,14 +38,18 @@ CSV_FILE=""
 OUTPUT_FILE=""
 METRICS_MODE="full"
 USE_DOCKER_HOST_GATEWAY=false
+SAVE_PERFORMANCE_REPORT=false
 
-# First, manually check for long option --docker-host-gateway
+# First, manually check for long options
 for arg in "$@"; do
     if [[ "$arg" == "--docker-host-gateway" ]]; then
         USE_DOCKER_HOST_GATEWAY=true
         # Remove from arguments to avoid conflict with getopts
         set -- "${@/--docker-host-gateway/}"
-        break
+    elif [[ "$arg" == "--save-performance-report" ]]; then
+        SAVE_PERFORMANCE_REPORT=true
+        # Remove from arguments to avoid conflict with getopts
+        set -- "${@/--save-performance-report/}"
     fi
 done
 
@@ -124,4 +129,5 @@ docker exec \
     -e CSV_FILE="$CSV_FILE" \
     -e OUTPUT_FILE="$OUTPUT_FILE" \
     -e METRICS_MODE="$METRICS_MODE" \
+    -e SAVE_PERFORMANCE_REPORT="$SAVE_PERFORMANCE_REPORT" \
     $CONTAINER_NAME bash -c "cd /app/RAG_evaluation && source venv/bin/activate && python run_headless_evaluation.py $*"

@@ -1,0 +1,2 @@
+# This file ensures the performance_reports directory is tracked in git
+# Performance reports are generated automatically and should not be committed

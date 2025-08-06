@@ -16,8 +16,9 @@ from typing import List, Dict, Any, Optional, Tuple
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("rag_evaluation")
 
-# Import our chat utility
+# Import our chat utility and performance monitoring
 from chat_util import RagChatUtil
+from performance_monitor import get_monitor
 
 # Default test questions
 DEFAULT_TEST_QUERIES = [
@@ -274,7 +275,10 @@ async def generate_rag_responses(
     username: str = "admin@example.com", 
     password: str = "password",
     reference_answers: Optional[List[str]] = None,
-    progress_callback=None
+    progress_callback=None,
+    use_batch_processing: bool = True,
+    batch_size: int = 5,
+    max_concurrent: int = 3
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Generate RAG responses for a list of queries
     
@@ -286,68 +290,95 @@ async def generate_rag_responses(
         password: Password for API authentication
         reference_answers: Optional list of reference answers (must match queries length if provided)
         progress_callback: Optional callback function for progress updates
+        use_batch_processing: Enable batch processing for better performance
+        batch_size: Number of queries to process in each batch
+        max_concurrent: Maximum concurrent requests per batch
         
     Returns:
         Tuple of (list of response dictionaries, logs)
     """
-    # Create chat utility
-    chat_util = RagChatUtil(
-        base_url=rag_api_url,
-        username=username,
-        password=password
-    )
+    monitor = get_monitor()
+    
+    with monitor.measure_operation("rag_responses_generation", 
+                                 query_count=len(queries), 
+                                 kb_name=kb_name,
+                                 use_batch_processing=use_batch_processing,
+                                 batch_size=batch_size):
+        # Create chat utility
+        chat_util = RagChatUtil(
+            base_url=rag_api_url,
+            username=username,
+            password=password
+        )
 
-    # Enable instrumentation
-    chat_util.enable_instrumentation()
+        # Enable instrumentation
+        chat_util.enable_instrumentation()
 
-    # Process each query
-    results = []
-    all_logs = []
-    for i, query in enumerate(queries):
-        logger.info(f"Processing query {i+1}/{len(queries)}: {query[:50]}...")
-
-        # Generate RAG response
-        start_time = time.time()
-        rag_result = await chat_util.generate_rag_response(query, kb_name)
-        end_time = time.time()
-
-        # Collect logs
-        logs = chat_util.get_logs()
-        all_logs.extend(logs)
-
-        # Get reference answer for this query
-        reference_answer = ""
-        if reference_answers and i < len(reference_answers):
-            reference_answer = reference_answers[i] or ""
-
-        # Format response
-        if "error" not in rag_result:
-            contexts = [item["page_content"] for item in rag_result.get("contexts", [])]
-            results.append({
-                "query": query,
-                "ground_truths": [reference_answer] if reference_answer else [""],
-                "reference_answer": reference_answer,  # Store for easier access
-                "answer": rag_result["response"],
-                "contexts": contexts,
-                "response_time": end_time - start_time,
-                "kb_id": rag_result.get("kb_id"),
-                "chat_id": rag_result.get("chat_id"),
-            })
+        if use_batch_processing and len(queries) > 1:
+            logger.info(f"Using batch processing: {len(queries)} queries, batch_size={batch_size}, max_concurrent={max_concurrent}")
+            
+            # Use batch processing for better performance
+            with monitor.measure_operation("rag_batch_processing", 
+                                         query_count=len(queries)):
+                raw_results = await chat_util.generate_rag_responses_batch(
+                    queries, kb_name, batch_size=batch_size, max_concurrent=max_concurrent
+                )
         else:
-            # Store error result
-            results.append({
-                "query": query,
-                "answer": rag_result.get("response", ""),  # For RAGAS compatibility
-                "contexts": [],
-                "ground_truths": [reference_answer] if reference_answer else [""],
-                "reference_answer": reference_answer,
-                "error": rag_result.get("error", "Unknown error"),
-                "response_time": end_time - start_time
-            })
+            logger.info(f"Using sequential processing: {len(queries)} queries")
+            
+            # Fall back to sequential processing
+            raw_results = []
+            for i, query in enumerate(queries):
+                logger.info(f"Processing query {i+1}/{len(queries)}: {query[:50]}...")
 
-        # Update progress if callback is provided
-        if progress_callback:
-            progress_callback(i, len(queries), query, results[-1])
+                with monitor.measure_operation("rag_api_single_query", 
+                                             query_index=i+1, 
+                                             query_preview=query[:50]):
+                    rag_result = await chat_util.generate_rag_response(query, kb_name)
+                
+                raw_results.append(rag_result)
+
+        # Process results and add reference answers
+        results = []
+        all_logs = chat_util.get_logs()
+        
+        for i, rag_result in enumerate(raw_results):
+            query = queries[i] if i < len(queries) else ""
+            
+            # Get reference answer for this query
+            reference_answer = ""
+            if reference_answers and i < len(reference_answers):
+                reference_answer = reference_answers[i] or ""
+
+            # Format response
+            if "error" not in rag_result:
+                contexts = [item["page_content"] for item in rag_result.get("contexts", [])]
+                results.append({
+                    "query": query,
+                    "ground_truths": [reference_answer] if reference_answer else [""],
+                    "reference_answer": reference_answer,  # Store for easier access
+                    "answer": rag_result["response"],
+                    "contexts": contexts,
+                    "response_time": rag_result.get("response_time", 0),
+                    "kb_id": rag_result.get("kb_id"),
+                    "chat_id": rag_result.get("chat_id"),
+                })
+            else:
+                # Store error result
+                results.append({
+                    "query": query,
+                    "answer": rag_result.get("response", ""),  # For RAGAS compatibility
+                    "contexts": [],
+                    "ground_truths": [reference_answer] if reference_answer else [""],
+                    "reference_answer": reference_answer,
+                    "error": rag_result.get("error", "Unknown error"),
+                    "response_time": rag_result.get("response_time", 0)
+                })
+                monitor.increment_counter("failed_operations")
+
+            # Update progress if callback is provided
+            if progress_callback:
+                progress_callback(i, len(queries), query, results[-1])
 
     return results, all_logs
 
@@ -465,51 +496,55 @@ def evaluate_faithfulness(eval_dataset, eval_llm) -> Tuple[Optional[Any], Option
     Returns:
         Tuple of (metric_result, error_message)
     """
-    try:
-        from ragas.metrics import Faithfulness
-        from ragas import evaluate
-        
-        logger.info("Initializing faithfulness metric...")
-        faithfulness_metric = Faithfulness(llm=eval_llm)
-        logger.info("Successfully initialized faithfulness metric")
-        
-        logger.info("Running faithfulness evaluation...")
-        result = evaluate(
-            dataset=eval_dataset,
-            metrics=[faithfulness_metric]
-        )
-        
-        # Debug: log what we actually got back
-        logger.info(f"RAGAS result type: {type(result).__name__}")
-        logger.info(f"RAGAS result attributes: {[attr for attr in dir(result) if not attr.startswith('_')]}")
-        logger.info(f"RAGAS scores: {result.scores if hasattr(result, 'scores') else 'No scores attr'}")
-        
-        # Try accessing through scores attribute first (correct for RAGAS 0.2.x)
-        if hasattr(result, 'scores') and isinstance(result.scores, list) and len(result.scores) > 0:
-            # Extract faithfulness scores from list of dicts
-            faithfulness_scores = [score_dict.get('faithfulness') for score_dict in result.scores if 'faithfulness' in score_dict]
-            if faithfulness_scores:
-                logger.info(f"Faithfulness evaluation completed via scores: {len(faithfulness_scores)} scores")
-                return faithfulness_scores, None
-        elif hasattr(result, 'faithfulness'):
-            faithfulness_scores = result.faithfulness
-            logger.info(f"Faithfulness evaluation completed: {type(faithfulness_scores).__name__}")
-            return faithfulness_scores.tolist() if hasattr(faithfulness_scores, 'tolist') else faithfulness_scores, None
-        else:
-            logger.warning("No faithfulness result found in evaluation output")
-            # Try to log what's actually in the result
-            if hasattr(result, '__dict__'):
-                logger.info(f"Result dict keys: {list(result.__dict__.keys())}")
-            if hasattr(result, 'scores') and hasattr(result.scores, '__dict__'):
-                logger.info(f"Scores dict keys: {list(result.scores.__dict__.keys())}")
-            return None, "No faithfulness result found"
+    monitor = get_monitor()
+    
+    with monitor.measure_operation("ragas_eval_faithfulness", dataset_size=len(eval_dataset)):
+        try:
+            from ragas.metrics import Faithfulness
+            from ragas import evaluate
             
-    except Exception as e:
-        error_msg = f"Faithfulness evaluation error: {str(e)}"
-        logger.error(error_msg)
-        import traceback
-        logger.error(traceback.format_exc())
-        return None, error_msg
+            logger.info("Initializing faithfulness metric...")
+            faithfulness_metric = Faithfulness(llm=eval_llm)
+            logger.info("Successfully initialized faithfulness metric")
+            
+            logger.info("Running faithfulness evaluation...")
+            monitor.increment_counter("openai_api_calls")  # This will make multiple API calls
+            result = evaluate(
+                dataset=eval_dataset,
+                metrics=[faithfulness_metric]
+            )
+            
+            # Debug: log what we actually got back
+            logger.info(f"RAGAS result type: {type(result).__name__}")
+            logger.info(f"RAGAS result attributes: {[attr for attr in dir(result) if not attr.startswith('_')]}")
+            logger.info(f"RAGAS scores: {result.scores if hasattr(result, 'scores') else 'No scores attr'}")
+            
+            # Try accessing through scores attribute first (correct for RAGAS 0.2.x)
+            if hasattr(result, 'scores') and isinstance(result.scores, list) and len(result.scores) > 0:
+                # Extract faithfulness scores from list of dicts
+                faithfulness_scores = [score_dict.get('faithfulness') for score_dict in result.scores if 'faithfulness' in score_dict]
+                if faithfulness_scores:
+                    logger.info(f"Faithfulness evaluation completed via scores: {len(faithfulness_scores)} scores")
+                    return faithfulness_scores, None
+            elif hasattr(result, 'faithfulness'):
+                faithfulness_scores = result.faithfulness
+                logger.info(f"Faithfulness evaluation completed: {type(faithfulness_scores).__name__}")
+                return faithfulness_scores.tolist() if hasattr(faithfulness_scores, 'tolist') else faithfulness_scores, None
+            else:
+                logger.warning("No faithfulness result found in evaluation output")
+                # Try to log what's actually in the result
+                if hasattr(result, '__dict__'):
+                    logger.info(f"Result dict keys: {list(result.__dict__.keys())}")
+                if hasattr(result, 'scores') and hasattr(result.scores, '__dict__'):
+                    logger.info(f"Scores dict keys: {list(result.scores.__dict__.keys())}")
+                return None, "No faithfulness result found"
+                
+        except Exception as e:
+            error_msg = f"Faithfulness evaluation error: {str(e)}"
+            logger.error(error_msg)
+            import traceback
+            logger.error(traceback.format_exc())
+            return None, error_msg
 
 def evaluate_answer_relevancy(eval_dataset, eval_llm) -> Tuple[Optional[Any], Optional[str]]:
     """Evaluate answer relevancy metric.
@@ -709,12 +744,164 @@ def evaluate_context_relevancy(eval_dataset, eval_llm) -> Tuple[Optional[Any], O
         logger.error(traceback.format_exc())
         return None, error_msg
 
+def evaluate_metrics_batch(eval_dataset, eval_llm, target_metrics: List[str], 
+                          has_contexts: bool, has_references: bool) -> Tuple[Dict[str, Any], List[str], List[str]]:
+    """Evaluate multiple RAGAS metrics in batches for better performance.
+    
+    Args:
+        eval_dataset: EvaluationDataset instance
+        eval_llm: LLM instance for evaluation
+        target_metrics: List of metrics to evaluate
+        has_contexts: Whether dataset has retrieved contexts
+        has_references: Whether dataset has reference answers
+        
+    Returns:
+        Tuple of (results_dict, successful_metrics, errors)
+    """
+    monitor = get_monitor()
+    results = {}
+    successful_metrics = []
+    errors = []
+    
+    # Filter out metrics that can't be evaluated due to missing data
+    available_metrics = []
+    
+    for metric in target_metrics:
+        # Check data requirements for each metric
+        if metric in ['faithfulness', 'answer_relevancy']:
+            # These only need question + answer (always available)
+            available_metrics.append(metric)
+        elif metric in ['context_precision_without_reference', 'context_relevancy']:
+            # These need contexts (always available in RAG)
+            if has_contexts:
+                available_metrics.append(metric)
+            else:
+                errors.append(f"{metric}: No contexts available")
+        elif metric in ['answer_similarity', 'answer_correctness']:
+            # These need reference answers
+            if has_references:
+                available_metrics.append(metric)
+            else:
+                errors.append(f"{metric}: No reference answers available")
+        elif metric in ['context_precision', 'context_recall']:
+            # These need both contexts and references
+            if has_contexts and has_references:
+                available_metrics.append(metric)
+            else:
+                missing = []
+                if not has_contexts:
+                    missing.append("contexts")
+                if not has_references:
+                    missing.append("references")
+                errors.append(f"{metric}: Missing {', '.join(missing)}")
+    
+    # Single unified batch evaluation for all available metrics
+    if available_metrics:
+        with monitor.measure_operation("batch_eval_unified_metrics",
+                                     metrics=available_metrics,
+                                     metric_count=len(available_metrics)):
+            logger.info(f"Unified batch evaluation: {len(available_metrics)} metrics - {available_metrics}")
+            batch_results, batch_errors = _evaluate_unified_metrics_batch(eval_dataset, eval_llm, available_metrics)
+            results.update(batch_results)
+            successful_metrics.extend(batch_results.keys())
+            errors.extend(batch_errors)
+    else:
+        logger.warning("No metrics available for evaluation due to missing data requirements")
+    
+    return results, successful_metrics, errors
+
+def _evaluate_unified_metrics_batch(eval_dataset, eval_llm, metrics: List[str]) -> Tuple[Dict[str, Any], List[str]]:
+    """Unified batch evaluation for all RAGAS metrics in a single call."""
+    try:
+        from ragas.metrics import (
+            Faithfulness, AnswerRelevancy, 
+            LLMContextPrecisionWithoutReference, ContextRelevance,
+            AnswerSimilarity, AnswerCorrectness,
+            ContextPrecision, ContextRecall
+        )
+        from ragas import evaluate
+        
+        # Build metric instances for all requested metrics
+        metric_instances = []
+        metric_name_mapping = {}
+        
+        for metric in metrics:
+            if metric == 'faithfulness':
+                metric_instances.append(Faithfulness())
+                metric_name_mapping['faithfulness'] = 'faithfulness'
+            elif metric == 'answer_relevancy':
+                metric_instances.append(AnswerRelevancy())
+                metric_name_mapping['answer_relevancy'] = 'answer_relevancy'
+            elif metric == 'context_precision_without_reference':
+                metric_instances.append(LLMContextPrecisionWithoutReference())
+                metric_name_mapping['context_precision_without_reference'] = 'llm_context_precision_without_reference'
+            elif metric == 'context_relevancy':
+                metric_instances.append(ContextRelevance())
+                metric_name_mapping['context_relevancy'] = 'nv_context_relevance'
+            elif metric == 'answer_similarity':
+                metric_instances.append(AnswerSimilarity())
+                metric_name_mapping['answer_similarity'] = 'semantic_similarity'
+            elif metric == 'answer_correctness':
+                metric_instances.append(AnswerCorrectness())
+                metric_name_mapping['answer_correctness'] = 'answer_correctness'
+            elif metric == 'context_precision':
+                metric_instances.append(ContextPrecision())
+                metric_name_mapping['context_precision'] = 'context_precision'
+            elif metric == 'context_recall':
+                metric_instances.append(ContextRecall())
+                metric_name_mapping['context_recall'] = 'context_recall'
+        
+        if not metric_instances:
+            return {}, []
+        
+        logger.info(f"Unified batch evaluating {len(metric_instances)} metrics: {metrics}")
+        monitor = get_monitor()
+        monitor.increment_counter("openai_api_calls", len(metric_instances))
+        
+        # Single unified RAGAS evaluation call
+        result = evaluate(dataset=eval_dataset, metrics=metric_instances)
+        
+        # Extract results for all metrics
+        results = {}
+        errors = []
+        
+        for metric_name in metrics:
+            ragas_key = metric_name_mapping.get(metric_name, metric_name)
+            
+            if hasattr(result, 'scores') and isinstance(result.scores, list) and len(result.scores) > 0:
+                # Extract scores from list of dicts
+                scores = [score_dict.get(ragas_key) for score_dict in result.scores if ragas_key in score_dict]
+                if scores and all(score is not None for score in scores):
+                    results[metric_name] = scores
+                    logger.info(f"Successfully extracted {len(scores)} scores for {metric_name} (ragas key: {ragas_key})")
+                else:
+                    errors.append(f"{metric_name}: No valid scores found for {ragas_key}")
+                    logger.warning(f"No valid scores for {metric_name} (ragas key: {ragas_key})")
+            elif hasattr(result, ragas_key):
+                metric_result = getattr(result, ragas_key)
+                results[metric_name] = metric_result.tolist() if hasattr(metric_result, 'tolist') else metric_result
+                logger.info(f"Successfully extracted attribute result for {metric_name}")
+            else:
+                errors.append(f"{metric_name}: No result found for {ragas_key}")
+                logger.warning(f"No result found for {metric_name} (ragas key: {ragas_key})")
+        
+        logger.info(f"Unified batch evaluation completed: {len(results)} successful, {len(errors)} errors")
+        return results, errors
+        
+    except Exception as e:
+        error_msg = f"Unified batch metrics evaluation error: {str(e)}"
+        logger.error(error_msg)
+        import traceback
+        logger.error(traceback.format_exc())
+        return {}, [error_msg]
+
+
 def run_ragas_evaluation(
     evaluation_data: List[Dict[str, Any]], 
     openai_model: str = "gpt-4o",
     openai_api_key: Optional[str] = None,
     enable_reference_metrics: bool = False,
-    metrics_mode: str = "full"
+    metrics_mode: str = "full",
 ) -> Dict[str, Any]:
     """Run RAGAS evaluation on the given data
     
@@ -728,6 +915,8 @@ def run_ragas_evaluation(
     Returns:
         Dictionary with evaluation results or error
     """
+    monitor = get_monitor()
+    
     logger.info(f"Starting RAGAS evaluation with enable_reference_metrics={enable_reference_metrics}, metrics_mode={metrics_mode}...")
     
     # Define metrics for each mode
@@ -801,249 +990,18 @@ def run_ragas_evaluation(
             logger.error(error_msg)
             return {"error": error_msg}
         
-        # Run individual metric evaluations
-        results = {}
-        successful_metrics = []
-        errors = []
+        # Use batch evaluation for better performance
+        results, successful_metrics, errors = evaluate_metrics_batch(
+            eval_dataset, eval_llm, target_metrics, has_contexts, has_references
+        )
         
-        # Evaluate faithfulness (doesn't require contexts) - only if in target metrics
-        if 'faithfulness' in target_metrics:
-            logger.info("Evaluating faithfulness metric...")
-            faithfulness_result, error_msg = evaluate_faithfulness(eval_dataset, eval_llm)
-            if error_msg:
-                errors.append(f"faithfulness: {error_msg}")
-            else:
-                results["faithfulness"] = faithfulness_result
-                successful_metrics.append("faithfulness")
-        
-        # Evaluate answer relevancy (doesn't require contexts) - only if in target metrics
-        if 'answer_relevancy' in target_metrics:
-            logger.info("Evaluating answer relevancy metric...")
-            relevancy_result, error_msg = evaluate_answer_relevancy(eval_dataset, eval_llm)
-            if error_msg:
-                errors.append(f"answer_relevancy: {error_msg}")
-            else:
-                results["answer_relevancy"] = relevancy_result
-                successful_metrics.append("answer_relevancy")
-        
-        # Evaluate context-based metrics only if contexts are available
-        if has_contexts:
-            # Context precision without reference (basic metric)
-            if 'context_precision_without_reference' in target_metrics:
-                logger.info("Evaluating context precision metric...")
-                precision_result, error_msg = evaluate_context_precision(eval_dataset, eval_llm)
-                if error_msg:
-                    errors.append(f"context_precision_without_reference: {error_msg}")
-                else:
-                    results["context_precision_without_reference"] = precision_result
-                    successful_metrics.append("context_precision_without_reference")
-            
-            # Context relevancy (basic metric)
-            if 'context_relevancy' in target_metrics:
-                logger.info("Evaluating context relevancy metric...")
-                context_relevancy_result, error_msg = evaluate_context_relevancy(eval_dataset, eval_llm)
-                if error_msg:
-                    errors.append(f"context_relevancy: {error_msg}")
-                else:
-                    results["context_relevancy"] = context_relevancy_result
-                    successful_metrics.append("context_relevancy")
-        else:
-            # Add errors for context-based metrics that are requested but not available
-            context_based_in_target = [m for m in target_metrics if m in ['context_precision_without_reference', 'context_relevancy', 'context_precision', 'context_recall']]
-            if context_based_in_target:
-                logger.info(f"Skipping context-based metrics - no contexts available: {context_based_in_target}")
-                for metric in context_based_in_target:
-                    errors.append(f"{metric}: No contexts available")
-        
-        # Evaluate reference-based metrics if enabled and references are available
-        reference_metrics_in_target = [m for m in target_metrics if m in REFERENCE_METRICS]
-        logger.info(f"DEBUG: Reference metrics check - enable_reference_metrics: {enable_reference_metrics}, has_references: {has_references}")
-        logger.info(f"DEBUG: Reference metrics in target: {reference_metrics_in_target}")
-        if reference_metrics_in_target and has_references:
-            logger.info("DEBUG: Starting evaluation of reference-based metrics...")
-            
-            # Answer Similarity - only evaluate if in target metrics
-            if 'answer_similarity' in target_metrics:
-                answer_sim_success = False
-                try:
-                    # First try standard AnswerSimilarity
-                    try:
-                        from ragas.metrics import AnswerSimilarity
-                        answer_sim_metric = AnswerSimilarity()
-                        metric_name = "AnswerSimilarity"
-                        logger.info("DEBUG: Using AnswerSimilarity metric")
-                    except ImportError:
-                        # Fallback to SemanticSimilarity if AnswerSimilarity doesn't exist
-                        from ragas.metrics import SemanticSimilarity
-                        answer_sim_metric = SemanticSimilarity()
-                        metric_name = "SemanticSimilarity"
-                        logger.info("DEBUG: Using SemanticSimilarity metric as fallback")
-                    
-                    from ragas import evaluate
-                    logger.info(f"DEBUG: Evaluating {metric_name} metric...")
-                    logger.info(f"DEBUG: Created {metric_name} metric, evaluating on dataset with {len(eval_dataset)} samples")
-                    
-                    # Check if dataset has required columns before evaluation
-                    dataset_df = eval_dataset.to_pandas()
-                    logger.info(f"DEBUG: Dataset columns before answer similarity evaluation: {list(dataset_df.columns)}")
-                    logger.info(f"DEBUG: Dataset has 'reference' column: {'reference' in dataset_df.columns}")
-                    if 'reference' in dataset_df.columns:
-                        non_empty_refs = dataset_df['reference'].apply(lambda x: bool(str(x).strip())).sum()
-                        logger.info(f"DEBUG: Non-empty references in dataset: {non_empty_refs}/{len(dataset_df)}")
-                        logger.info(f"DEBUG: Sample reference value: {dataset_df['reference'].iloc[0] if len(dataset_df) > 0 else 'None'}")
-                    
-                    answer_sim_result = evaluate(eval_dataset, metrics=[answer_sim_metric], llm=eval_llm)
-                    logger.info(f"DEBUG: {metric_name} result type: {type(answer_sim_result)}")
-                    
-                    # Extract from pandas DataFrame
-                    df_result = answer_sim_result.to_pandas()
-                    logger.info(f"DEBUG: {metric_name} result columns: {list(df_result.columns)}")
-                    logger.info(f"DEBUG: {metric_name} result shape: {df_result.shape}")
-                    logger.info(f"DEBUG: {metric_name} result sample: {df_result.head().to_dict()}")
-                    
-                    # Try multiple possible column names based on metric type
-                    if metric_name == "SemanticSimilarity":
-                        possible_columns = ['semantic_similarity', 'answer_similarity', 'similarity']
-                    else:
-                        possible_columns = ['answer_similarity', 'semantic_similarity', 'similarity']
-                    
-                    found_column = None
-                    for col in possible_columns:
-                        if col in df_result.columns:
-                            found_column = col
-                            break
-                    
-                    if found_column:
-                        sim_values = df_result[found_column].tolist()
-                        results["answer_similarity"] = sim_values
-                        successful_metrics.append("answer_similarity")
-                        answer_sim_success = True
-                        logger.info(f"DEBUG: {metric_name} evaluation completed with values from column '{found_column}': {sim_values}")
-                    else:
-                        # Try to find similar column names
-                        sim_columns = [col for col in df_result.columns if 'similarity' in col.lower()]
-                        logger.error(f"DEBUG: No similarity columns found in {metric_name} result. Available similarity columns: {sim_columns}")
-                        logger.error(f"DEBUG: All available columns: {list(df_result.columns)}")
-                        errors.append(f"answer_similarity: No similarity column found. Available: {list(df_result.columns)}")
-                        
-                except Exception as e:
-                    error_msg = f"answer_similarity: {str(e)}"
-                    errors.append(error_msg)
-                    logger.error(f"Answer similarity evaluation error: {str(e)}")
-                    logger.error(f"DEBUG: Full error traceback for answer similarity:")
-                    import traceback
-                    logger.error(traceback.format_exc())
-            
-            # Answer Correctness - only evaluate if in target metrics
-            if 'answer_correctness' in target_metrics:
-                try:
-                    from ragas.metrics import AnswerCorrectness
-                    from ragas import evaluate
-                    logger.info("DEBUG: Evaluating answer correctness metric...")
-                    answer_corr_metric = AnswerCorrectness()  # No llm parameter needed
-                    answer_corr_result = evaluate(eval_dataset, metrics=[answer_corr_metric], llm=eval_llm)
-                    
-                    # Extract from pandas DataFrame
-                    df_result = answer_corr_result.to_pandas()
-                    logger.info(f"DEBUG: Answer correctness result columns: {list(df_result.columns)}")
-                    logger.info(f"DEBUG: Answer correctness result shape: {df_result.shape}")
-                    
-                    if 'answer_correctness' in df_result.columns:
-                        corr_values = df_result['answer_correctness'].tolist()
-                        results["answer_correctness"] = corr_values
-                        successful_metrics.append("answer_correctness")
-                        logger.info(f"DEBUG: Answer correctness evaluation completed with values: {corr_values}")
-                    else:
-                        # Try to find similar column names
-                        corr_columns = [col for col in df_result.columns if 'correctness' in col.lower()]
-                        logger.error(f"DEBUG: answer_correctness column not found. Available correctness columns: {corr_columns}")
-                        logger.error(f"DEBUG: All available columns: {list(df_result.columns)}")
-                        errors.append(f"answer_correctness: Column not found. Available: {list(df_result.columns)}")
-                except Exception as e:
-                    error_msg = f"answer_correctness: {str(e)}"
-                    errors.append(error_msg)
-                    logger.error(f"Answer correctness evaluation error: {str(e)}")
-            
-            # Context Precision (with reference) - only evaluate if in target metrics and contexts available
-            if 'context_precision' in target_metrics and has_contexts:
-                try:
-                    from ragas.metrics import ContextPrecision
-                    from ragas import evaluate
-                    logger.info("DEBUG: Evaluating context precision metric (with reference)...")
-                    context_prec_metric = ContextPrecision()  # No llm parameter needed
-                    context_prec_result = evaluate(eval_dataset, metrics=[context_prec_metric], llm=eval_llm)
-                    
-                    # Extract from pandas DataFrame
-                    df_result = context_prec_result.to_pandas()
-                    logger.info(f"DEBUG: Context precision result columns: {list(df_result.columns)}")
-                    logger.info(f"DEBUG: Context precision result shape: {df_result.shape}")
-                    
-                    if 'context_precision' in df_result.columns:
-                        prec_values = df_result['context_precision'].tolist()
-                        results["context_precision"] = prec_values
-                        successful_metrics.append("context_precision")
-                        logger.info(f"DEBUG: Context precision evaluation completed with values: {prec_values}")
-                    else:
-                        # Try to find similar column names
-                        prec_columns = [col for col in df_result.columns if 'precision' in col.lower()]
-                        logger.error(f"DEBUG: context_precision column not found. Available precision columns: {prec_columns}")
-                        logger.error(f"DEBUG: All available columns: {list(df_result.columns)}")
-                        errors.append(f"context_precision: Column not found. Available: {list(df_result.columns)}")
-                except Exception as e:
-                    error_msg = f"context_precision: {str(e)}"
-                    errors.append(error_msg)
-                    logger.error(f"Context precision evaluation error: {str(e)}")
-                
-            # Context Recall - only evaluate if in target metrics and contexts available
-            if 'context_recall' in target_metrics and has_contexts:
-                try:
-                    from ragas.metrics import ContextRecall
-                    from ragas import evaluate
-                    logger.info("DEBUG: Evaluating context recall metric...")
-                    context_recall_metric = ContextRecall()  # No llm parameter needed
-                    context_recall_result = evaluate(eval_dataset, metrics=[context_recall_metric], llm=eval_llm)
-                    
-                    # Extract from pandas DataFrame
-                    df_result = context_recall_result.to_pandas()
-                    logger.info(f"DEBUG: Context recall result columns: {list(df_result.columns)}")
-                    logger.info(f"DEBUG: Context recall result shape: {df_result.shape}")
-                    
-                    if 'context_recall' in df_result.columns:
-                        recall_values = df_result['context_recall'].tolist()
-                        results["context_recall"] = recall_values
-                        successful_metrics.append("context_recall")
-                        logger.info(f"DEBUG: Context recall evaluation completed with values: {recall_values}")
-                    else:
-                        # Try to find similar column names
-                        recall_columns = [col for col in df_result.columns if 'recall' in col.lower()]
-                        logger.error(f"DEBUG: context_recall column not found. Available recall columns: {recall_columns}")
-                        logger.error(f"DEBUG: All available columns: {list(df_result.columns)}")
-                        errors.append(f"context_recall: Column not found. Available: {list(df_result.columns)}")
-                except Exception as e:
-                    error_msg = f"context_recall: {str(e)}"
-                    errors.append(error_msg)
-                    logger.error(f"Context recall evaluation error: {str(e)}")
-        
-        # Add errors for reference metrics that were requested but couldn't be evaluated
-        reference_metrics_requested_but_failed = [m for m in target_metrics if m in REFERENCE_METRICS and m not in successful_metrics]
-        if reference_metrics_requested_but_failed:
-            if not has_references:
-                for metric in reference_metrics_requested_but_failed:
-                    errors.append(f"{metric}: No reference answers available")
-            elif not has_contexts and any(m in ['context_precision', 'context_recall'] for m in reference_metrics_requested_but_failed):
-                for metric in reference_metrics_requested_but_failed:
-                    if metric in ['context_precision', 'context_recall']:
-                        errors.append(f"{metric}: No contexts available")
-        
-        # Check if any metrics succeeded
-        if not successful_metrics:
-            error_details = "; ".join(errors) if errors else "Unknown reasons"
-            return {"error": f"No metrics could be evaluated. Details: {error_details}"}
-        
-        logger.info(f"Successfully evaluated {len(successful_metrics)} metrics: {', '.join(successful_metrics)}")
+        # Log evaluation results
+        logger.info(f"RAGAS evaluation completed: {len(successful_metrics)} successful metrics, {len(errors)} errors")
+        if successful_metrics:
+            logger.info(f"Successful metrics: {', '.join(successful_metrics)}")
         if errors:
-            logger.warning(f"Failed to evaluate some metrics: {'; '.join(errors)}")
-        
+            logger.warning(f"Metric errors: {'; '.join(errors)}")
+        # Return successful evaluation results
         logger.info("RAGAS evaluation completed successfully")
         return {
             "success": True,
@@ -1061,10 +1019,11 @@ def run_ragas_evaluation(
         logger.error(traceback.format_exc())
         return {"error": error_msg}
 
+
 async def evaluate_queries(
     queries: List[str],
     kb_name: str,
-    openai_model: str = "gpt-4o",
+    openai_model: str = "gpt-4o-mini",
     openai_api_key: Optional[str] = None,
     rag_api_url: str = "http://localhost:8000",
     username: str = "admin@example.com",
@@ -1072,7 +1031,11 @@ async def evaluate_queries(
     reference_answers: Optional[List[str]] = None,
     metrics_mode: str = "full",
     progress_callback=None,
-    ragas_status_callback=None
+    ragas_status_callback=None,
+    use_batch_processing: bool = True,
+    batch_size: int = 5,
+    max_concurrent: int = 3,
+    save_performance_report: bool = False
 ) -> Dict[str, Any]:
     """Evaluate a list of queries against a knowledge base
     
@@ -1088,6 +1051,10 @@ async def evaluate_queries(
         metrics_mode: Metrics evaluation mode - 'basic', 'full', or 'reference-only'
         progress_callback: Optional callback for query progress updates
         ragas_status_callback: Optional callback for RAGAS status updates
+        use_batch_processing: Enable batch processing for better performance
+        batch_size: Number of queries per batch
+        max_concurrent: Maximum concurrent requests per batch
+        save_performance_report: Save performance report to JSON file (default: False)
         
     Returns:
         Dictionary with evaluation results
@@ -1117,6 +1084,12 @@ async def evaluate_queries(
     if reference_answers:
         logger.info(f"DEBUG: Reference answers count: {len(reference_answers)}, non-empty: {sum(1 for ref in reference_answers if ref.strip())}")
     
+    # Initialize performance monitoring for Streamlit path
+    from performance_monitor import reset_monitor
+    reset_monitor()
+    monitor = get_monitor()
+    monitor.start_monitoring()
+    
     # Generate RAG responses
     rag_results, logs = await generate_rag_responses(
         queries=queries,
@@ -1125,7 +1098,10 @@ async def evaluate_queries(
         username=username,
         password=password,
         reference_answers=reference_answers,
-        progress_callback=progress_callback
+        progress_callback=progress_callback,
+        use_batch_processing=use_batch_processing,
+        batch_size=batch_size,
+        max_concurrent=max_concurrent
     )
     
     # Calculate response time stats
@@ -1177,6 +1153,35 @@ async def evaluate_queries(
                         logger.warning(f"DEBUG: RAGAS failed to evaluate '{metric}' for query {i+1} - setting to None")
                 logger.info(f"DEBUG: Result {i+1} final keys: {list(result.keys())}")
 
+    # Stop performance monitoring
+    monitor.stop_monitoring()
+    
+    # Save performance report if requested
+    if save_performance_report:
+        import time
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_filename = f"performance_reports/evaluation_report_{timestamp}.json"
+        try:
+            monitor.save_report_to_file(report_filename, len(queries))
+            logger.info(f"Performance report saved to: {report_filename}")
+        except Exception as e:
+            logger.warning(f"Failed to save performance report: {str(e)}")
+    
+    # Get performance summary from monitor
+    try:
+        performance_report = monitor.generate_report(len(queries))
+        performance_summary = {
+            "total_duration": performance_report.total_duration,
+            "avg_query_time": performance_report.avg_query_time,
+            "peak_memory_mb": performance_report.peak_memory_mb,
+            "openai_api_calls": performance_report.openai_api_calls,
+            "rag_api_time": performance_report.rag_api_total_time,
+            "ragas_eval_time": performance_report.ragas_eval_total_time
+        }
+    except Exception as e:
+        logger.warning(f"Could not generate performance summary: {e}")
+        performance_summary = {}
     
     # Return combined results
     return {
@@ -1185,7 +1190,8 @@ async def evaluate_queries(
         "rag_results": rag_results,
         "avg_response_time": avg_response_time,
         "ragas_results": ragas_results,
-        "logs": logs
+        "logs": logs,
+        "performance_summary": performance_summary
     }
 
 def run_headless_evaluation(
@@ -1199,7 +1205,8 @@ def run_headless_evaluation(
     password: str = "password",
     metrics_mode: str = "full",
     progress_callback=None,
-    ragas_status_callback=None
+    ragas_status_callback=None,
+    save_performance_report: bool = False
 ) -> Dict[str, Any]:
     """Run a headless evaluation on the specified knowledge base
     
@@ -1215,29 +1222,44 @@ def run_headless_evaluation(
         metrics_mode: Metrics evaluation mode - 'basic', 'full', or 'reference-only'
         progress_callback: Optional callback for query progress updates
         ragas_status_callback: Optional callback for RAGAS status updates
+        save_performance_report: Save performance report to JSON file (default: False)
         
     Returns:
         Dictionary with evaluation results
     """
-    # Use default queries if none provided
-    if queries is None:
-        queries = DEFAULT_TEST_QUERIES
+    # Initialize performance monitoring
+    from performance_monitor import reset_monitor
+    reset_monitor()  # Clear any previous monitoring data
+    monitor = get_monitor()
+    monitor.start_monitoring()
     
     try:
-        # Run evaluation asynchronously
-        return asyncio.run(evaluate_queries(
-            queries=queries,
-            kb_name=kb_name,
-            openai_model=openai_model,
-            openai_api_key=openai_api_key,
-            rag_api_url=rag_api_url,
-            username=username,
-            password=password,
-            reference_answers=reference_answers,
-            metrics_mode=metrics_mode,
-            progress_callback=progress_callback,
-            ragas_status_callback=ragas_status_callback
-        ))
+        # Use default queries if none provided
+        if queries is None:
+            queries = DEFAULT_TEST_QUERIES
+        
+        with monitor.measure_operation("full_headless_evaluation",
+                                     query_count=len(queries),
+                                     metrics_mode=metrics_mode,
+                                     kb_name=kb_name):
+            # Run evaluation asynchronously
+            result = asyncio.run(evaluate_queries(
+                queries=queries,
+                kb_name=kb_name,
+                openai_model=openai_model,
+                openai_api_key=openai_api_key,
+                rag_api_url=rag_api_url,
+                username=username,
+                password=password,
+                reference_answers=reference_answers,
+                metrics_mode=metrics_mode,
+                progress_callback=progress_callback,
+                ragas_status_callback=ragas_status_callback,
+                save_performance_report=save_performance_report
+            ))
+            
+            return result
+            
     except Exception as e:
         logger.error(f"Error in headless evaluation: {str(e)}")
         import traceback
@@ -1247,3 +1269,20 @@ def run_headless_evaluation(
             "queries": queries,
             "error": f"Error in headless evaluation: {str(e)}"
         }
+    finally:
+        # Stop monitoring and log performance summary
+        monitor.stop_monitoring()
+        
+        # Save performance report if requested (for error cases)
+        if save_performance_report:
+            import time
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            report_filename = f"performance_reports/evaluation_report_error_{timestamp}.json"
+            try:
+                monitor.save_report_to_file(report_filename, len(queries) if queries else 0)
+                logger.info(f"Performance report (error case) saved to: {report_filename}")
+            except Exception as e:
+                logger.warning(f"Failed to save performance report in error case: {str(e)}")
+        
+        monitor.log_summary(len(queries) if queries else 0)

@@ -25,6 +25,7 @@ def main():
     metrics_mode = 'full'
     queries = None
     reference_answers = None
+    save_performance_report = False
 
     # Get values from environment (set by shell script)
     kb_name = os.getenv('KB_NAME', kb_name)
@@ -34,6 +35,7 @@ def main():
     csv_file = os.getenv('CSV_FILE', csv_file)
     output_file = os.getenv('OUTPUT_FILE', output_file)
     metrics_mode = os.getenv('METRICS_MODE', metrics_mode)
+    save_performance_report = os.getenv('SAVE_PERFORMANCE_REPORT', 'false').lower() == 'true'
 
     # Load queries and reference answers from CSV if provided
     if csv_file and csv_file.strip():
@@ -116,7 +118,8 @@ def main():
         username=username,
         password=password,
         rag_api_url=rag_api_url,
-        metrics_mode=metrics_mode
+        metrics_mode=metrics_mode,
+        save_performance_report=save_performance_report
     )
 
     # Output results with JSON serialization fix
