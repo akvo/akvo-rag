@@ -304,16 +304,16 @@ class ResultsDisplayManager:
         total_queries = len(st.session_state.results) if st.session_state.results else 1
         
         # Debug information - only show if there are issues
-        debug_mode = st.sidebar.checkbox("🐛 Debug Mode", False)
+        debug_mode = st.sidebar.checkbox("Debug Mode", False)
         if debug_mode:
-            st.write("🐛 **Debug Performance Data**:")
+            st.write("**Debug Performance Data**:")
             st.write(f"- Performance keys: {list(perf.keys())}")
             st.write(f"- RAG API time: {rag_time}")
             st.write(f"- RAGAS eval time: {ragas_time}")
             st.write(f"- Total queries: {total_queries}")
         
-        # Show timing section if we have any performance data (lowered threshold for debugging)
-        if ragas_time >= 0 or rag_time >= 0 or debug_mode:
+        # Show timing section if we have any performance data
+        if ragas_time > 0 or rag_time > 0 or debug_mode:
             st.write("### ⏱️ Metrics Evaluation Timing")
             if ragas_time == 0 and rag_time == 0:
                 st.info("📊 Performance data available but timing values are zero - this may indicate a measurement issue.")

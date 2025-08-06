@@ -93,13 +93,13 @@ class PerformanceMonitor:
         self.start_time = time.time()
         self.peak_memory = self._get_memory_usage()
         self._start_memory_monitoring()
-        logger.info("🔍 Performance monitoring started")
+        logger.debug("Performance monitoring started")
         
     def stop_monitoring(self):
         """Stop the overall monitoring session."""
         self.end_time = time.time()
         self._stop_memory_monitoring()
-        logger.info("📊 Performance monitoring stopped")
+        logger.debug("Performance monitoring stopped")
         
     def _start_memory_monitoring(self):
         """Start background thread to monitor peak memory usage."""
@@ -170,8 +170,8 @@ class PerformanceMonitor:
             self.metrics.append(metric)
             
             # Log slow operations
-            if metric.duration and metric.duration > 5.0:  # Log operations > 5 seconds
-                logger.warning(f"⚠️ Slow operation: {operation} took {metric.duration:.2f}s")
+            if metric.duration and metric.duration > 10.0:  # Log operations > 10 seconds
+                logger.info(f"Slow operation: {operation} took {metric.duration:.2f}s")
                 
     def increment_counter(self, counter_name: str, amount: int = 1):
         """Increment a named counter."""
@@ -258,29 +258,9 @@ class PerformanceMonitor:
             
         report = self.generate_report(total_queries)
         
-        logger.info("=" * 50)
-        logger.info("📊 PERFORMANCE SUMMARY")
-        logger.info("=" * 50)
-        
-        # Debug: Show all operation names that were tracked
-        operation_names = [m.operation for m in self.metrics if m.duration]
-        logger.info(f"Tracked operations: {set(operation_names)}")
-        
-        logger.info(f"Total Duration: {report.total_duration:.2f}s")
-        logger.info(f"Total Queries: {report.total_queries}")
-        logger.info(f"Avg Query Time: {report.avg_query_time:.2f}s")
-        logger.info(f"RAG API Time: {report.rag_api_total_time:.2f}s")
-        logger.info(f"RAGAS Eval Time: {report.ragas_eval_total_time:.2f}s")
-        logger.info(f"Peak Memory: {report.peak_memory_mb:.1f} MB")
-        logger.info(f"OpenAI API Calls: {report.openai_api_calls}")
-        logger.info(f"Failed Operations: {report.failed_operations}")
-        
-        if report.metrics_breakdown:
-            logger.info("Metrics Breakdown:")
-            for metric, time_spent in sorted(report.metrics_breakdown.items(), key=lambda x: x[1], reverse=True):
-                logger.info(f"  {metric}: {time_spent:.2f}s")
-        
-        logger.info("=" * 50)
+        logger.info(f"Performance: {report.total_duration:.1f}s total, {report.avg_query_time:.1f}s/query, "
+                   f"RAG: {report.rag_api_total_time:.1f}s, RAGAS: {report.ragas_eval_total_time:.1f}s, "
+                   f"Memory: {report.peak_memory_mb:.0f}MB")
         
     def save_report_to_file(self, filepath: str, total_queries: int = 0):
         """Save performance report to JSON file."""
@@ -294,7 +274,7 @@ class PerformanceMonitor:
         with open(filepath, 'w') as f:
             json.dump(report_data, f, indent=2)
             
-        logger.info(f"📝 Performance report saved to: {filepath}")
+        logger.info(f"Performance report saved to: {filepath}")
 
 # Global performance monitor instance
 _global_monitor: Optional[PerformanceMonitor] = None

@@ -226,10 +226,8 @@ async def run_evaluation_async(config, queries, reference_answers):
         # Store performance data for detailed display
         if "performance_summary" in eval_results:
             st.session_state.performance_data = eval_results["performance_summary"]
-            logger.info(f"🐛 Stored performance data keys: {list(st.session_state.performance_data.keys())}")
         else:
             st.session_state.performance_data = {}
-            logger.info("🐛 No performance_summary in eval_results")
         
         # Show detailed performance summary 
         if "performance_summary" in eval_results:
