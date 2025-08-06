@@ -2,6 +2,7 @@ import asyncio
 from mcp_clients.multi_mcp_client_manager import MultiMCPClientManager
 
 
+# Testing purpose from terminal
 async def main():
     manager = MultiMCPClientManager(
         {
