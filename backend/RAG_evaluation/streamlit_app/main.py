@@ -193,7 +193,7 @@ async def run_evaluation_async(config, queries, reference_answers):
         # Get evaluation mode from session state
         evaluation_mode = st.session_state.get('evaluation_mode', 'full')
         
-        # Run evaluation
+        # Run evaluation with performance settings
         eval_results = await evaluate_queries(
             queries=queries,
             kb_name=config['kb_name'],
@@ -205,13 +205,24 @@ async def run_evaluation_async(config, queries, reference_answers):
             reference_answers=reference_answers,
             metrics_mode=evaluation_mode,
             progress_callback=update_progress,
-            ragas_status_callback=update_ragas_status
+            ragas_status_callback=update_ragas_status,
+            use_batch_processing=config.get('use_batch_processing', True),
+            batch_size=config.get('batch_size', 5),
+            max_concurrent=config.get('max_concurrent', 3)
         )
         
         # Store results
         rag_results = eval_results.get("rag_results", [])
         st.session_state.results = rag_results
         st.session_state.logs = eval_results.get("logs", [])
+        
+        # Show performance summary if available
+        if "performance_summary" in eval_results:
+            perf = eval_results["performance_summary"]
+            st.success(f"⚡ **Performance**: {perf['total_duration']:.1f}s total "
+                      f"({perf['avg_query_time']:.1f}s/query) • "
+                      f"Peak memory: {perf['peak_memory_mb']:.0f}MB • "
+                      f"API calls: {perf['openai_api_calls']}")
         
         # Update completion status
         progress_bar.progress(1.0)

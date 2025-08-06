@@ -1,0 +1,190 @@
+{
+  "benchmark_results": [
+    {
+      "scenario_name": "Small_Basic_NoRef",
+      "query_count": 2,
+      "metrics_mode": "basic",
+      "include_references": false,
+      "iterations": 1,
+      "successful_iterations": 0,
+      "error": "All iterations failed",
+      "detailed_results": [
+        {
+          "iteration": 1,
+          "success": false,
+          "performance": {
+            "total_queries": 2,
+            "total_duration": 0.0008406639099121094,
+            "avg_query_time": 0.0004203319549560547,
+            "rag_api_total_time": 0,
+            "ragas_eval_total_time": 0,
+            "peak_memory_mb": 114.7578125,
+            "openai_api_calls": 0,
+            "failed_operations": 0,
+            "metrics_breakdown": {},
+            "operation_count": 1,
+            "slowest_operations": [
+              {
+                "operation": "full_evaluation",
+                "duration": 5.698204040527344e-05,
+                "metadata": {
+                  "scenario": "Small_Basic_NoRef",
+                  "iteration": 1
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "scenario_name": "Medium_Basic_NoRef",
+      "query_count": 5,
+      "metrics_mode": "basic",
+      "include_references": false,
+      "iterations": 1,
+      "successful_iterations": 0,
+      "error": "All iterations failed",
+      "detailed_results": [
+        {
+          "iteration": 1,
+          "success": false,
+          "performance": {
+            "total_queries": 5,
+            "total_duration": 0.0017173290252685547,
+            "avg_query_time": 0.0003434658050537109,
+            "rag_api_total_time": 0,
+            "ragas_eval_total_time": 0,
+            "peak_memory_mb": 114.7578125,
+            "openai_api_calls": 0,
+            "failed_operations": 0,
+            "metrics_breakdown": {},
+            "operation_count": 1,
+            "slowest_operations": [
+              {
+                "operation": "full_evaluation",
+                "duration": 0.00023698806762695312,
+                "metadata": {
+                  "scenario": "Medium_Basic_NoRef",
+                  "iteration": 1
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "scenario_name": "Large_Basic_NoRef",
+      "query_count": 10,
+      "metrics_mode": "basic",
+      "include_references": false,
+      "iterations": 1,
+      "successful_iterations": 0,
+      "error": "All iterations failed",
+      "detailed_results": [
+        {
+          "iteration": 1,
+          "success": false,
+          "performance": {
+            "total_queries": 10,
+            "total_duration": 0.0029189586639404297,
+            "avg_query_time": 0.00029189586639404296,
+            "rag_api_total_time": 0,
+            "ragas_eval_total_time": 0,
+            "peak_memory_mb": 114.7578125,
+            "openai_api_calls": 0,
+            "failed_operations": 0,
+            "metrics_breakdown": {},
+            "operation_count": 1,
+            "slowest_operations": [
+              {
+                "operation": "full_evaluation",
+                "duration": 0.0004150867462158203,
+                "metadata": {
+                  "scenario": "Large_Basic_NoRef",
+                  "iteration": 1
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "scenario_name": "Small_Full_WithRef",
+      "query_count": 2,
+      "metrics_mode": "full",
+      "include_references": true,
+      "iterations": 1,
+      "successful_iterations": 0,
+      "error": "All iterations failed",
+      "detailed_results": [
+        {
+          "iteration": 1,
+          "success": false,
+          "performance": {
+            "total_queries": 2,
+            "total_duration": 0.0015430450439453125,
+            "avg_query_time": 0.0007715225219726562,
+            "rag_api_total_time": 0,
+            "ragas_eval_total_time": 0,
+            "peak_memory_mb": 114.7578125,
+            "openai_api_calls": 0,
+            "failed_operations": 0,
+            "metrics_breakdown": {},
+            "operation_count": 1,
+            "slowest_operations": [
+              {
+                "operation": "full_evaluation",
+                "duration": 0.0001697540283203125,
+                "metadata": {
+                  "scenario": "Small_Full_WithRef",
+                  "iteration": 1
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "scenario_name": "Medium_RefOnly_WithRef",
+      "query_count": 5,
+      "metrics_mode": "reference-only",
+      "include_references": true,
+      "iterations": 1,
+      "successful_iterations": 0,
+      "error": "All iterations failed",
+      "detailed_results": [
+        {
+          "iteration": 1,
+          "success": false,
+          "performance": {
+            "total_queries": 5,
+            "total_duration": 0.0026030540466308594,
+            "avg_query_time": 0.0005206108093261719,
+            "rag_api_total_time": 0,
+            "ragas_eval_total_time": 0,
+            "peak_memory_mb": 114.7578125,
+            "openai_api_calls": 0,
+            "failed_operations": 0,
+            "metrics_breakdown": {},
+            "operation_count": 1,
+            "slowest_operations": [
+              {
+                "operation": "full_evaluation",
+                "duration": 0.0002696514129638672,
+                "metadata": {
+                  "scenario": "Medium_RefOnly_WithRef",
+                  "iteration": 1
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "timestamp": 1754423203.617467
+}
