@@ -17,7 +17,7 @@ def get_config() -> dict:
     }
 
 
-@mcp.resource("resource://health")
+@mcp.custom_route("resource://health")
 def health_check():
     return {"status": "ok"}
 
@@ -32,11 +32,8 @@ def health_check():
 def image_search_tool(
     image_file: Optional[bytes] = None,
     text_query: Optional[str] = None,
-    top_k: int = 10,
 ) -> dict:
-    return multimodal_search(
-        image_file=image_file, text_query=text_query, top_k=top_k
-    )
+    return multimodal_search(image_file=image_file, text_query=text_query)
 
 
 if __name__ == "__main__":
