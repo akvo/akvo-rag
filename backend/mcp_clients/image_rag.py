@@ -1,16 +1,26 @@
 import asyncio
-from fastmcp import Client
-
-
-client = Client("http://image-rag-mcp:8600/mcp")
+from mcp_clients.multi_mcp_client_manager import MultiMCPClientManager
 
 
 async def main():
-    async with client:
-        await client.ping()
+    manager = MultiMCPClientManager(
+        {
+            "image_rag": "http://image-rag-mcp:8600/mcp",
+        }
+    )
+    print("\n🔍 Ping servers:")
+    print(await manager.ping_all())
 
-        tools = await client.list_tools()
-        print(tools)
+    print("\n📋 Tools available:")
+    tools = await manager.get_all_tools()
+    for server, t in tools.items():
+        print(f"{server}: {t}")
+
+    print("\n⚡ Call tool '/search' image_rag:")
+    result = await manager.run_tool(
+        "image_rag", "/search", {"text_query": "What is cashew gumosis?"}
+    )
+    print(f"Call result: {result}")
 
 
 if __name__ == "__main__":
