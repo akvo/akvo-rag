@@ -24,6 +24,16 @@ class MultiMCPClientManager:
                 print(f"Error ping server {name}: {e}")
         return results
 
+    async def get_all_resources(self):
+        all_resources = {}
+        for name, service in self.services.items():
+            try:
+                resources = await service.list_resources()
+                all_resources[name] = resources
+            except Exception as e:
+                print(f"Error listing resources for {name}: {e}")
+        return all_resources
+
     async def get_all_tools(self):
         all_tools = {}
         for name, service in self.services.items():
