@@ -21,6 +21,11 @@ class MCPClientService:
             # List available tools on the server
             return await client.list_resources()
 
+    async def read_resource(self, uri: str):
+        async with Client(self.server_url) as client:
+            # Read a specific resource by its URI
+            return await client.read_resource(uri)
+
     async def call_tool(self, tool_name: str, param: Optional[dict] = {}):
         async with Client(self.server_url) as client:
             # Call a specific tool with the provided arguments

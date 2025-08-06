@@ -11,6 +11,7 @@ async def scoping_agent():
     manager = MultiMCPClientManager(
         {
             "image_rag_mcp": "http://image-rag-mcp:8600/mcp",
+            "knowledge_bases_mcp": "http://localhost:8700/mcp",
         }
     )
 
@@ -30,9 +31,32 @@ async def scoping_agent():
                     )
                 )
 
+    all_resources_info = await manager.get_all_resources()
+    resources_context = []
+    for server_name, resource_list in all_resources_info.items():
+        if isinstance(resource_list, list):
+            for r in resource_list:
+                content = await manager.read_resource(
+                    server_name=server_name, uri=r.uri
+                )
+                if content:
+                    print(content, "=====")
+                resources_context.append(
+                    f"[{server_name}] {r.uri} - {r.name} ({r.description})"
+                )
+    resources_text = "\n".join(resources_context)
+    system_prompt = (
+        "You are a scoping agent. "
+        "You have access to these tools and resources:\n"
+        f"{resources_text}\n"
+        "Select the most relevant tool or resource based on the user query."
+    )
+
     llm = LLMFactory.create()
 
-    agent_executor = create_react_agent(model=llm, tools=tools, debug=True)
+    agent_executor = create_react_agent(
+        model=llm, tools=tools, prompt=system_prompt, debug=True
+    )
 
     return agent_executor
 
@@ -42,20 +66,25 @@ if __name__ == "__main__":
 
     async def main():
         agent = await scoping_agent()
-        result = await agent.ainvoke(
+        # await agent.ainvoke(
+        #     {
+        #         "messages": [
+        #             HumanMessage(
+        #                 content="How is cashew gumosis looks like?",
+        #             )
+        #         ]
+        #     }
+        # )
+
+        await agent.ainvoke(
             {
                 "messages": [
-                    HumanMessage(
-                        content="How is cashew gumosis looks like?",
-                    )
+                    HumanMessage(content="Hi, what do you know about UNEP?")
                 ]
             }
         )
-        print(result)
-
-        result = await agent.ainvoke(
-            {"messages": [HumanMessage(content="Where is Indonesia located?")]}
-        )
-        print(result)
 
     asyncio.run(main())
+
+
+# python -m app.services.scoping_agent.scoping_agent

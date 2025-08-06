@@ -44,6 +44,11 @@ class MultiMCPClientManager:
                 print(f"Error listing tools for {name}: {e}")
         return all_tools
 
+    async def read_resource(self, server_name: str, uri: str):
+        if server_name not in self.services:
+            raise ValueError(f"Server `{server_name}` not found.")
+        return await self.services[server_name].read_resource(uri)
+
     async def run_tool(
         self, server_name: str, tool_name: str, param: Optional[dict] = {}
     ):

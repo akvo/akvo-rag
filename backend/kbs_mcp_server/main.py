@@ -1,9 +1,10 @@
+import json
+
 from fastmcp import FastMCP
+from mcp.types import TextResourceContents
+
 from app.db.session import SessionLocal
 from app.models.knowledge import KnowledgeBase, Document
-from app.services.vector_store import VectorStoreFactory
-from app.services.embedding.embedding_factory import EmbeddingsFactory
-from app.core.config import settings
 
 
 mcp = FastMCP(name="Kowledge Bases MCP Server")
@@ -14,14 +15,18 @@ def health_check():
     return {"status": "ok"}
 
 
-@mcp.resource("resource://knowledge_bases")
+@mcp.resource(
+    uri="resource://knowledge_bases",
+    name="List of all Knowledge Bases",
+    description="List of all available knowledge bases in the system.",
+)
 def list_all_knowledge_bases():
     """
     List all knowledge bases.
     """
     db = SessionLocal()
     try:
-        embeddings = EmbeddingsFactory.create()
+        # embeddings = EmbeddingsFactory.create()
 
         kbs = (
             db.query(KnowledgeBase)
@@ -30,29 +35,24 @@ def list_all_knowledge_bases():
             .all()
         )
 
+        print(f"Found {len(kbs)} KBs in DB")
         available_kbs = []
         for kb in kbs:
-            vector_store = VectorStoreFactory.create(
-                store_type=settings.VECTOR_STORE_TYPE,
-                collection_name=f"kb_{kb.id}",
-                embedding_function=embeddings,
+            print(f"KB: {kb.name} has {len(kb.documents)} docs")
+            available_kbs.append(
+                {
+                    "id": kb.id,
+                    "name": kb.name,
+                    "description": kb.description,
+                }
             )
-            chunk_count = vector_store._store._collection.count()
-            if chunk_count > 0:
-                available_kbs.append(
-                    {
-                        "id": kb.id,
-                        "name": kb.name,
-                        "description": kb.description,
-                        "document_count": len(kb.documents),
-                        "chunk_count": chunk_count,
-                    }
-                )
-
-        return available_kbs
+        return TextResourceContents(
+            uri="resource://knowledge_bases",
+            mimeType="application/json",
+            text=json.dumps(available_kbs),
+        )
     finally:
         db.close()
-        return []
 
 
 if __name__ == "__main__":
