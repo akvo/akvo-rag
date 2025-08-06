@@ -27,6 +27,8 @@ class SessionStateManager:
             st.session_state.results = []
         if "evaluation_running" not in st.session_state:
             st.session_state.evaluation_running = False
+        if "performance_data" not in st.session_state:
+            st.session_state.performance_data = {}
             
         # Configuration state
         if "selected_kb" not in st.session_state:
@@ -83,6 +85,7 @@ class SessionStateManager:
         st.session_state.evaluation_running = False
         st.session_state.current_queries = []
         st.session_state.current_references = None
+        st.session_state.performance_data = {}
     
     @staticmethod
     def get_field_count() -> int:

@@ -44,6 +44,9 @@ class ResultsDisplayManager:
             if 'response_time' in results_df.columns:
                 ResultsDisplayManager._render_response_times(results_df)
             
+            # Display metrics evaluation timing
+            ResultsDisplayManager._render_metrics_timing()
+            
             # Display detailed results
             ResultsDisplayManager._render_detailed_results()
             
@@ -287,3 +290,64 @@ class ResultsDisplayManager:
             # Show detailed logs
             st.write("**Detailed Logs:**")
             st.json(st.session_state.logs)
+    
+    @staticmethod
+    def _render_metrics_timing():
+        """Render detailed metrics evaluation timing information."""
+        # Check if we have performance data stored
+        if not hasattr(st.session_state, 'performance_data') or not st.session_state.performance_data:
+            return
+            
+        perf = st.session_state.performance_data
+        rag_time = perf.get('rag_api_time', 0)
+        ragas_time = perf.get('ragas_eval_time', 0)
+        total_queries = len(st.session_state.results) if st.session_state.results else 1
+        
+        # Debug information - only show if there are issues
+        debug_mode = st.sidebar.checkbox("🐛 Debug Mode", False)
+        if debug_mode:
+            st.write("🐛 **Debug Performance Data**:")
+            st.write(f"- Performance keys: {list(perf.keys())}")
+            st.write(f"- RAG API time: {rag_time}")
+            st.write(f"- RAGAS eval time: {ragas_time}")
+            st.write(f"- Total queries: {total_queries}")
+        
+        # Show timing section if we have any performance data (lowered threshold for debugging)
+        if ragas_time >= 0 or rag_time >= 0 or debug_mode:
+            st.write("### ⏱️ Metrics Evaluation Timing")
+            if ragas_time == 0 and rag_time == 0:
+                st.info("📊 Performance data available but timing values are zero - this may indicate a measurement issue.")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.metric(
+                    "📊 Total Metrics Evaluation Time",
+                    f"{ragas_time:.2f}s",
+                    help="Total time spent evaluating all RAGAS metrics for all queries"
+                )
+                
+            with col2:
+                avg_metrics_time = ragas_time / total_queries if total_queries > 0 else 0
+                st.metric(
+                    "📈 Average Metrics Time per Query", 
+                    f"{avg_metrics_time:.2f}s",
+                    help="Average time to evaluate all metrics for a single query"
+                )
+            
+            # Show timing breakdown
+            if rag_time > 0 and ragas_time > 0:
+                total_time = rag_time + ragas_time
+                rag_pct = (rag_time / total_time) * 100
+                ragas_pct = (ragas_time / total_time) * 100
+                
+                st.write("**⏳ Time Distribution:**")
+                st.progress(rag_pct / 100)
+                st.write(f"🔍 RAG Response Generation: {rag_time:.1f}s ({rag_pct:.1f}%)")
+                st.progress(ragas_pct / 100)
+                st.write(f"📊 Metrics Evaluation: {ragas_time:.1f}s ({ragas_pct:.1f}%)")
+                
+                if ragas_time > rag_time:
+                    st.info("💡 **Insight**: Metrics evaluation took longer than RAG response generation. Consider using faster models like gpt-4o-mini for better performance.")
+                elif rag_time > ragas_time * 2:
+                    st.info("💡 **Insight**: RAG response generation is the main bottleneck. Consider optimizing your knowledge base or API performance.")

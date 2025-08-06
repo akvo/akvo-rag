@@ -8,6 +8,7 @@ Run this with: streamlit run streamlit_app/main.py
 import streamlit as st
 import asyncio
 import logging
+import time
 from typing import List, Optional
 
 # Import our modular components
@@ -193,6 +194,9 @@ async def run_evaluation_async(config, queries, reference_answers):
         # Get evaluation mode from session state
         evaluation_mode = st.session_state.get('evaluation_mode', 'full')
         
+        # Track total evaluation time
+        eval_start_time = time.time()
+        
         # Run evaluation with performance settings
         eval_results = await evaluate_queries(
             queries=queries,
@@ -211,22 +215,70 @@ async def run_evaluation_async(config, queries, reference_answers):
             max_concurrent=config.get('max_concurrent', 3)
         )
         
-        # Store results
+        # Calculate total evaluation time
+        total_eval_time = time.time() - eval_start_time
+        
+        # Store results and performance data
         rag_results = eval_results.get("rag_results", [])
         st.session_state.results = rag_results
         st.session_state.logs = eval_results.get("logs", [])
         
-        # Show performance summary if available
+        # Store performance data for detailed display
+        if "performance_summary" in eval_results:
+            st.session_state.performance_data = eval_results["performance_summary"]
+            logger.info(f"🐛 Stored performance data keys: {list(st.session_state.performance_data.keys())}")
+        else:
+            st.session_state.performance_data = {}
+            logger.info("🐛 No performance_summary in eval_results")
+        
+        # Show detailed performance summary 
         if "performance_summary" in eval_results:
             perf = eval_results["performance_summary"]
+            
+            # Main performance summary
             st.success(f"⚡ **Performance**: {perf['total_duration']:.1f}s total "
                       f"({perf['avg_query_time']:.1f}s/query) • "
                       f"Peak memory: {perf['peak_memory_mb']:.0f}MB • "
                       f"API calls: {perf['openai_api_calls']}")
+            
+            # Detailed timing breakdown
+            rag_time = perf.get('rag_api_time', 0)
+            ragas_time = perf.get('ragas_eval_time', 0)
+            
+            if rag_time > 0 or ragas_time > 0:
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric(
+                        "🔍 RAG API Time", 
+                        f"{rag_time:.1f}s",
+                        help="Time spent generating RAG responses from your knowledge base"
+                    )
+                
+                with col2:
+                    st.metric(
+                        "📊 Metrics Evaluation Time", 
+                        f"{ragas_time:.1f}s",
+                        help="Time spent evaluating all metrics for all queries using RAGAS"
+                    )
+                
+                with col3:
+                    avg_metrics_time = ragas_time / len(queries) if queries and ragas_time > 0 else 0
+                    st.metric(
+                        "📈 Avg Metrics Time/Query", 
+                        f"{avg_metrics_time:.1f}s",
+                        help="Average time to evaluate all metrics for a single query"
+                    )
+        else:
+            # Fallback to basic timing if no performance summary
+            avg_time = total_eval_time / len(queries) if queries else 0
+            st.success(f"⚡ **Evaluation Complete**: {total_eval_time:.1f}s total "
+                      f"({avg_time:.1f}s/query) • "
+                      f"{len(queries)} queries processed")
         
         # Update completion status
         progress_bar.progress(1.0)
-        status_text.text(UI_MESSAGES['evaluation_complete'])
+        status_text.text(f"✅ Evaluation completed in {total_eval_time:.1f} seconds")
         
     except Exception as e:
         logger.error(f"Error in evaluation: {str(e)}")

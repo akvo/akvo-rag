@@ -10,6 +10,7 @@ import base64
 import logging
 import httpx
 import asyncio
+import time
 from typing import Dict, List, Any, Tuple, AsyncGenerator, Optional
 from datetime import datetime, timezone
 
@@ -374,26 +375,32 @@ class RagChatUtil:
             kb_name: The name of the knowledge base to use
 
         Returns:
-            Dictionary with query, response, and retrieval context
+            Dictionary with query, response, retrieval context, and response time
         """
+        start_time = time.time()
+        
         # Get KB by name
         kb = await self.get_knowledge_base_by_name(kb_name)
         if not kb:
+            response_time = time.time() - start_time
             return {
                 "query": query,
                 "response": f"Error: Knowledge base '{kb_name}' not found",
                 "contexts": [],
-                "error": f"Knowledge base '{kb_name}' not found"
+                "error": f"Knowledge base '{kb_name}' not found",
+                "response_time": response_time
             }
 
         # Create chat
         chat = await self.create_chat([kb["id"]])
         if not chat:
+            response_time = time.time() - start_time
             return {
                 "query": query,
                 "response": "Error: Failed to create chat",
                 "contexts": [],
-                "error": "Failed to create chat"
+                "error": "Failed to create chat",
+                "response_time": response_time
             }
 
         # Send message and collect response
@@ -405,12 +412,15 @@ class RagChatUtil:
             if context_data and "context" in context_data and context_data["context"]:
                 contexts = context_data["context"]
 
+        response_time = time.time() - start_time
+        
         return {
             "query": query,
             "response": full_response,
             "contexts": contexts,
             "kb_id": kb["id"],
-            "chat_id": chat["id"]
+            "chat_id": chat["id"],
+            "response_time": response_time
         }
 
     async def generate_rag_responses_batch(self, queries: List[str], kb_name: str, 
@@ -434,7 +444,8 @@ class RagChatUtil:
             error_result = {
                 "response": f"Error: Knowledge base '{kb_name}' not found",
                 "contexts": [],
-                "error": f"Knowledge base '{kb_name}' not found"
+                "error": f"Knowledge base '{kb_name}' not found",
+                "response_time": 0
             }
             return [{**error_result, "query": query} for query in queries]
 
@@ -463,7 +474,8 @@ class RagChatUtil:
                         "query": batch[j],
                         "response": f"Error: {str(result)}",
                         "contexts": [],
-                        "error": str(result)
+                        "error": str(result),
+                        "response_time": 0  # Unknown time for exceptions
                     }
             
             all_results.extend(batch_results)
@@ -482,17 +494,21 @@ class RagChatUtil:
             kb: Knowledge base dictionary (pre-fetched)
             
         Returns:
-            Response dictionary
+            Response dictionary with timing information
         """
+        start_time = time.time()
+        
         try:
             # Create chat for this query
             chat = await self.create_chat([kb["id"]])
             if not chat:
+                response_time = time.time() - start_time
                 return {
                     "query": query,
                     "response": "Error: Failed to create chat",
                     "contexts": [],
-                    "error": "Failed to create chat"
+                    "error": "Failed to create chat",
+                    "response_time": response_time
                 }
 
             # Send message and collect response
@@ -504,19 +520,24 @@ class RagChatUtil:
                 if context_data and "context" in context_data and context_data["context"]:
                     contexts = context_data["context"]
 
+            response_time = time.time() - start_time
+            
             return {
                 "query": query,
                 "response": full_response,
                 "contexts": contexts,
                 "kb_id": kb["id"],
-                "chat_id": chat["id"]
+                "chat_id": chat["id"],
+                "response_time": response_time
             }
             
         except Exception as e:
+            response_time = time.time() - start_time
             logger.error(f"Error processing query '{query}': {str(e)}")
             return {
                 "query": query,
                 "response": f"Error: {str(e)}",
                 "contexts": [],
-                "error": str(e)
+                "error": str(e),
+                "response_time": response_time
             }

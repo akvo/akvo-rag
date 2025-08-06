@@ -217,8 +217,15 @@ class PerformanceMonitor:
         total_duration = self.end_time - self.start_time
         
         # Calculate timing breakdowns
-        rag_api_stats = self.get_operation_stats("rag_api")
-        ragas_eval_stats = self.get_operation_stats("ragas_eval")
+        # Get all RAG-related operations (rag_api_single_query, rag_batch_processing, etc.)
+        rag_operations = [m for m in self.metrics if any(term in m.operation for term in ["rag_api", "rag_batch", "rag_responses"]) and m.duration]
+        rag_total_time = sum(op.duration for op in rag_operations)
+        rag_api_stats = {"total_time": rag_total_time, "count": len(rag_operations)}
+        
+        # Get all RAGAS-related operations (ragas_eval_*, batch_eval_*)
+        ragas_operations = [m for m in self.metrics if any(term in m.operation for term in ["ragas_eval", "batch_eval"]) and m.duration]
+        ragas_total_time = sum(op.duration for op in ragas_operations)
+        ragas_eval_stats = {"total_time": ragas_total_time, "count": len(ragas_operations)}
         
         # Build metrics breakdown
         metrics_breakdown = {}
@@ -254,6 +261,11 @@ class PerformanceMonitor:
         logger.info("=" * 50)
         logger.info("📊 PERFORMANCE SUMMARY")
         logger.info("=" * 50)
+        
+        # Debug: Show all operation names that were tracked
+        operation_names = [m.operation for m in self.metrics if m.duration]
+        logger.info(f"Tracked operations: {set(operation_names)}")
+        
         logger.info(f"Total Duration: {report.total_duration:.2f}s")
         logger.info(f"Total Queries: {report.total_queries}")
         logger.info(f"Avg Query Time: {report.avg_query_time:.2f}s")

@@ -763,28 +763,30 @@ def evaluate_metrics_batch(eval_dataset, eval_llm, target_metrics: List[str],
     successful_metrics = []
     errors = []
     
-    # Group metrics by requirements for batch processing
-    basic_metrics = []  # Don't require contexts or references
-    context_metrics = []  # Require contexts but not references  
-    reference_metrics = []  # Require references
-    context_reference_metrics = []  # Require both contexts and references
+    # Filter out metrics that can't be evaluated due to missing data
+    available_metrics = []
     
     for metric in target_metrics:
+        # Check data requirements for each metric
         if metric in ['faithfulness', 'answer_relevancy']:
-            basic_metrics.append(metric)
+            # These only need question + answer (always available)
+            available_metrics.append(metric)
         elif metric in ['context_precision_without_reference', 'context_relevancy']:
+            # These need contexts (always available in RAG)
             if has_contexts:
-                context_metrics.append(metric)
+                available_metrics.append(metric)
             else:
                 errors.append(f"{metric}: No contexts available")
         elif metric in ['answer_similarity', 'answer_correctness']:
+            # These need reference answers
             if has_references:
-                reference_metrics.append(metric)
+                available_metrics.append(metric)
             else:
                 errors.append(f"{metric}: No reference answers available")
         elif metric in ['context_precision', 'context_recall']:
+            # These need both contexts and references
             if has_contexts and has_references:
-                context_reference_metrics.append(metric)
+                available_metrics.append(metric)
             else:
                 missing = []
                 if not has_contexts:
@@ -793,47 +795,105 @@ def evaluate_metrics_batch(eval_dataset, eval_llm, target_metrics: List[str],
                     missing.append("references")
                 errors.append(f"{metric}: Missing {', '.join(missing)}")
     
-    # Batch evaluate basic metrics (faithfulness + answer_relevancy)
-    if basic_metrics:
-        with monitor.measure_operation("batch_eval_basic_metrics", 
-                                     metrics=basic_metrics,
-                                     metric_count=len(basic_metrics)):
-            batch_results, batch_errors = _evaluate_basic_metrics_batch(eval_dataset, eval_llm, basic_metrics)
+    # Single unified batch evaluation for all available metrics
+    if available_metrics:
+        with monitor.measure_operation("batch_eval_unified_metrics",
+                                     metrics=available_metrics,
+                                     metric_count=len(available_metrics)):
+            logger.info(f"Unified batch evaluation: {len(available_metrics)} metrics - {available_metrics}")
+            batch_results, batch_errors = _evaluate_unified_metrics_batch(eval_dataset, eval_llm, available_metrics)
             results.update(batch_results)
             successful_metrics.extend(batch_results.keys())
             errors.extend(batch_errors)
-    
-    # Batch evaluate context metrics
-    if context_metrics:
-        with monitor.measure_operation("batch_eval_context_metrics",
-                                     metrics=context_metrics,
-                                     metric_count=len(context_metrics)):
-            batch_results, batch_errors = _evaluate_context_metrics_batch(eval_dataset, eval_llm, context_metrics)
-            results.update(batch_results)
-            successful_metrics.extend(batch_results.keys())
-            errors.extend(batch_errors)
-    
-    # Batch evaluate reference metrics
-    if reference_metrics:
-        with monitor.measure_operation("batch_eval_reference_metrics",
-                                     metrics=reference_metrics,
-                                     metric_count=len(reference_metrics)):
-            batch_results, batch_errors = _evaluate_reference_metrics_batch(eval_dataset, eval_llm, reference_metrics)
-            results.update(batch_results)
-            successful_metrics.extend(batch_results.keys())
-            errors.extend(batch_errors)
-    
-    # Batch evaluate context+reference metrics
-    if context_reference_metrics:
-        with monitor.measure_operation("batch_eval_context_reference_metrics",
-                                     metrics=context_reference_metrics,
-                                     metric_count=len(context_reference_metrics)):
-            batch_results, batch_errors = _evaluate_context_reference_metrics_batch(eval_dataset, eval_llm, context_reference_metrics)
-            results.update(batch_results)
-            successful_metrics.extend(batch_results.keys())
-            errors.extend(batch_errors)
+    else:
+        logger.warning("No metrics available for evaluation due to missing data requirements")
     
     return results, successful_metrics, errors
+
+def _evaluate_unified_metrics_batch(eval_dataset, eval_llm, metrics: List[str]) -> Tuple[Dict[str, Any], List[str]]:
+    """Unified batch evaluation for all RAGAS metrics in a single call."""
+    try:
+        from ragas.metrics import (
+            Faithfulness, AnswerRelevancy, 
+            LLMContextPrecisionWithoutReference, ContextRelevance,
+            AnswerSimilarity, AnswerCorrectness,
+            ContextPrecision, ContextRecall
+        )
+        from ragas import evaluate
+        
+        # Build metric instances for all requested metrics
+        metric_instances = []
+        metric_name_mapping = {}
+        
+        for metric in metrics:
+            if metric == 'faithfulness':
+                metric_instances.append(Faithfulness())
+                metric_name_mapping['faithfulness'] = 'faithfulness'
+            elif metric == 'answer_relevancy':
+                metric_instances.append(AnswerRelevancy())
+                metric_name_mapping['answer_relevancy'] = 'answer_relevancy'
+            elif metric == 'context_precision_without_reference':
+                metric_instances.append(LLMContextPrecisionWithoutReference())
+                metric_name_mapping['context_precision_without_reference'] = 'llm_context_precision_without_reference'
+            elif metric == 'context_relevancy':
+                metric_instances.append(ContextRelevance())
+                metric_name_mapping['context_relevancy'] = 'nv_context_relevance'
+            elif metric == 'answer_similarity':
+                metric_instances.append(AnswerSimilarity())
+                metric_name_mapping['answer_similarity'] = 'semantic_similarity'
+            elif metric == 'answer_correctness':
+                metric_instances.append(AnswerCorrectness())
+                metric_name_mapping['answer_correctness'] = 'answer_correctness'
+            elif metric == 'context_precision':
+                metric_instances.append(ContextPrecision())
+                metric_name_mapping['context_precision'] = 'context_precision'
+            elif metric == 'context_recall':
+                metric_instances.append(ContextRecall())
+                metric_name_mapping['context_recall'] = 'context_recall'
+        
+        if not metric_instances:
+            return {}, []
+        
+        logger.info(f"Unified batch evaluating {len(metric_instances)} metrics: {metrics}")
+        monitor = get_monitor()
+        monitor.increment_counter("openai_api_calls", len(metric_instances))
+        
+        # Single unified RAGAS evaluation call
+        result = evaluate(dataset=eval_dataset, metrics=metric_instances)
+        
+        # Extract results for all metrics
+        results = {}
+        errors = []
+        
+        for metric_name in metrics:
+            ragas_key = metric_name_mapping.get(metric_name, metric_name)
+            
+            if hasattr(result, 'scores') and isinstance(result.scores, list) and len(result.scores) > 0:
+                # Extract scores from list of dicts
+                scores = [score_dict.get(ragas_key) for score_dict in result.scores if ragas_key in score_dict]
+                if scores and all(score is not None for score in scores):
+                    results[metric_name] = scores
+                    logger.info(f"Successfully extracted {len(scores)} scores for {metric_name} (ragas key: {ragas_key})")
+                else:
+                    errors.append(f"{metric_name}: No valid scores found for {ragas_key}")
+                    logger.warning(f"No valid scores for {metric_name} (ragas key: {ragas_key})")
+            elif hasattr(result, ragas_key):
+                metric_result = getattr(result, ragas_key)
+                results[metric_name] = metric_result.tolist() if hasattr(metric_result, 'tolist') else metric_result
+                logger.info(f"Successfully extracted attribute result for {metric_name}")
+            else:
+                errors.append(f"{metric_name}: No result found for {ragas_key}")
+                logger.warning(f"No result found for {metric_name} (ragas key: {ragas_key})")
+        
+        logger.info(f"Unified batch evaluation completed: {len(results)} successful, {len(errors)} errors")
+        return results, errors
+        
+    except Exception as e:
+        error_msg = f"Unified batch metrics evaluation error: {str(e)}"
+        logger.error(error_msg)
+        import traceback
+        logger.error(traceback.format_exc())
+        return {}, [error_msg]
 
 def _evaluate_basic_metrics_batch(eval_dataset, eval_llm, metrics: List[str]) -> Tuple[Dict[str, Any], List[str]]:
     """Batch evaluate basic metrics that don't require contexts or references."""
@@ -1268,6 +1328,12 @@ async def evaluate_queries(
     if reference_answers:
         logger.info(f"DEBUG: Reference answers count: {len(reference_answers)}, non-empty: {sum(1 for ref in reference_answers if ref.strip())}")
     
+    # Initialize performance monitoring for Streamlit path
+    from performance_monitor import reset_monitor
+    reset_monitor()
+    monitor = get_monitor()
+    monitor.start_monitoring()
+    
     # Generate RAG responses
     rag_results, logs = await generate_rag_responses(
         queries=queries,
@@ -1331,9 +1397,10 @@ async def evaluate_queries(
                         logger.warning(f"DEBUG: RAGAS failed to evaluate '{metric}' for query {i+1} - setting to None")
                 logger.info(f"DEBUG: Result {i+1} final keys: {list(result.keys())}")
 
+    # Stop performance monitoring
+    monitor.stop_monitoring()
     
     # Get performance summary from monitor
-    monitor = get_monitor()
     try:
         performance_report = monitor.generate_report(len(queries))
         performance_summary = {
@@ -1391,6 +1458,8 @@ def run_headless_evaluation(
         Dictionary with evaluation results
     """
     # Initialize performance monitoring
+    from performance_monitor import reset_monitor
+    reset_monitor()  # Clear any previous monitoring data
     monitor = get_monitor()
     monitor.start_monitoring()
     
