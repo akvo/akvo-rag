@@ -39,7 +39,6 @@ def json_schema_to_pydantic(name: str, schema: dict):
 
         fields[field_name] = (field_type, default)
 
-    print(create_model(name, **fields))
     return create_model(name, **fields)
 
 

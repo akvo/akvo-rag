@@ -77,7 +77,7 @@ async def scoping_agent():
     system_prompt = (
         "You are a scoping agent.\n"
         "You have access ONLY to the tools listed below.\n"
-        "NEVER call a tool that is not relevant to the user's query.\n"
+        "NEVER call a tool that is not relevant to the relevant resource.\n"
         "If no tool is relevant, DO NOT call any tool — "
         "instead return ONLY a JSON object with:\n"
         "{\n"
@@ -85,6 +85,8 @@ async def scoping_agent():
         '  "id": "<kb_id from list above or any relevant resource id>",\n'
         '  "reason": "<why it is relevant>"\n'
         "}\n\n"
+        "If you found MORE THAN ONE RELEVANT RESOURCES, "
+        "please use the LATEST one (sorted by their kb id ascending).\n"
         "Tools:\n"
         f"{[t.name for t in tools]}\n\n"
         "Resources:\n"
@@ -108,15 +110,16 @@ if __name__ == "__main__":
 
     async def main():
         agent = await scoping_agent()
-        # await agent.ainvoke(
-        #     {
-        #         "messages": [
-        #             HumanMessage(
-        #                 content="How is cashew gumosis looks like?",
-        #             )
-        #         ]
-        #     }
-        # )
+        result = await agent.ainvoke(
+            {
+                "messages": [
+                    HumanMessage(
+                        content="Find an image for cashew gumosis",
+                    )
+                ]
+            }
+        )
+        print(result)
 
         result = await agent.ainvoke(
             {
