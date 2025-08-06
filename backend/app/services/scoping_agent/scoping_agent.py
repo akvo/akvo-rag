@@ -9,12 +9,7 @@ from .helper import make_structured_tool
 
 
 async def scoping_agent():
-    manager = MultiMCPClientManager(
-        {
-            "image_rag_mcp": "http://image-rag-mcp:8600/mcp",
-            "knowledge_bases_mcp": "http://localhost:8700/mcp",
-        }
-    )
+    manager = MultiMCPClientManager()
 
     # 🔹 Step 1
     all_tools_info = await manager.get_all_tools()

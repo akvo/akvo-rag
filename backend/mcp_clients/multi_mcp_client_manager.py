@@ -2,16 +2,25 @@ from typing import Dict, Optional
 from mcp_clients.mcp_client_service import MCPClientService
 
 
+DEFAULT_MCP_SERVERS = {
+    "image_rag_mcp": "http://image-rag-mcp:8600/mcp",
+    "knowledge_bases_mcp": "http://localhost:8700/mcp",
+}
+
+
 class MultiMCPClientManager:
-    def __init__(self, server_urls: Dict[str, str]):
+    def __init__(self, server_urls: Optional[Dict[str, str]] = None):
         """
         server_urls = {
             "image_rag": "http://localhost:8600/mcp",
             "text_analysis": "http://localhost:8700/mcp"
         }
         """
+        self.server_urls = server_urls or DEFAULT_MCP_SERVERS
+        # Initialize MCPClientService for each server URL
         self.services = {
-            name: MCPClientService(url) for name, url in server_urls.items()
+            name: MCPClientService(url)
+            for name, url in self.server_urls.items()
         }
 
     async def ping_all(self):

@@ -6,12 +6,7 @@ from mcp_clients.multi_mcp_client_manager import MultiMCPClientManager
 # can handle more that one MCP server
 # e.g. image_rag, text_analysis, etc.
 async def main():
-    manager = MultiMCPClientManager(
-        {
-            "image_rag": "http://image-rag-mcp:8600/mcp",
-            "knowledge_bases": "http://localhost:8700/mcp",
-        }
-    )
+    manager = MultiMCPClientManager()
     print("\n🔍 Ping servers:")
     print(await manager.ping_all())
 
