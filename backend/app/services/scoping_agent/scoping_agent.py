@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import HumanMessage
@@ -15,8 +16,8 @@ async def scoping_agent():
         }
     )
 
+    # 🔹 Step 1
     all_tools_info = await manager.get_all_tools()
-
     tools = []
     for server_name, tool_list in all_tools_info.items():
         if isinstance(tool_list, list):
@@ -31,31 +32,72 @@ async def scoping_agent():
                     )
                 )
 
+    # 🔹 Step 2
     all_resources_info = await manager.get_all_resources()
     resources_context = []
+
     for server_name, resource_list in all_resources_info.items():
         if isinstance(resource_list, list):
             for r in resource_list:
-                content = await manager.read_resource(
-                    server_name=server_name, uri=r.uri
-                )
-                if content:
-                    print(content, "=====")
+                kb_details = ""
+                try:
+                    # Baca isi resource
+                    content = await manager.read_resource(
+                        server_name=server_name, uri=r.uri
+                    )
+                    if content and hasattr(content[0], "text"):
+                        try:
+                            parsed = json.loads(content[0].text)
+                            # Kalau isinya list KB
+                            if (
+                                isinstance(parsed, list)
+                                and parsed
+                                and "id" in parsed[0]
+                            ):
+                                kb_details = "\n".join(
+                                    [
+                                        f"  - ({kb['id']}) {kb['name']}: {kb.get('description', '')}"
+                                        for kb in parsed
+                                    ]
+                                )
+                            else:
+                                kb_details = content[0].text
+                        except json.JSONDecodeError:
+                            kb_details = content[0].text
+                except Exception as e:
+                    kb_details = f"[Error reading resource: {e}]"
+
                 resources_context.append(
-                    f"[{server_name}] {r.uri} - {r.name} ({r.description})"
+                    f"[{server_name}] {r.uri} - {r.name} ({r.description})\nKBs:\n{kb_details}"
                 )
-    resources_text = "\n".join(resources_context)
+
+    resources_text = "\n\n".join(resources_context)
+
+    # 🔹 Step 3
     system_prompt = (
-        "You are a scoping agent. "
-        "You have access to these tools and resources:\n"
+        "You are a scoping agent.\n"
+        "You have access ONLY to the tools listed below.\n"
+        "NEVER call a tool that is not relevant to the user's query.\n"
+        "If no tool is relevant, DO NOT call any tool — "
+        "instead return ONLY a JSON object with:\n"
+        "{\n"
+        '  "resource_uri": "<uri from list above>",\n'
+        '  "id": "<kb_id from list above or any relevant resource id>",\n'
+        '  "reason": "<why it is relevant>"\n'
+        "}\n\n"
+        "Tools:\n"
+        f"{[t.name for t in tools]}\n\n"
+        "Resources:\n"
         f"{resources_text}\n"
-        "Select the most relevant tool or resource based on the user query."
     )
 
+    # 🔹 Step 4
     llm = LLMFactory.create()
-
     agent_executor = create_react_agent(
-        model=llm, tools=tools, prompt=system_prompt, debug=True
+        model=llm,
+        tools=tools,
+        prompt=system_prompt,
+        # debug=True,
     )
 
     return agent_executor
@@ -76,13 +118,14 @@ if __name__ == "__main__":
         #     }
         # )
 
-        await agent.ainvoke(
+        result = await agent.ainvoke(
             {
                 "messages": [
                     HumanMessage(content="Hi, what do you know about UNEP?")
                 ]
             }
         )
+        print(result)
 
     asyncio.run(main())
 
