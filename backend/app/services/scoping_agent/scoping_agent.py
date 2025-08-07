@@ -1,8 +1,6 @@
-import asyncio
 import json
 
 from langgraph.prebuilt import create_react_agent
-from langchain_core.messages import HumanMessage
 from mcp_clients.multi_mcp_client_manager import MultiMCPClientManager
 from app.services.llm.llm_factory import LLMFactory
 from .helper import make_structured_tool
@@ -11,7 +9,7 @@ from .helper import make_structured_tool
 async def scoping_agent():
     manager = MultiMCPClientManager()
 
-    # 🔹 Step 1
+    # Step 1: Ambil semua tools
     all_tools_info = await manager.get_all_tools()
     tools = []
     for server_name, tool_list in all_tools_info.items():
@@ -26,24 +24,29 @@ async def scoping_agent():
                         description=tool.description,
                     )
                 )
+    tool_list = [
+        {
+            "server_name": t.metadata.get("server_name"),
+            "tool_name": t.metadata.get("original_name", t.name),
+            "description": t.description,
+        }
+        for t in tools
+    ]
 
-    # 🔹 Step 2
+    # Step 2: Ambil semua resources
     all_resources_info = await manager.get_all_resources()
     resources_context = []
-
     for server_name, resource_list in all_resources_info.items():
         if isinstance(resource_list, list):
             for r in resource_list:
                 kb_details = ""
                 try:
-                    # Baca isi resource
                     content = await manager.read_resource(
                         server_name=server_name, uri=r.uri
                     )
                     if content and hasattr(content[0], "text"):
                         try:
                             parsed = json.loads(content[0].text)
-                            # Kalau isinya list KB
                             if (
                                 isinstance(parsed, list)
                                 and parsed
@@ -68,64 +71,32 @@ async def scoping_agent():
 
     resources_text = "\n\n".join(resources_context)
 
-    # 🔹 Step 3
+    # Step 3: Prompt khusus supaya LLM return JSON siap dispatch
     system_prompt = (
         "You are a scoping agent.\n"
         "You have access ONLY to the tools listed below.\n"
-        "NEVER call a tool that is not relevant to the relevant resource.\n"
-        "If no tool is relevant, DO NOT call any tool — "
-        "instead return ONLY a JSON object with:\n"
+        "Your job: Pick the most relevant tool, "
+        "and return ONLY a JSON object in this format:\n"
         "{\n"
-        '  "resource_uri": "<uri from list above>",\n'
-        '  "id": "<kb_id from list above or any relevant resource id>",\n'
-        '  "reason": "<why it is relevant>"\n'
+        '  "server_name": "<server name from the list>",\n'
+        '  "tool_name": "<tool name from the list>",\n'
+        '  "input": { <valid JSON matching the tool input schema> }\n'
         "}\n\n"
-        "If you found MORE THAN ONE RELEVANT RESOURCES, "
-        "please use the LATEST one (sorted by their kb id ascending).\n"
-        "Tools:\n"
-        f"{[t.name for t in tools]}\n\n"
-        "Resources:\n"
-        f"{resources_text}\n"
+        "If no tool is relevant, return:\n"
+        "{\n"
+        '  "server_name": null,\n'
+        '  "tool_name": null,\n'
+        '  "input": {}\n'
+        "}\n\n"
+        f"Tools: {tool_list}\n\n"
+        f"Resources:\n{resources_text}\n"
     )
 
-    # 🔹 Step 4
     llm = LLMFactory.create()
     agent_executor = create_react_agent(
         model=llm,
         tools=tools,
         prompt=system_prompt,
-        # debug=True,
     )
 
     return agent_executor
-
-
-# Testing purpose from terminal
-if __name__ == "__main__":
-
-    async def main():
-        agent = await scoping_agent()
-        result = await agent.ainvoke(
-            {
-                "messages": [
-                    HumanMessage(
-                        content="Find an image for cashew gumosis",
-                    )
-                ]
-            }
-        )
-        print(result)
-
-        result = await agent.ainvoke(
-            {
-                "messages": [
-                    HumanMessage(content="Hi, what do you know about UNEP?")
-                ]
-            }
-        )
-        print(result)
-
-    asyncio.run(main())
-
-
-# python -m app.services.scoping_agent.scoping_agent
