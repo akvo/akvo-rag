@@ -34,7 +34,7 @@ async def query_kbs_simple(query: str, knowledge_base_ids: List[int]):
 
         embeddings = EmbeddingsFactory.create()
 
-        kb = knowledge_bases[0]
+        kb = knowledge_bases[-1]
         documents = (
             db.query(Document)
             .filter(Document.knowledge_base_id == kb.id)

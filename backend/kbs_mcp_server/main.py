@@ -58,7 +58,6 @@ def list_all_knowledge_bases():
 
 
 @mcp.tool(
-    uri="/query",
     name="query_knowledge_base",
     description="Query a specific knowledge base return answer with context.",
 )
