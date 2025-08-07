@@ -80,6 +80,10 @@ class QueryDispatcher:
             }
 
     def _post_process(self, result: Any) -> Any:
-        if isinstance(result, dict) and "answer" in result:
-            return {"answer": result["answer"]}
-        return result
+        try:
+            base64_context = result.content[0].text
+            base64_context = json.loads(base64_context)
+            return base64_context.get("context", "")
+        except Exception as e:
+            logger.error(f"Post-processing error: {e}")
+            return ""
