@@ -28,7 +28,6 @@ async def query_kbs(query: str, knowledge_base_ids: List[int]):
 
         embeddings = EmbeddingsFactory.create()
 
-        # Ambil KB terakhir
         kb = knowledge_bases[-1]
         documents = (
             db.query(Document)
@@ -41,7 +40,7 @@ async def query_kbs(query: str, knowledge_base_ids: List[int]):
                 "note": f"Knowledge base {kb.id} is empty.",
             }
 
-        # Vector store
+        # Vector store retriever
         vector_store = VectorStoreFactory.create(
             store_type=settings.VECTOR_STORE_TYPE,
             collection_name=f"kb_{kb.id}",
@@ -51,10 +50,9 @@ async def query_kbs(query: str, knowledge_base_ids: List[int]):
             search_kwargs={"k": settings_service.get_top_k()}
         )
 
-        # Hanya ambil dokumen relevan
         retrieved_docs = await retriever.aget_relevant_documents(query)
 
-        # Encode context biar aman lewat network
+        # Encode context
         serializable_context = [
             {"page_content": doc.page_content, "metadata": doc.metadata}
             for doc in retrieved_docs

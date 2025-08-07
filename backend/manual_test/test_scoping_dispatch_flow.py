@@ -24,6 +24,7 @@ async def run_flow(user_input: str):
 
 
 if __name__ == "__main__":
-    asyncio.run(run_flow("What is UNEP?"))
+    asyncio.run(run_flow("What is UNEP GMPL?"))
+    asyncio.run(run_flow("Find an image about cashew gumosis."))
 
 # python -m manual_test.test_scoping_dispatch_flow
