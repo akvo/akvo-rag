@@ -5,6 +5,7 @@ ragas==0.2.15  # Pinned to a specific version to avoid API changes
 pandas==2.0.0
 plotly==5.18.0
 httpx==0.26.0
+psutil>=7.0.0  # System and memory monitoring
 
 # E2E Testing dependencies
 playwright==1.40.0

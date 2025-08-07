@@ -895,36 +895,6 @@ def _evaluate_unified_metrics_batch(eval_dataset, eval_llm, metrics: List[str]) 
         logger.error(traceback.format_exc())
         return {}, [error_msg]
 
-def evaluate_metrics_individual(eval_dataset, eval_llm, target_metrics: List[str],
-                               has_contexts: bool, has_references: bool) -> Tuple[Dict[str, Any], List[str], List[str]]:
-    """Evaluate metrics individually (original approach for fallback)."""
-    results = {}
-    successful_metrics = []
-    errors = []
-    
-    # Evaluate faithfulness (doesn't require contexts) - only if in target metrics
-    if 'faithfulness' in target_metrics:
-        logger.info("Evaluating faithfulness metric...")
-        faithfulness_result, error_msg = evaluate_faithfulness(eval_dataset, eval_llm)
-        if error_msg:
-            errors.append(f"faithfulness: {error_msg}")
-        else:
-            results["faithfulness"] = faithfulness_result
-            successful_metrics.append("faithfulness")
-    
-    # Evaluate answer relevancy (doesn't require contexts) - only if in target metrics
-    if 'answer_relevancy' in target_metrics:
-        logger.info("Evaluating answer relevancy metric...")
-        relevancy_result, error_msg = evaluate_answer_relevancy(eval_dataset, eval_llm)
-        if error_msg:
-            errors.append(f"answer_relevancy: {error_msg}")
-        else:
-            results["answer_relevancy"] = relevancy_result
-            successful_metrics.append("answer_relevancy")
-    
-    # Add other individual metric evaluations as needed...
-    
-    return results, successful_metrics, errors
 
 def run_ragas_evaluation(
     evaluation_data: List[Dict[str, Any]], 
@@ -932,7 +902,6 @@ def run_ragas_evaluation(
     openai_api_key: Optional[str] = None,
     enable_reference_metrics: bool = False,
     metrics_mode: str = "full",
-    use_batch_evaluation: bool = True
 ) -> Dict[str, Any]:
     """Run RAGAS evaluation on the given data
     
@@ -942,14 +911,13 @@ def run_ragas_evaluation(
         openai_api_key: OpenAI API key (will use env var if None)
         enable_reference_metrics: If True, enable metrics that require reference answers
         metrics_mode: Metrics evaluation mode - 'basic', 'full', or 'reference-only'
-        use_batch_evaluation: Use batch evaluation for better performance
         
     Returns:
         Dictionary with evaluation results or error
     """
     monitor = get_monitor()
     
-    logger.info(f"Starting RAGAS evaluation with enable_reference_metrics={enable_reference_metrics}, metrics_mode={metrics_mode}, use_batch_evaluation={use_batch_evaluation}...")
+    logger.info(f"Starting RAGAS evaluation with enable_reference_metrics={enable_reference_metrics}, metrics_mode={metrics_mode}...")
     
     # Define metrics for each mode
     BASIC_METRICS = ['faithfulness', 'answer_relevancy', 'context_precision_without_reference', 'context_relevancy']
@@ -1022,17 +990,10 @@ def run_ragas_evaluation(
             logger.error(error_msg)
             return {"error": error_msg}
         
-        # Choose evaluation strategy
-        if use_batch_evaluation:
-            # Use batch evaluation for better performance
-            results, successful_metrics, errors = evaluate_metrics_batch(
-                eval_dataset, eval_llm, target_metrics, has_contexts, has_references
-            )
-        else:
-            # Use individual metric evaluations (original approach)
-            results, successful_metrics, errors = evaluate_metrics_individual(
-                eval_dataset, eval_llm, target_metrics, has_contexts, has_references
-            )
+        # Use batch evaluation for better performance
+        results, successful_metrics, errors = evaluate_metrics_batch(
+            eval_dataset, eval_llm, target_metrics, has_contexts, has_references
+        )
         
         # Log evaluation results
         logger.info(f"RAGAS evaluation completed: {len(successful_metrics)} successful metrics, {len(errors)} errors")
@@ -1073,7 +1034,8 @@ async def evaluate_queries(
     ragas_status_callback=None,
     use_batch_processing: bool = True,
     batch_size: int = 5,
-    max_concurrent: int = 3
+    max_concurrent: int = 3,
+    save_performance_report: bool = False
 ) -> Dict[str, Any]:
     """Evaluate a list of queries against a knowledge base
     
@@ -1089,6 +1051,10 @@ async def evaluate_queries(
         metrics_mode: Metrics evaluation mode - 'basic', 'full', or 'reference-only'
         progress_callback: Optional callback for query progress updates
         ragas_status_callback: Optional callback for RAGAS status updates
+        use_batch_processing: Enable batch processing for better performance
+        batch_size: Number of queries per batch
+        max_concurrent: Maximum concurrent requests per batch
+        save_performance_report: Save performance report to JSON file (default: False)
         
     Returns:
         Dictionary with evaluation results
@@ -1190,6 +1156,18 @@ async def evaluate_queries(
     # Stop performance monitoring
     monitor.stop_monitoring()
     
+    # Save performance report if requested
+    if save_performance_report:
+        import time
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_filename = f"performance_reports/evaluation_report_{timestamp}.json"
+        try:
+            monitor.save_report_to_file(report_filename, len(queries))
+            logger.info(f"Performance report saved to: {report_filename}")
+        except Exception as e:
+            logger.warning(f"Failed to save performance report: {str(e)}")
+    
     # Get performance summary from monitor
     try:
         performance_report = monitor.generate_report(len(queries))
@@ -1227,7 +1205,8 @@ def run_headless_evaluation(
     password: str = "password",
     metrics_mode: str = "full",
     progress_callback=None,
-    ragas_status_callback=None
+    ragas_status_callback=None,
+    save_performance_report: bool = False
 ) -> Dict[str, Any]:
     """Run a headless evaluation on the specified knowledge base
     
@@ -1243,6 +1222,7 @@ def run_headless_evaluation(
         metrics_mode: Metrics evaluation mode - 'basic', 'full', or 'reference-only'
         progress_callback: Optional callback for query progress updates
         ragas_status_callback: Optional callback for RAGAS status updates
+        save_performance_report: Save performance report to JSON file (default: False)
         
     Returns:
         Dictionary with evaluation results
@@ -1274,7 +1254,8 @@ def run_headless_evaluation(
                 reference_answers=reference_answers,
                 metrics_mode=metrics_mode,
                 progress_callback=progress_callback,
-                ragas_status_callback=ragas_status_callback
+                ragas_status_callback=ragas_status_callback,
+                save_performance_report=save_performance_report
             ))
             
             return result
@@ -1291,4 +1272,17 @@ def run_headless_evaluation(
     finally:
         # Stop monitoring and log performance summary
         monitor.stop_monitoring()
+        
+        # Save performance report if requested (for error cases)
+        if save_performance_report:
+            import time
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            report_filename = f"performance_reports/evaluation_report_error_{timestamp}.json"
+            try:
+                monitor.save_report_to_file(report_filename, len(queries) if queries else 0)
+                logger.info(f"Performance report (error case) saved to: {report_filename}")
+            except Exception as e:
+                logger.warning(f"Failed to save performance report in error case: {str(e)}")
+        
         monitor.log_summary(len(queries) if queries else 0)
