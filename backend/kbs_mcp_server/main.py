@@ -6,7 +6,7 @@ from typing import List
 
 from app.db.session import SessionLocal
 from app.models.knowledge import KnowledgeBase, Document
-from .query import query_kbs_simple
+from .query import query_kbs
 
 
 mcp = FastMCP(name="Kowledge Bases MCP Server")
@@ -62,9 +62,7 @@ def list_all_knowledge_bases():
     description="Query a specific knowledge base return answer with context.",
 )
 async def query_knowledge_base(query: str, knowledge_base_ids: List[int]):
-    return await query_kbs_simple(
-        query=query, knowledge_base_ids=knowledge_base_ids
-    )
+    return await query_kbs(query=query, knowledge_base_ids=knowledge_base_ids)
 
 
 if __name__ == "__main__":
