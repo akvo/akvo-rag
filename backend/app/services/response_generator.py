@@ -65,6 +65,7 @@ async def generate_response_from_context(
                 all_context_docs.extend(decoded)
             except Exception as e:
                 print(f"Error decoding context: {e}")
+        print(all_context_docs, "==== 123")
 
         if not all_context_docs:
             yield '0:"No context found from tools."\n'
