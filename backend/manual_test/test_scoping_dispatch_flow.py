@@ -24,19 +24,20 @@ async def run_flow(user_input: str):
     dispatch_result = await dispatcher.dispatch(scoping_result)
 
     # print("\n=== DISPATCH RESULT ===")
-    # print(dispatch_result["processed_result"])
+    # print(dispatch_result)
 
-    await generate_response_from_context(
+    async for chunk in generate_response_from_context(
         query=user_input,
         tool_contexts=[dispatch_result["processed_result"]],
         db=db,
-    )
+    ):
+        print(chunk, "123")
 
     return dispatch_result
 
 
 if __name__ == "__main__":
-    asyncio.run(run_flow("What is UNEP GMPL?"))
+    asyncio.run(run_flow("What do you know about UNEP programm?"))
     # asyncio.run(run_flow("Find an image about cashew gumosis."))
 
 # python -m manual_test.test_scoping_dispatch_flow

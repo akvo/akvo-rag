@@ -1,9 +1,13 @@
 import re
 import json
 import logging
-
 from typing import Dict, Any
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+from app.services.llm.llm_factory import LLMFactory
+from app.services.prompt_service import PromptService
+from app.db.session import SessionLocal
 from mcp_clients.multi_mcp_client_manager import MultiMCPClientManager
 
 logger = logging.getLogger(__name__)
@@ -14,14 +18,15 @@ class QueryDispatcher:
     def __init__(self):
         self.manager = MultiMCPClientManager()
 
-    async def dispatch(self, scoping_result: Dict[str, Any]) -> Dict[str, Any]:
+    async def dispatch(
+        self, scoping_result: Dict[str, Any], messages: dict = {}
+    ) -> Dict[str, Any]:
         if (
             isinstance(scoping_result, dict)
             and "server_name" in scoping_result
         ):
             payload = scoping_result
         elif isinstance(scoping_result, dict) and "messages" in scoping_result:
-            # Ambil AIMessage terakhir
             ai_msg = next(
                 (
                     m
@@ -32,8 +37,8 @@ class QueryDispatcher:
             )
             if not ai_msg:
                 raise ValueError("No AIMessage found in scoping_result.")
+
             content_str = ai_msg.content
-            # Hilangkan wrapper ```json ... ```
             match = re.search(r"```json\s*(.*?)\s*```", content_str, re.S)
             if match:
                 content_str = match.group(1)
@@ -47,17 +52,65 @@ class QueryDispatcher:
             )
 
         try:
+            db = SessionLocal()
+            prompt_service = PromptService(db=db)
+            llm = LLMFactory.create()
+
+            contextualize_prompt_str = (
+                prompt_service.get_full_contextualize_prompt()
+            )
+            contextualize_prompt = ChatPromptTemplate.from_messages(
+                [
+                    ("system", contextualize_prompt_str),
+                    MessagesPlaceholder("chat_history"),
+                    ("human", "{input}"),
+                ]
+            )
+
+            # Ambil chat_history dari payload (jika ada)
+            chat_history_msgs = []
+            for msg in messages.get("messages", []):
+                if msg["role"] == "user":
+                    chat_history_msgs.append(
+                        HumanMessage(content=msg["content"])
+                    )
+                elif msg["role"] == "assistant":
+                    # if include __LLM_RESPONSE__, only use the last part
+                    if "__LLM_RESPONSE__" in msg["content"]:
+                        msg["content"] = msg["content"].split(
+                            "__LLM_RESPONSE__"
+                        )[-1]
+                    chat_history_msgs.append(AIMessage(content=msg["content"]))
+
+            user_query = payload.get("input", {}).get("query", "")
+
+            # Generate stand-alone question
+            chain = contextualize_prompt | llm
+            standalone_question = await chain.ainvoke(
+                {"chat_history": chat_history_msgs, "input": user_query}
+            )
+            payload["input"]["query"] = standalone_question.content.strip()
+
+        except Exception as e:
+            logger.error(
+                f"Contextualization failed, using original query. Error: {e}"
+            )
+
+        finally:
+            db.close()
+
+        # --- Call MCP tool ---
+        try:
             server_name = payload["server_name"]
             tool_name = payload["tool_name"]
             param = payload.get("input", {})
-            # Call MCP tool via manager
+
             result = await self.manager.run_tool(
                 server_name=server_name,
                 tool_name=tool_name,
                 param=param,
             )
 
-            # Optional: post-processing
             processed_result = self._post_process(result)
 
             return {

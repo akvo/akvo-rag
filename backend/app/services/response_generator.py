@@ -4,14 +4,12 @@ from typing import List, AsyncGenerator
 
 from sqlalchemy.orm import Session
 from langchain_core.documents import Document
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import (
     ChatPromptTemplate,
     MessagesPlaceholder,
     PromptTemplate,
 )
-from langchain.chains import create_history_aware_retriever
+from langchain.chains.combine_documents import create_stuff_documents_chain
 
 from app.services.llm.llm_factory import LLMFactory
 from app.services.prompt_service import PromptService
@@ -37,7 +35,6 @@ async def generate_response_from_context(
     db: Session,
     tool_contexts: List[str],
     chat_history: List[dict] = [],
-    messages: List[dict] = [],
     strict_mode: bool = True,
 ) -> AsyncGenerator[str, None]:
     """
@@ -48,7 +45,7 @@ async def generate_response_from_context(
         prompt_service = PromptService(db=db)
         llm = LLMFactory.create()
 
-        # Step 1: Decode the Base64 context
+        # Step 1: Decode the Base64 contexts
         all_context_docs = []
         for b64 in tool_contexts:
             try:
@@ -61,52 +58,12 @@ async def generate_response_from_context(
             yield '0:"No context found from tools."\n'
             return
 
-        # --- Step 2: Convert chat history to LangChain message format
-        lc_chat_history = []
-        for msg in chat_history:
-            content = msg.get("content", "")
-            if "__LLM_RESPONSE__" in content:
-                content = content.split("__LLM_RESPONSE__")[-1]
-            if msg["role"] == "user":
-                lc_chat_history.append(HumanMessage(content=content))
-            elif msg["role"] == "assistant":
-                lc_chat_history.append(AIMessage(content=content))
-
-        # --- Step 3: Contextualize Query (History-aware)
-        contextualize_prompt_str = (
-            prompt_service.get_full_contextualize_prompt()
-        )
-        contextualize_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", contextualize_prompt_str),
-                MessagesPlaceholder("chat_history"),
-                ("human", "{input}"),
-            ]
-        )
-
-        contextualize_chain = create_history_aware_retriever(
-            llm=llm,
-            retriever=None,  # We'll skip retriever use and adapt only prompt
-            contextualize_prompt=contextualize_prompt,
-        )
-
-        # "Fake" retriever chain input with documents already available
-        contextualized_input = await contextualize_chain.ainvoke(
-            {
-                "input": query,
-                "chat_history": lc_chat_history,
-            }
-        )
-
-        contextualized_query = contextualized_input.get("next_input", query)
-
-        # --- Step 4: QA Prompt
+        # Step 2: QA Prompt (strict/flexible)
         qa_prompt_str = (
             prompt_service.get_full_qa_strict_prompt()
             if strict_mode
             else prompt_service.get_full_qa_flexible_prompt()
         )
-
         qa_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", qa_prompt_str),
@@ -126,20 +83,19 @@ async def generate_response_from_context(
             document_variable_name="context",
         )
 
-        # --- Step 5: Run QA with docs from MCP
+        # Step 3: Run QA directly (no retriever — docs already provided)
         full_response = ""
         async for chunk in qa_chain.astream(
             {
-                "input": contextualized_query,
+                "input": query,  # already contextualized
                 "context": all_context_docs,
-                "chat_history": lc_chat_history,
+                "chat_history": chat_history,
             }
         ):
-            if "answer" in chunk:
-                part = chunk["answer"]
+            part = chunk
+            if isinstance(part, str):
                 full_response += part
                 escaped = part.replace('"', '\\"').replace("\n", "\\n")
-                print(escaped)
                 yield f'0:"{escaped}"\n'
 
     except Exception as e:
