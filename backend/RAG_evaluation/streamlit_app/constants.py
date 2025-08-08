@@ -31,7 +31,18 @@ REFERENCE_METRICS: List[str] = [
     'answer_correctness'
 ]
 
+# Reference-only metrics (same as REFERENCE_METRICS for consistency)
+REFERENCE_ONLY_METRICS: List[str] = REFERENCE_METRICS
+
 ALL_METRICS: List[str] = BASIC_METRICS + REFERENCE_METRICS
+
+# Evaluation modes
+EVALUATION_MODES: List[str] = ['basic', 'full', 'reference-only']
+MODE_DESCRIPTIONS: Dict[str, str] = {
+    'basic': 'Basic (4 metrics) - No reference answers required',
+    'full': 'Full (8 metrics) - Uses reference answers if available', 
+    'reference-only': 'Reference-Only (4 metrics) - Requires reference answers'
+}
 
 # Context-dependent and reference-based metric categorization
 CONTEXT_DEPENDENT_METRICS: set = {
@@ -56,8 +67,25 @@ CSV_REFERENCE_COLUMNS: List[str] = ['reference_answer', 'reference', 'answer', '
 # Default configuration values
 DEFAULT_CONFIG: Dict[str, Any] = {
     'rag_api_url': 'http://localhost:8000',
-    'openai_models': ['gpt-4o', 'gpt-4', 'gpt-3.5-turbo-16k'],
-    'default_model': 'gpt-4o'
+    'openai_models': [
+        'gpt-4o-mini',      # Recommended: 5-10x faster, 10x cheaper than gpt-4o
+        'gpt-4o',           # Highest quality but slowest
+        'gpt-3.5-turbo',    # Fast and cheap alternative  
+        'gpt-4',            # Legacy model
+        'gpt-3.5-turbo-16k' # Legacy model
+    ],
+    'default_model': 'gpt-4o-mini',  # Much faster default
+    'model_recommendations': {
+        'basic': 'gpt-4o-mini',        # Fast model for basic metrics
+        'full': 'gpt-4o-mini',         # Good balance for mixed evaluation
+        'reference-only': 'gpt-3.5-turbo'  # Even faster for reference comparisons
+    },
+    'model_performance': {
+        'gpt-4o-mini': {'speed': 'Very Fast', 'cost': 'Very Low', 'quality': 'High'},
+        'gpt-4o': {'speed': 'Slow', 'cost': 'High', 'quality': 'Highest'},
+        'gpt-3.5-turbo': {'speed': 'Fast', 'cost': 'Low', 'quality': 'Good'},
+        'gpt-4': {'speed': 'Very Slow', 'cost': 'Very High', 'quality': 'High'}
+    }
 }
 
 # UI Messages
@@ -67,6 +95,8 @@ UI_MESSAGES: Dict[str, str] = {
     'full_mode_enabled': "🎯 Full evaluation mode enabled with reference answers!",
     'full_mode_no_refs': "⚠️ Full mode selected but no reference answers found in CSV. Only basic metrics will be available.",
     'basic_mode_with_refs': "⚠️ Reference answers found but Basic mode selected. Switch to Full mode to use reference-based metrics.",
+    'reference_only_enabled': "📚 Reference-only mode enabled - will evaluate only reference-based metrics!",
+    'reference_only_no_refs': "❌ Reference-only mode requires reference answers in CSV file.",
     'queries_prepared_with_refs': "✅ {query_count} queries prepared with {ref_count} reference answers",
     'queries_missing_refs': "⚠️ {missing_count} queries missing reference answers",
     'queries_prepared_basic': "✅ {query_count} queries prepared for basic evaluation",

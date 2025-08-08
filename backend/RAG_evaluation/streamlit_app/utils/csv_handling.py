@@ -140,13 +140,15 @@ class CSVProcessor:
     
     @staticmethod
     def generate_results_csv(results: List[Dict[str, Any]], 
-                           enable_reference_metrics: bool = False) -> Optional[str]:
+                           enable_reference_metrics: bool = False,
+                           metrics_mode: str = "full") -> Optional[str]:
         """
         Convert evaluation results to CSV format.
         
         Args:
             results: List of evaluation result dictionaries
-            enable_reference_metrics: Whether reference metrics are included
+            enable_reference_metrics: Whether reference metrics are included (for backward compatibility)
+            metrics_mode: Metrics mode - 'basic', 'full', or 'reference-only'
             
         Returns:
             CSV string or None if generation failed
@@ -157,11 +159,23 @@ class CSVProcessor:
         
         try:
             csv_data = []
-            metric_names = BASIC_METRICS + REFERENCE_METRICS
+            
+            # Determine which metrics to include based on mode
+            if metrics_mode == 'basic':
+                metric_names = BASIC_METRICS
+                include_reference_column = False
+            elif metrics_mode == 'reference-only':
+                metric_names = REFERENCE_METRICS  
+                include_reference_column = True
+            else:  # metrics_mode == 'full' or legacy enable_reference_metrics
+                # For backward compatibility, also check enable_reference_metrics
+                include_refs = enable_reference_metrics or metrics_mode == 'full'
+                metric_names = BASIC_METRICS + (REFERENCE_METRICS if include_refs else [])
+                include_reference_column = include_refs
             
             for i, result in enumerate(results):
                 # Create base row structure based on mode
-                if enable_reference_metrics:
+                if include_reference_column:
                     row = {
                         "Query_ID": f"Q{i+1}",
                         "Query": result.get('query', ''),

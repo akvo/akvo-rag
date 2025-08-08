@@ -35,6 +35,10 @@ ENV/
 *.log
 logs/
 
+# Performance monitoring reports
+performance_reports/*.json
+*_report_*.json
+
 # OS
 .DS_Store
 Thumbs.db
