@@ -13,6 +13,7 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 
 from app.services.llm.llm_factory import LLMFactory
 from app.services.prompt_service import PromptService
+from app.models.chat import Message
 
 
 def decode_mcp_context(base64_context: str) -> List[Document]:
@@ -33,6 +34,7 @@ def decode_mcp_context(base64_context: str) -> List[Document]:
 async def generate_response_from_context(
     query: str,
     db: Session,
+    chat_id: int,
     tool_contexts: List[str],
     chat_history: List[dict] = [],
     strict_mode: bool = True,
@@ -45,6 +47,16 @@ async def generate_response_from_context(
         prompt_service = PromptService(db=db)
         llm = LLMFactory.create()
 
+        # Create user message
+        user_message = Message(content=query, role="user", chat_id=chat_id)
+        db.add(user_message)
+        db.commit()
+
+        # Create bot message placeholder
+        bot_message = Message(content="", role="assistant", chat_id=chat_id)
+        db.add(bot_message)
+        db.commit()
+
         # Step 1: Decode the Base64 contexts
         all_context_docs = []
         for b64 in tool_contexts:
@@ -56,6 +68,8 @@ async def generate_response_from_context(
 
         if not all_context_docs:
             yield '0:"No context found from tools."\n'
+            bot_message.content = "No context found from tools"
+            db.commit()
             return
 
         # Step 2: QA Prompt (strict/flexible)
@@ -98,5 +112,14 @@ async def generate_response_from_context(
                 escaped = part.replace('"', '\\"').replace("\n", "\\n")
                 yield f'0:"{escaped}"\n'
 
+        # Update bot message content
+        bot_message.content = full_response
+        db.commit()
+
     except Exception as e:
         yield f'3:"Error: {str(e)}"\n'
+
+        # Update bot message with error
+        if "bot_message" in locals():
+            bot_message.content = f'3:"Error: {str(e)}"\n'
+            db.commit()

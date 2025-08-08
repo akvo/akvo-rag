@@ -1,8 +1,9 @@
 import re
 import json
 import logging
-from typing import Dict, Any
-from langchain_core.messages import AIMessage, HumanMessage
+
+from typing import Dict, Any, List
+from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from app.services.llm.llm_factory import LLMFactory
@@ -19,7 +20,7 @@ class QueryDispatcher:
         self.manager = MultiMCPClientManager()
 
     async def dispatch(
-        self, scoping_result: Dict[str, Any], messages: dict = {}
+        self, scoping_result: Dict[str, Any], chat_history: List[dict] = []
     ) -> Dict[str, Any]:
         if (
             isinstance(scoping_result, dict)
@@ -67,27 +68,12 @@ class QueryDispatcher:
                 ]
             )
 
-            # Ambil chat_history dari payload (jika ada)
-            chat_history_msgs = []
-            for msg in messages.get("messages", []):
-                if msg["role"] == "user":
-                    chat_history_msgs.append(
-                        HumanMessage(content=msg["content"])
-                    )
-                elif msg["role"] == "assistant":
-                    # if include __LLM_RESPONSE__, only use the last part
-                    if "__LLM_RESPONSE__" in msg["content"]:
-                        msg["content"] = msg["content"].split(
-                            "__LLM_RESPONSE__"
-                        )[-1]
-                    chat_history_msgs.append(AIMessage(content=msg["content"]))
-
             user_query = payload.get("input", {}).get("query", "")
 
             # Generate stand-alone question
             chain = contextualize_prompt | llm
             standalone_question = await chain.ainvoke(
-                {"chat_history": chat_history_msgs, "input": user_query}
+                {"chat_history": chat_history, "input": user_query}
             )
             payload["input"]["query"] = standalone_question.content.strip()
 
