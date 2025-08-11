@@ -68,14 +68,23 @@ class QueryDispatcher:
                 ]
             )
 
-            user_query = payload.get("input", {}).get("query", "")
+            pl_input = payload.get("input", {})
+            user_query = pl_input.get("query", "")
+            if "text_query" in pl_input:
+                user_query = pl_input["text_query"]
 
             # Generate stand-alone question
             chain = contextualize_prompt | llm
             standalone_question = await chain.ainvoke(
                 {"chat_history": chat_history, "input": user_query}
             )
-            payload["input"]["query"] = standalone_question.content.strip()
+
+            if "query" in pl_input:
+                payload["input"]["query"] = standalone_question.content.strip()
+            if "text_query" in pl_input:
+                payload["input"][
+                    "text_query"
+                ] = standalone_question.content.strip()
 
         except Exception as e:
             logger.error(

@@ -17,8 +17,8 @@ from app.models.chat import Chat, Message
 async def run_flow(user_input: str):
     db = SessionLocal()
 
-    # current chat ID static: 135
-    chat_id = 135
+    # current chat ID static: 1
+    chat_id = 1
     chat = db.query(Chat).filter(Chat.id == chat_id).first()
 
     if not chat:
@@ -84,7 +84,10 @@ async def run_flow(user_input: str):
 
 
 if __name__ == "__main__":
-    query = "Tell me about information on plastic waste management!"
+    # query = "Tell me about information on plastic waste management!"
+    # asyncio.run(run_flow(user_input=query))
+
+    query = "Tell me about cashew disease types!"
     asyncio.run(run_flow(user_input=query))
 
 # python -m manual_test.test_mcp_flow

@@ -77,7 +77,7 @@ async def multimodal_search(
 
         # Encode context
         serializable_context = [
-            {"page_content": m.get("description", ""), "metadata": m}
+            {"page_content": m.get("caption", ""), "metadata": m}
             for m in results["metadatas"][0]
         ]
 
