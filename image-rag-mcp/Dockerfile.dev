@@ -30,5 +30,11 @@ COPY . .
 ENV PYTHONPATH=/app
 ENV ENVIRONMENT=development
 
+# Set default cache dir
+ENV MODEL_CACHE_DIR=/app/models
+
+# Pre-download model
+RUN python ./script/init_download_models.py
+
 # Run the application
 ENTRYPOINT ["./entrypoint.sh"]
