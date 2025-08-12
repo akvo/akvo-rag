@@ -85,6 +85,8 @@ async def run_flow(user_input: str):
 
 
 if __name__ == "__main__":
+    # TODO :: Update the query here to test user query
+
     # query = "Tell me about information on plastic waste management!"
     # asyncio.run(run_flow(user_input=query))
 
@@ -93,5 +95,6 @@ if __name__ == "__main__":
 
     # query = "Tell me about Kenya Dryland!"
     # asyncio.run(run_flow(user_input=query))
+
 
 # python -m manual_test.test_mcp_flow
