@@ -42,8 +42,16 @@ class QueryDispatcher:
             content_str = ai_msg.content
             match = re.search(r"```json\s*(.*?)\s*```", content_str, re.S)
             if match:
-                content_str = match.group(1)
-            payload = json.loads(content_str)
+                content_str = match.group(1).strip()
+            else:
+                content_str = content_str.strip()
+
+            # Try to load JSON
+            try:
+                payload = json.loads(content_str)
+            except json.JSONDecodeError:
+                logger.error("Invalid JSON from scoping_result AIMessage")
+                raise
         else:
             raise ValueError("Scoping result format not recognized.")
 

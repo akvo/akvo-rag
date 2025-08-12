@@ -18,6 +18,7 @@ async def run_flow(user_input: str):
     db = SessionLocal()
 
     # current chat ID static: 1
+    # TODO:: (basically you need to create a chat first on our akvo rag app)
     chat_id = 1
     chat = db.query(Chat).filter(Chat.id == chat_id).first()
 
@@ -62,8 +63,8 @@ async def run_flow(user_input: str):
 
     scoping_result = await agent.ainvoke({"messages": [user_input]})
 
-    print("\n=== SCOPING RESULT ===")
-    print(scoping_result)
+    # print("\n=== SCOPING RESULT ===")
+    # print(scoping_result)
 
     dispatcher = QueryDispatcher()
     dispatch_result = await dispatcher.dispatch(scoping_result)
@@ -78,7 +79,7 @@ async def run_flow(user_input: str):
         chat_id=chat_id,
         chat_history=chat_history,
     ):
-        print(chunk, "123")
+        print(chunk, "stream chunk")
 
     return dispatch_result
 
@@ -89,5 +90,8 @@ if __name__ == "__main__":
 
     query = "Tell me about cashew disease types!"
     asyncio.run(run_flow(user_input=query))
+
+    # query = "Tell me about Kenya Dryland!"
+    # asyncio.run(run_flow(user_input=query))
 
 # python -m manual_test.test_mcp_flow
