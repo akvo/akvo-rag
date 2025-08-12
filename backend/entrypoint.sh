@@ -19,6 +19,9 @@ fi
 
 echo "Starting application..."
 if [ "$ENVIRONMENT" = "development" ]; then
+  echo "Starting MCP server..."
+  python -m kbs_mcp_server.main &
+
   uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*" --reload
 else
   uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*"
