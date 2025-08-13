@@ -19,6 +19,7 @@ You need the following running before the test:
 
 1. Inside the `image-rag-mcp` folder, create a `dataset` directory.
 2. Place your image folders inside `dataset` using the following structure:
+3. You can download the image files from [here](https://www.kaggle.com/datasets/nirmalsankalana/crop-pest-and-disease-detection).
 
 ```bash
 image-rag-mcp/dataset
