@@ -15,7 +15,7 @@ async def run_flow(user_input: str):
     print(scoping_result)
 
     dispatcher = QueryDispatcher()
-    dispatch_result = await dispatcher.dispatch(scoping_result)
+    dispatch_result = await dispatcher.dispatch(scoping_result=scoping_result)
 
     print("\n=== DISPATCH RESULT ===")
     print(dispatch_result)
@@ -24,7 +24,9 @@ async def run_flow(user_input: str):
 
 
 if __name__ == "__main__":
-    asyncio.run(run_flow("What is UNEP GMPL?"))
-    asyncio.run(run_flow("Find an image about cashew gumosis."))
+    query = "In a coastal village with extensive cashew farming, gumosis"
+    query += " often affects the trees. Does UNEP GPML have any initiatives"
+    query += " there to protect the coastal environment?"
+    asyncio.run(run_flow(user_input=query))
 
 # python -m manual_test.test_scoping_dispatch_flow
