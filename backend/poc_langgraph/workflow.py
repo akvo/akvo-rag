@@ -2,9 +2,14 @@ import re
 import json
 import asyncio
 
-from langgraph.graph import StateGraph
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from typing import TypedDict, Dict, Any
+from langgraph.graph import StateGraph
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    MessagesPlaceholder,
+    PromptTemplate,
+)
+from langchain.chains.combine_documents import create_stuff_documents_chain
 
 from app.services.llm.llm_factory import LLMFactory
 from app.services.prompt_service import PromptService
@@ -30,7 +35,6 @@ def get_chat_history(chat_id: int) -> list:
     db = SessionLocal()
 
     chat = db.query(Chat).filter(Chat.id == chat_id).first()
-
     if not chat:
         raise ValueError(f"Chat with ID {chat_id} not found.")
 
@@ -55,7 +59,6 @@ def get_chat_history(chat_id: int) -> list:
 
 def contextualize_node(state: GraphState) -> GraphState:
     """Contextualize the user query using a prompt and LLM."""
-
     db = SessionLocal()
     prompt_service = PromptService(db=db)
     chat_history = get_chat_history(chat_id=state.get("chat_id", None))
@@ -82,9 +85,7 @@ def contextualize_node(state: GraphState) -> GraphState:
 
 
 async def scoping_node(state: GraphState) -> GraphState:
-    """
-    Determine the scope for the MCP tool based on the contextualized query.
-    """
+    """Determine the scope for the MCP tool based on the contextualized query."""
     agent = await scoping_agent()
 
     payload = {}
@@ -109,7 +110,6 @@ async def scoping_node(state: GraphState) -> GraphState:
 
 async def run_mcp_tool_node(state: GraphState) -> GraphState:
     """Run the MCP tool with the determined scope and input parameters."""
-
     manager = MultiMCPClientManager()
     scope = state["scope"]
     result = await manager.run_tool(
@@ -133,27 +133,77 @@ def post_processing_node(state: GraphState) -> GraphState:
     return state
 
 
-def response_generation_node(state: GraphState) -> GraphState:
+async def response_generation_node(state: GraphState) -> GraphState:
     """
     Generate a response using the LLM based on the context and user query.
+    This version saves the final answer, streaming is handled externally.
     """
-    print(len(state["context"]), "context found")
-
+    db = SessionLocal()
+    prompt_service = PromptService(db=db)
     llm = LLMFactory.create()
-    prompt = f"""
-    You are a helpful assistant.
-    User question: {state["query"]}
-    Context: {state["context"]}
-    Please answer the question using the context above.
-    """
-    result = llm.invoke(prompt)
-    state["answer"] = result.content.strip()
-    return state
+
+    chat_history = get_chat_history(chat_id=state["chat_id"])
+
+    # Save user message
+    user_message = Message(
+        content=state["query"], role="user", chat_id=state["chat_id"]
+    )
+    db.add(user_message)
+    db.commit()
+
+    # Placeholder bot message
+    bot_message = Message(
+        content="", role="assistant", chat_id=state["chat_id"]
+    )
+    db.add(bot_message)
+    db.commit()
+
+    # Build QA prompt
+    qa_prompt_str = prompt_service.get_full_qa_strict_prompt()
+    qa_prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", qa_prompt_str),
+            MessagesPlaceholder("chat_history"),
+            ("human", "{input}"),
+        ]
+    )
+
+    document_prompt = PromptTemplate.from_template("\n\n- {page_content}\n\n")
+
+    qa_chain = create_stuff_documents_chain(
+        llm=llm,
+        prompt=qa_prompt,
+        document_prompt=document_prompt,
+        document_variable_name="context",
+    )
+
+    full_response = ""
+
+    async for chunk in qa_chain.astream(
+        {
+            "input": state["contextual_query"],
+            "context": state["context"],
+            "chat_history": chat_history,
+        }
+    ):
+        part = chunk
+        if isinstance(part, str):
+            full_response += part
+            escaped = part.replace('"', '\\"').replace("\n", "\\n")
+            yield f'0:"{escaped}"\n'
+
+    # Save final answer
+    bot_message.content = full_response
+    db.commit()
+    db.close()
+
+    state["answer"] = full_response
+    # Yield final state
+    yield state
 
 
 # Build the graph
 workflow = StateGraph(GraphState)
-
 workflow.add_node("contextualize", contextualize_node)
 workflow.add_node("scope", scoping_node)
 workflow.add_node("run_mcp", run_mcp_tool_node)
@@ -168,16 +218,33 @@ workflow.add_edge("post_process", "generate")
 
 app = workflow.compile()
 
-# Run example
+
 if __name__ == "__main__":
 
     async def main():
-        chat_id = 1  # Example chat ID
+        chat_id = 1
         initial_state = {
             "chat_id": chat_id,
             "query": "Explain about Kenya climate based on the context.",
         }
-        final_state = await app.ainvoke(initial_state)
-        print("FINAL ANSWER:", final_state["answer"])
+
+        # Streaming only the final answer
+        async for event in app.astream_events(
+            initial_state, stream_mode="values"
+        ):
+            if (
+                event.get("name", None) == "generate"
+                and event.get("event", None) == "on_chain_stream"
+            ):
+                # print(list(event.keys()), "event", event.get("event"))
+                data = event.get("data", {})
+                chunk = data.get("chunk", "")
+                if "0:" not in chunk:
+                    continue
+                print(chunk, end="", flush=True)
+
+        # You can also get the final state if needed
+        # final_state = await app.ainvoke(initial_state)
+        # print("\nFINAL ANSWER:", final_state["answer"])
 
     asyncio.run(main())
