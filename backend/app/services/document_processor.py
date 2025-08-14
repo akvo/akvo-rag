@@ -415,10 +415,10 @@ async def process_document_background(
                     db.commit()  # 每 100 条提交一次，避免事务太大
             
             # 7. 添加到向量存储
-            logger.info(f"Task {task_id}: Adding chunks to vector store")
+            logger.info(f"Task {task_id}: Adding {len(chunks)} chunks to vector store")
             vector_store.add_documents(chunks)
             # 移除 persist() 调用，因为新版本不需要
-            logger.info(f"Task {task_id}: Chunks added to vector store")
+            logger.info(f"Task {task_id}: All {len(chunks)} chunks added to vector store")
             
             # 8. 更新任务状态
             logger.info(f"Task {task_id}: Updating task status to completed")
