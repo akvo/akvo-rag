@@ -47,6 +47,33 @@ class PreviewResult(BaseModel):
     chunks: List[TextChunk]
     total_chunks: int
 
+
+def generate_chunk_id(kb_id: int, file_name: str, chunk_content: str, chunk_metadata: dict) -> tuple[str, str]:
+    """
+    Generate consistent chunk ID and hash for document chunks.
+    
+    Args:
+        kb_id: Knowledge base ID
+        file_name: Name of the source file
+        chunk_content: The text content of the chunk
+        chunk_metadata: Metadata dictionary for the chunk
+        
+    Returns:
+        tuple: (chunk_hash, chunk_id) - hash of content+metadata, and unique chunk ID
+    """
+    # Generate content hash including metadata for uniqueness
+    chunk_hash = hashlib.sha256(
+        (chunk_content + str(chunk_metadata)).encode()
+    ).hexdigest()
+    
+    # Generate unique chunk ID using knowledge base, filename, and content hash
+    chunk_id = hashlib.sha256(
+        f"{kb_id}:{file_name}:{chunk_hash}".encode()
+    ).hexdigest()
+    
+    return chunk_hash, chunk_id
+
+
 async def process_document(file_path: str, file_name: str, kb_id: int, document_id: int, chunk_size: int = 1000, chunk_overlap: int = 200) -> None:
     """Process document and store in vector database with incremental updates"""
     logger = logging.getLogger(__name__)
@@ -77,20 +104,18 @@ async def process_document(file_path: str, file_name: str, kb_id: int, document_
         documents_to_update = []
         
         for chunk in preview_result.chunks:
-            # Calculate chunk hash
-            chunk_hash = hashlib.sha256(
-                (chunk.content + str(chunk.metadata)).encode()
-            ).hexdigest()
+            # Generate consistent chunk hash and ID
+            chunk_hash, chunk_id = generate_chunk_id(
+                kb_id=kb_id,
+                file_name=file_name, 
+                chunk_content=chunk.content,
+                chunk_metadata=chunk.metadata
+            )
             current_hashes.add(chunk_hash)
             
             # Skip if chunk hasn't changed
             if chunk_hash in existing_hashes:
                 continue
-            
-            # Create unique ID for the chunk
-            chunk_id = hashlib.sha256(
-                f"{kb_id}:{file_name}:{chunk_hash}".encode()
-            ).hexdigest()
             
             # Prepare chunk record
             # Prepare metadata
@@ -358,10 +383,13 @@ async def process_document_background(
             # 6. 存储文档块
             logger.info(f"Task {task_id}: Storing document chunks")
             for i, chunk in enumerate(chunks):
-                # 为每个 chunk 生成唯一的 ID
-                chunk_id = hashlib.sha256(
-                    f"{kb_id}:{file_name}:{chunk.page_content}".encode()
-                ).hexdigest()
+                # Generate consistent chunk hash and ID using shared function
+                chunk_hash, chunk_id = generate_chunk_id(
+                    kb_id=kb_id,
+                    file_name=file_name,
+                    chunk_content=chunk.page_content,
+                    chunk_metadata=chunk.metadata
+                )
 
                 chunk.metadata["source"] = file_name
                 chunk.metadata["kb_id"] = kb_id
@@ -387,10 +415,10 @@ async def process_document_background(
                     db.commit()  # 每 100 条提交一次，避免事务太大
             
             # 7. 添加到向量存储
-            logger.info(f"Task {task_id}: Adding chunks to vector store")
+            logger.info(f"Task {task_id}: Adding {len(chunks)} chunks to vector store")
             vector_store.add_documents(chunks)
             # 移除 persist() 调用，因为新版本不需要
-            logger.info(f"Task {task_id}: Chunks added to vector store")
+            logger.info(f"Task {task_id}: All {len(chunks)} chunks added to vector store")
             
             # 8. 更新任务状态
             logger.info(f"Task {task_id}: Updating task status to completed")
