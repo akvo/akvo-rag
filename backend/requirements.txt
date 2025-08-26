@@ -30,3 +30,4 @@ websockets==15.0.1
 langgraph==0.6.3
 
 fastmcp==2.11.1
+langextract==1.0.8
