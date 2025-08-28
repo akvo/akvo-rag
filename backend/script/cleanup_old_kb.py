@@ -113,7 +113,8 @@ def delete_kbs(kb_ids: list[int]):
                         collection_name=f"kb_{kb.id}",
                         embedding_function=embeddings,
                     )
-                    vector_store._store.delete_collection(name=f"kb_{kb.id}")
+                    collection_name = f"kb_{kb.id}"
+                    vector_store._store.delete_collection(collection_name)
                     logger.info(
                         f"Vector store cleanup completed for KB {kb.id}"
                     )
