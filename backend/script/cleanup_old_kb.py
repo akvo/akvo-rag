@@ -86,11 +86,6 @@ def delete_old_kbs(cutoff_date: datetime):
         # Initialize external services
         minio_client = get_minio_client()
         embeddings = EmbeddingsFactory.create()
-        vector_store = VectorStoreFactory.create(
-            store_type=settings.VECTOR_STORE_TYPE,
-            collection_name="",  # collection name will be set per KB
-            embedding_function=embeddings,
-        )
 
         for kb in kbs:
             try:
@@ -111,6 +106,11 @@ def delete_old_kbs(cutoff_date: datetime):
 
                 # Clean vector store collection
                 try:
+                    vector_store = VectorStoreFactory.create(
+                        store_type=settings.VECTOR_STORE_TYPE,
+                        collection_name=f"kb_{kb.id}",
+                        embedding_function=embeddings,
+                    )
                     vector_store._store.delete_collection(f"kb_{kb.id}")
                     logger.info(
                         f"Vector store cleanup completed for KB {kb.id}"
