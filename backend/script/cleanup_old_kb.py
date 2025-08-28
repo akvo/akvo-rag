@@ -44,55 +44,52 @@ def authenticate_superuser(email: str, password: str):
         db.close()
 
 
-def preview_old_kbs(cutoff_date: datetime):
-    """Preview all knowledge bases created before cutoff_date."""
+def preview_kbs(kb_ids=None, cutoff_date=None):
+    """Preview KBs by ID list or cutoff date."""
     db: Session = SessionLocal()
     try:
-        kbs = (
-            db.query(KnowledgeBase)
-            .filter(KnowledgeBase.created_at < cutoff_date)
-            .all()
-        )
+        query = db.query(KnowledgeBase)
+        if kb_ids:
+            query = query.filter(KnowledgeBase.id.in_(kb_ids))
+        elif cutoff_date:
+            query = query.filter(KnowledgeBase.created_at < cutoff_date)
+
+        kbs = query.all()
         if not kbs:
-            print(f"No knowledge bases found before {cutoff_date}")
-            return
-        print(
-            f"{len(kbs)} knowledge bases will be deleted (created_at < {cutoff_date.date()}):"
-        )
+            print("No knowledge bases found for the given criteria")
+            return []
+
+        print(f"{len(kbs)} knowledge bases will be deleted:")
         for kb in kbs:
             print(f"- ID {kb.id} | Name: {kb.name} | Created: {kb.created_at}")
+        return [kb.id for kb in kbs]
     finally:
         db.close()
 
 
-def preview_kb_by_id(kb_id: int):
-    """Preview a single knowledge base by ID."""
-    db: Session = SessionLocal()
-    try:
-        kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
-        if not kb:
-            print(f"No knowledge base found with ID {kb_id}")
-            return
-        print(f"1 knowledge base will be deleted:")
-        print(f"- ID {kb.id} | Name: {kb.name} | Created: {kb.created_at}")
-    finally:
-        db.close()
-
-
-def delete_kbs(kbs):
+def delete_kbs(kb_ids: list[int]):
     """Delete KBs list with cleanup (MinIO, vector store, DB)."""
     db: Session = SessionLocal()
     try:
-        if not kbs:
+        if not kb_ids:
             print("No knowledge bases found for deletion")
             return
 
-        print(f"Deleting {len(kbs)} knowledge bases...")
+        print(f"Deleting {len(kb_ids)} knowledge bases...")
 
         minio_client = get_minio_client()
         embeddings = EmbeddingsFactory.create()
 
-        for kb in kbs:
+        for kb_id in kb_ids:
+            kb = (
+                db.query(KnowledgeBase)
+                .filter(KnowledgeBase.id == kb_id)
+                .first()
+            )
+            if not kb:
+                logger.warning(f"KB {kb_id} not found, skipping...")
+                continue
+
             try:
                 # Clean MinIO files
                 try:
@@ -116,7 +113,7 @@ def delete_kbs(kbs):
                         collection_name=f"kb_{kb.id}",
                         embedding_function=embeddings,
                     )
-                    vector_store._store.delete_collection(f"kb_{kb.id}")
+                    vector_store._store.delete_collection(name=f"kb_{kb.id}")
                     logger.info(
                         f"Vector store cleanup completed for KB {kb.id}"
                     )
@@ -132,36 +129,9 @@ def delete_kbs(kbs):
 
             except Exception as e:
                 db.rollback()
-                logger.error(f"Failed to delete KB {kb.id}: {e}")
+                logger.error(f"Failed to delete KB {kb_id}: {e}")
 
         logger.info("✅ All cleanup tasks completed.")
-    finally:
-        db.close()
-
-
-def delete_old_kbs(cutoff_date: datetime):
-    """Fetch KBs by cutoff date and pass to delete_kbs()."""
-    db: Session = SessionLocal()
-    try:
-        kbs = (
-            db.query(KnowledgeBase)
-            .filter(KnowledgeBase.created_at < cutoff_date)
-            .all()
-        )
-        delete_kbs(kbs)
-    finally:
-        db.close()
-
-
-def delete_kb_by_id(kb_id: int):
-    """Fetch KB by ID and pass to delete_kbs()."""
-    db: Session = SessionLocal()
-    try:
-        kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
-        if kb:
-            delete_kbs([kb])
-        else:
-            print(f"No knowledge base found with ID {kb_id}")
     finally:
         db.close()
 
@@ -179,8 +149,11 @@ if __name__ == "__main__":
         exit(1)
 
     # --- MAIN ACTION ---
-    mode = input("Choose mode (date/id): ").strip().lower()
     action = input("Choose action (preview/delete): ").strip().lower()
+    mode = input("Delete by (date/id): ").strip().lower()
+
+    kb_ids = []
+    cutoff_date = None
 
     if mode == "date":
         cutoff_date_str = input("Enter cutoff date (YYYY-MM-DD): ").strip()
@@ -189,49 +162,30 @@ if __name__ == "__main__":
         except ValueError:
             print("❌ Invalid date format! Use YYYY-MM-DD")
             exit(1)
-
-        if action == "preview":
-            preview_old_kbs(cutoff_date)
-        elif action == "delete":
-            preview_old_kbs(cutoff_date)
-            confirm = (
-                input(
-                    f"⚠️ Are you sure you want to delete all KBs before {cutoff_date.date()}? (yes/no): "
-                )
-                .strip()
-                .lower()
-            )
-            if confirm == "yes":
-                delete_old_kbs(cutoff_date)
-            else:
-                print("❌ Cancelled.")
-        else:
-            print("❌ Unknown action. Use 'preview' or 'delete'.")
+        kb_ids = preview_kbs(cutoff_date=cutoff_date)
 
     elif mode == "id":
-        kb_id = input("Enter KB ID: ").strip()
-        if not kb_id.isdigit():
-            print("❌ KB ID must be an integer")
+        id_str = input("Enter KB IDs (comma separated): ").strip()
+        try:
+            kb_ids = [int(x) for x in id_str.split(",") if x.strip().isdigit()]
+        except ValueError:
+            print("❌ Invalid IDs! Use comma-separated integers")
             exit(1)
-        kb_id = int(kb_id)
-
-        if action == "preview":
-            preview_kb_by_id(kb_id)
-        elif action == "delete":
-            preview_kb_by_id(kb_id)
-            confirm = (
-                input(
-                    f"⚠️ Are you sure you want to delete KB with ID {kb_id}? (yes/no): "
-                )
-                .strip()
-                .lower()
-            )
-            if confirm == "yes":
-                delete_kb_by_id(kb_id)
-            else:
-                print("❌ Cancelled.")
-        else:
-            print("❌ Unknown action. Use 'preview' or 'delete'.")
+        kb_ids = preview_kbs(kb_ids=kb_ids)
 
     else:
         print("❌ Unknown mode. Use 'date' or 'id'.")
+        exit(1)
+
+    if action == "delete" and kb_ids:
+        confirm = (
+            input(
+                f"⚠️ Are you sure you want to delete {len(kb_ids)} KBs? (yes/no): "
+            )
+            .strip()
+            .lower()
+        )
+        if confirm == "yes":
+            delete_kbs(kb_ids)
+        else:
+            print("❌ Cancelled.")
