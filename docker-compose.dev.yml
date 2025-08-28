@@ -136,6 +136,25 @@ services:
     networks:
       - app_network
 
+  image-rag-mcp:
+    build:
+      context: ./image-rag-mcp
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8600:8600"
+    env_file:
+      - ./image-rag-mcp/.env
+    environment:
+      - DEBUG=1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./image-rag-mcp:/app
+    depends_on:
+      - chromadb
+    networks:
+      - app_network
+
+
 volumes:
   mysql_data:
   chroma_data:
