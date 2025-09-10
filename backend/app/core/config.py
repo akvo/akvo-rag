@@ -76,6 +76,9 @@ class Settings(BaseSettings):
         "OLLAMA_EMBEDDINGS_MODEL", "nomic-embed-text"
     )  # Added this line
 
+    # Vector Store batch processing
+    VECTOR_STORE_BATCH_SIZE: int = int(os.getenv("VECTOR_STORE_BATCH_SIZE", "100"))
+
     class Config:
         env_file = ".env"
 

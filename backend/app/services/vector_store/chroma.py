@@ -3,9 +3,12 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_chroma import Chroma
 import chromadb 
+import logging
 from app.core.config import settings
 
 from .base import BaseVectorStore
+
+logger = logging.getLogger(__name__)
 
 class ChromaVectorStore(BaseVectorStore):
     """Chroma vector store implementation"""
@@ -23,8 +26,24 @@ class ChromaVectorStore(BaseVectorStore):
             embedding_function=embedding_function,
         )
     def add_documents(self, documents: List[Document]) -> None:
-        """Add documents to Chroma"""
-        self._store.add_documents(documents)
+        """Add documents to Chroma in batches to avoid payload size limits"""
+        if not documents:
+            return
+        
+        batch_size = settings.VECTOR_STORE_BATCH_SIZE
+        total_documents = len(documents)
+        
+        logger.info(f"Adding {total_documents} documents to vector store in batches of {batch_size}")
+        
+        for i in range(0, total_documents, batch_size):
+            batch = documents[i:i + batch_size]
+            batch_num = (i // batch_size) + 1
+            total_batches = (total_documents + batch_size - 1) // batch_size
+            
+            logger.info(f"Adding batch {batch_num}/{total_batches} ({len(batch)} documents)")
+            self._store.add_documents(batch)
+            
+        logger.info(f"Successfully added all {total_documents} documents to vector store")
     
     def delete(self, ids: List[str]) -> None:
         """Delete documents from Chroma"""

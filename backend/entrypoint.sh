@@ -4,7 +4,9 @@
 set -e
 
 echo "Waiting for MySQL..."
-while ! nc -z db 3306; do
+DB_HOST=${MYSQL_SERVER:-db}
+DB_PORT=${MYSQL_PORT:-3306}
+while ! nc -z $DB_HOST $DB_PORT; do
   sleep 1
 done
 echo "MySQL started"

@@ -206,6 +206,12 @@ In the Streamlit UI, configure:
 ```bash
 # Evaluate with custom CSV prompts
 ./run_headless.sh -u "admin" -p "password" -a "http://localhost:8000" -k "My Knowledge Base" -c "custom_prompts.csv"
+
+# Save detailed performance report
+./run_headless.sh --save-performance-report -k "My Knowledge Base"
+
+# Combine CSV evaluation with performance reporting
+./run_headless.sh --save-performance-report -c "custom_prompts.csv" -k "My Knowledge Base"
 ```
 
 ### CSV Format
@@ -227,6 +233,7 @@ Currently headless evaluation doesn't support 8 metric evaluation with reference
 - `-k KB_NAME`: Knowledge base name to evaluate against
 - `-c CSV_FILE`: Optional CSV file with custom prompts. Must be a path from the RAG_evaluation folder.
 - `--docker-host-gateway`: Optional flag to replace `localhost` in the `API URL` with `host.docker.internal`. Use this if your Docker container cannot reach services via `localhost` (e.g., on macOS).
+- `--save-performance-report`: Save detailed performance report to timestamped JSON file in `performance_reports/` directory
 
 ### Output
 The headless evaluation outputs comprehensive JSON results including:
@@ -387,14 +394,14 @@ BROWSER_SLOW_MO=1000
 - Reference answers properly entered and used
 
 **8 Metrics Verified:**
-1. Faithfulness
-2. Answer Relevancy
-3. Context Precision Without Reference
-4. Context Relevancy
-5. Answer Similarity 📚
-6. Answer Correctness 📚
-7. Context Precision 📚
-8. Context Recall 📚
+1.🧠 Faithfulness
+2.🧠 Context Relevancy
+3.Answer Relevancy
+4.🧠 Context Precision Without Reference
+5.🧠📚 Context Recall
+6.🧠📚 Context Precision
+7.📚 Answer Similarity
+8.📚 Answer Correctness
 
 *(📚 = Reference-based metrics requiring reference answers)*
 
@@ -412,3 +419,83 @@ The evaluation system uses **RAGAS v0.2.15** which automatically selects embeddi
 - Reduces API costs but requires local compute resources
 
 **Rate Limiting**: When using OpenAI embeddings with OpenAI LLMs (like `gpt-4o`), you may encounter 429 rate limiting errors as both services share API quotas. The system automatically retries with exponential backoff, but evaluations may take longer during high usage periods.
+
+## Performance Monitoring
+
+The evaluation system includes comprehensive performance monitoring to help identify bottlenecks and measure optimization improvements.
+
+### When Performance Monitoring is Active
+
+**Enabled Automatically**:
+- ✅ **Headless evaluation**: Always active during `evaluate_queries()` 
+- ✅ **CSV processing**: Active during `process_csv_file()`
+- ⚠️ **Streamlit UI**: Performance data collected but monitoring lifecycle not fully integrated
+
+### Metrics Tracked
+
+**Operation Timing**:
+- RAG API response generation time
+- RAGAS metrics evaluation time  
+- Individual metric breakdowns (faithfulness, context_relevancy, etc.)
+- Batch processing timing
+
+**Resource Usage**:
+- Peak memory consumption during evaluation
+- OpenAI API call counts
+- Failed operation counts
+
+**Performance Insights**:
+- Total evaluation duration
+- Average time per query
+- Time distribution between RAG responses and metrics evaluation
+
+### Performance Data Access
+
+**Streamlit UI**: Real-time performance metrics displayed after evaluation completion
+- Total evaluation time
+- Per-query average timing
+- RAG vs RAGAS time breakdown
+- Memory usage statistics
+
+**JSON Reports**: Detailed performance reports can be automatically saved using CLI flag
+
+**Headless Evaluation**:
+```bash
+# Save performance report to timestamped JSON file
+./run_headless.sh --save-performance-report -k "Knowledge Base Name"
+```
+
+**Console Logging**: Concise performance summaries logged during evaluation
+
+### Performance Reports Structure
+
+Reports are saved in `performance_reports/` directory with the following structure:
+```json
+{
+  "timestamp": "2025-01-XX...",
+  "performance_report": {
+    "total_duration": 180.5,
+    "total_queries": 10,
+    "avg_query_time": 18.05,
+    "rag_api_total_time": 45.2,
+    "ragas_eval_total_time": 125.8,
+    "peak_memory_mb": 156.7,
+    "openai_api_calls": 89,
+    "failed_operations": 0,
+    "metrics_breakdown": {
+      "faithfulness": 12.3,
+      "answer_relevancy": 15.7,
+      "context_precision": 18.9
+    },
+    "slowest_operations": [...]
+  }
+}
+```
+
+### Performance Optimization Tips
+
+**Based on monitoring data, you can optimize**:
+- Use faster OpenAI models (e.g., `gpt-4o-mini` vs `gpt-4o`) for significant speedups
+- Adjust batch sizes and concurrency settings
+- Identify which metrics take the longest and consider evaluation strategy
+- Monitor memory usage for large-scale evaluations

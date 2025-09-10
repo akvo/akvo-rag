@@ -326,13 +326,13 @@ class EightMetricsE2ETest:
         # Search for actual display names as they appear in the Streamlit UI
         expected_metrics = [
             ('faithfulness', 'Faithfulness'),
-            ('answer_relevancy', 'Answer Relevancy'), 
             ('context_relevancy', 'Context Relevancy'),
+            ('answer_relevancy', 'Answer Relevancy'), 
             ('context_precision_without_reference', 'Context Precision Without Reference'),
+            ('context_recall', 'Context Recall'),
             ('context_precision', 'Context Precision'),
             ('answer_similarity', 'Answer Similarity'),
-            ('answer_correctness', 'Answer Correctness'),
-            ('context_recall', 'Context Recall')
+            ('answer_correctness', 'Answer Correctness')
         ]
         
         found_metrics = []

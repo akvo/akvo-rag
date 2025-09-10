@@ -1,0 +1,19 @@
+prompt,reference_answer
+What are all the elements that go into a calculation of a Living Income benchmark?,"A Living Income benchmark is an estimate of the cost of a basic and decent standard of living for a household in a specific location. It answers how much a typical household in a particular place needs to earn from all income sources to live decently.
+
+The calculation of a Living Income benchmark considers the costs for a typical household in a specified geographic area, as costs vary by location (e.g., urban vs. rural). It is primarily based on the Anker methodology.
+
+The elements that typically go into this calculation include:
+
+Food costs: Estimated based on a low-cost, nutritious diet that aligns with WHO recommendations for calories, macronutrients, and micronutrients, while also being consistent with local food preferences and prices.
+
+Housing costs: Estimated for basic, decent, and healthy housing, including rent equivalent, utilities (water, lighting, cooking fuel), and maintenance. These costs consider international and national standards adjusted to local conditions.
+
+Other essential needs (Non-Food Non-Housing - NFNH): This category covers a lump sum for expenses such as education (through secondary school), healthcare, transportation, clothing, furniture, communication, recreation, and personal care. Cross-checks are performed to ensure sufficient allowances for healthcare and education.
+
+Provision for unexpected events: A small margin (e.g., 5% to 10%) is added to the total cost to provide for unforeseen events like illnesses, accidents, or special occasions, helping to ensure financial stability and prevent families from falling into a poverty trap.
+
+These elements are combined to determine the total cost of a basic but decent standard of living for a family."
+What is the difference between the Living Income and the LIRP?,"The Living Income (or Living Income benchmark) is the total net annual income a household needs in a specific location to afford a basic and decent standard of living for all its members. This includes costs for food, housing, education, healthcare, transport, clothing, and other essential needs, plus a provision for unexpected events. It considers all income sources of a household.
+
+The Living Income Reference Price (LIRP), on the other hand, is a price for a specific agricultural commodity (e.g., cocoa). It represents the price per unit (e.g., kilogramme or metric tonne) that an average farmer household would need to receive from selling that particular crop to achieve the overall Living Income. The LIRP calculation accounts for the Living Income benchmark, sustainable yields, a viable farm size, and the costs of sustainable production."

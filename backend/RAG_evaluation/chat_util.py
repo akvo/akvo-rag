@@ -10,6 +10,7 @@ import base64
 import logging
 import httpx
 import asyncio
+import time
 from typing import Dict, List, Any, Tuple, AsyncGenerator, Optional
 from datetime import datetime, timezone
 
@@ -374,26 +375,32 @@ class RagChatUtil:
             kb_name: The name of the knowledge base to use
 
         Returns:
-            Dictionary with query, response, and retrieval context
+            Dictionary with query, response, retrieval context, and response time
         """
+        start_time = time.time()
+        
         # Get KB by name
         kb = await self.get_knowledge_base_by_name(kb_name)
         if not kb:
+            response_time = time.time() - start_time
             return {
                 "query": query,
                 "response": f"Error: Knowledge base '{kb_name}' not found",
                 "contexts": [],
-                "error": f"Knowledge base '{kb_name}' not found"
+                "error": f"Knowledge base '{kb_name}' not found",
+                "response_time": response_time
             }
 
         # Create chat
         chat = await self.create_chat([kb["id"]])
         if not chat:
+            response_time = time.time() - start_time
             return {
                 "query": query,
                 "response": "Error: Failed to create chat",
                 "contexts": [],
-                "error": "Failed to create chat"
+                "error": "Failed to create chat",
+                "response_time": response_time
             }
 
         # Send message and collect response
@@ -405,10 +412,132 @@ class RagChatUtil:
             if context_data and "context" in context_data and context_data["context"]:
                 contexts = context_data["context"]
 
+        response_time = time.time() - start_time
+        
         return {
             "query": query,
             "response": full_response,
             "contexts": contexts,
             "kb_id": kb["id"],
-            "chat_id": chat["id"]
+            "chat_id": chat["id"],
+            "response_time": response_time
         }
+
+    async def generate_rag_responses_batch(self, queries: List[str], kb_name: str, 
+                                         batch_size: int = 5, 
+                                         max_concurrent: int = 3) -> List[Dict[str, Any]]:
+        """Generate RAG responses for multiple queries with batching and concurrency control.
+        
+        Args:
+            queries: List of query strings
+            kb_name: Name of the knowledge base
+            batch_size: Number of queries to process in each batch
+            max_concurrent: Maximum number of concurrent requests per batch
+            
+        Returns:
+            List of response dictionaries
+        """
+        # Cache knowledge base lookup
+        kb = await self.get_knowledge_base_by_name(kb_name)
+        if not kb:
+            # Return error for all queries
+            error_result = {
+                "response": f"Error: Knowledge base '{kb_name}' not found",
+                "contexts": [],
+                "error": f"Knowledge base '{kb_name}' not found",
+                "response_time": 0
+            }
+            return [{**error_result, "query": query} for query in queries]
+
+        # Process queries in batches
+        all_results = []
+        for i in range(0, len(queries), batch_size):
+            batch = queries[i:i + batch_size]
+            logger.info(f"Processing batch {i//batch_size + 1}/{(len(queries) + batch_size - 1)//batch_size}: {len(batch)} queries")
+            
+            # Limit concurrency within batch
+            semaphore = asyncio.Semaphore(max_concurrent)
+            
+            async def process_single_query(query: str) -> Dict[str, Any]:
+                async with semaphore:
+                    return await self._generate_single_rag_response_cached_kb(query, kb)
+            
+            # Process batch concurrently
+            batch_tasks = [process_single_query(query) for query in batch]
+            batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+            
+            # Handle exceptions
+            for j, result in enumerate(batch_results):
+                if isinstance(result, Exception):
+                    logger.error(f"Error processing query '{batch[j]}': {str(result)}")
+                    batch_results[j] = {
+                        "query": batch[j],
+                        "response": f"Error: {str(result)}",
+                        "contexts": [],
+                        "error": str(result),
+                        "response_time": 0  # Unknown time for exceptions
+                    }
+            
+            all_results.extend(batch_results)
+            
+            # Small delay between batches to be nice to the API
+            if i + batch_size < len(queries):
+                await asyncio.sleep(0.5)
+        
+        return all_results
+
+    async def _generate_single_rag_response_cached_kb(self, query: str, kb: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate RAG response for a single query with cached knowledge base info.
+        
+        Args:
+            query: Query string
+            kb: Knowledge base dictionary (pre-fetched)
+            
+        Returns:
+            Response dictionary with timing information
+        """
+        start_time = time.time()
+        
+        try:
+            # Create chat for this query
+            chat = await self.create_chat([kb["id"]])
+            if not chat:
+                response_time = time.time() - start_time
+                return {
+                    "query": query,
+                    "response": "Error: Failed to create chat",
+                    "contexts": [],
+                    "error": "Failed to create chat",
+                    "response_time": response_time
+                }
+
+            # Send message and collect response
+            full_response = ""
+            contexts = []
+
+            async for text_chunk, context_data in self.send_message(chat["id"], query):
+                full_response += text_chunk
+                if context_data and "context" in context_data and context_data["context"]:
+                    contexts = context_data["context"]
+
+            response_time = time.time() - start_time
+            
+            return {
+                "query": query,
+                "response": full_response,
+                "contexts": contexts,
+                "kb_id": kb["id"],
+                "chat_id": chat["id"],
+                "response_time": response_time
+            }
+            
+        except Exception as e:
+            response_time = time.time() - start_time
+            logger.error(f"Error processing query '{query}': {str(e)}")
+            return {
+                "query": query,
+                "response": f"Error: {str(e)}",
+                "contexts": [],
+                "error": str(e),
+                "response_time": response_time
+            }
