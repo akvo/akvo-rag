@@ -19,8 +19,8 @@ async def stream_mcp_response(
 ):
     """
     Stream a response from the MCP-integrated workflow.
-    Handles both streaming chunks and final persistence to DB,
-    including serialized context for citations.
+    Combines serialized context + answer in one SSE chunk for frontend parsing.
+    Persists final response to DB.
     """
     if not knowledge_base_ids:
         raise ValueError("No knowledge_base_ids provided for this chat.")
@@ -72,7 +72,7 @@ async def stream_mcp_response(
     # Get final state to include context + answer
     final_state = await query_answering_workflow.ainvoke(initial_state)
 
-    # Combine serialized context and answer
+    # Combine serialized context + answer for final persistence and streaming
     full_response = ""
 
     # Serialize context documents
@@ -87,17 +87,17 @@ async def stream_mcp_response(
         escaped_context = json.dumps({"context": serializable_context})
         base64_context = base64.b64encode(escaped_context.encode()).decode()
         separator = "__LLM_RESPONSE__"
-        yield f'0:"{base64_context}{separator}"\n'
         full_response += base64_context + separator
+        yield f'0:"{base64_context}{separator}"\n'
 
     # Append final answer
     if final_state.get("answer"):
         answer_chunk = final_state["answer"]
+        full_response += answer_chunk
         escaped_chunk = answer_chunk.replace('"', '\\"').replace("\n", "\\n")
         yield f'0:"{escaped_chunk}"\n'
-        full_response += answer_chunk
 
-    # Persist messages to DB (include serialized context)
+    # Persist both context + answer
     db.add_all(
         [
             Message(content=query, role="user", chat_id=chat_id),
