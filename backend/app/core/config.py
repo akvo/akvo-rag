@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     # JWT settings
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-here")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
+        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080")
+    )
 
     # Chat Provider settings
     CHAT_PROVIDER: str = os.getenv("CHAT_PROVIDER", "openai")
@@ -44,14 +46,22 @@ class Settings(BaseSettings):
     MINIO_BUCKET_NAME: str = os.getenv("MINIO_BUCKET_NAME", "documents")
 
     # OpenAI settings
-    OPENAI_API_BASE: str = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "your-openai-api-key-here")
+    OPENAI_API_BASE: str = os.getenv(
+        "OPENAI_API_BASE", "https://api.openai.com/v1"
+    )
+    OPENAI_API_KEY: str = os.getenv(
+        "OPENAI_API_KEY", "your-openai-api-key-here"
+    )
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4")
-    OPENAI_EMBEDDINGS_MODEL: str = os.getenv("OPENAI_EMBEDDINGS_MODEL", "text-embedding-ada-002")
+    OPENAI_EMBEDDINGS_MODEL: str = os.getenv(
+        "OPENAI_EMBEDDINGS_MODEL", "text-embedding-ada-002"
+    )
 
     # DashScope settings
     DASH_SCOPE_API_KEY: str = os.getenv("DASH_SCOPE_API_KEY", "")
-    DASH_SCOPE_EMBEDDINGS_MODEL: str = os.getenv("DASH_SCOPE_EMBEDDINGS_MODEL", "")
+    DASH_SCOPE_EMBEDDINGS_MODEL: str = os.getenv(
+        "DASH_SCOPE_EMBEDDINGS_MODEL", ""
+    )
 
     # Vector Store settings
     VECTOR_STORE_TYPE: str = os.getenv("VECTOR_STORE_TYPE", "chroma")
@@ -62,7 +72,9 @@ class Settings(BaseSettings):
 
     # Qdrant DB settings
     QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6333")
-    QDRANT_PREFER_GRPC: bool = os.getenv("QDRANT_PREFER_GRPC", "true").lower() == "true"
+    QDRANT_PREFER_GRPC: bool = (
+        os.getenv("QDRANT_PREFER_GRPC", "true").lower() == "true"
+    )
 
     # Deepseek settings
     DEEPSEEK_API_KEY: str = ""
@@ -77,7 +89,17 @@ class Settings(BaseSettings):
     )  # Added this line
 
     # Vector Store batch processing
-    VECTOR_STORE_BATCH_SIZE: int = int(os.getenv("VECTOR_STORE_BATCH_SIZE", "100"))
+    VECTOR_STORE_BATCH_SIZE: int = int(
+        os.getenv("VECTOR_STORE_BATCH_SIZE", "100")
+    )
+
+    # KB MCP Server
+    KNOWLEDGE_BASES_MCP: str = os.getenv(
+        "KNOWLEDGE_BASES_MCP", "http:localhost:8100/mcp"
+    )
+    KNOWLEDGE_BASES_API_KEY: str = os.getenv(
+        "KNOWLEDGE_BASES_API_KEY", "your-kb-api-key-here"
+    )
 
     class Config:
         env_file = ".env"
