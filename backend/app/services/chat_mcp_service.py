@@ -19,6 +19,9 @@ async def stream_mcp_response(
     Stream a response from the MCP-integrated workflow.
     Handles both streaming chunks and final persistence to DB.
     """
+    if not knowledge_base_ids:
+        raise ValueError("No knowledge_base_ids provided for this chat.")
+
     prompt_service = PromptService(db=db)
 
     # Load chat history from DB only if messages length <= 1
