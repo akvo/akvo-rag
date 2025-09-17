@@ -54,11 +54,14 @@ class TestScopingAgent:
         """
         discovery_file.write_text(json.dumps(valid_discovery_data))
 
-        result = agent.scope_query("find documents", kb_id=42)
+        result = agent.scope_query("find documents", knowledge_base_ids=[42])
 
         assert result["server_name"] == "knowledge_bases_mcp"
         assert result["tool_name"] == "query_knowledge_base"
-        assert result["input"] == {"kb_id": 42, "query": "find documents"}
+        assert result["input"] == {
+            "knowledge_base_ids": [42],
+            "query": "find documents",
+        }
 
     # -------------------- Error scenarios --------------------
 

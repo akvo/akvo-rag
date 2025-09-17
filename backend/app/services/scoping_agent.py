@@ -29,18 +29,17 @@ class ScopingAgent:
             raise
 
     def scope_query(
-        self, query: str, kb_id: Optional[int] = None
+        self, query: str, knowledge_base_ids: Optional[list[int]] = None
     ) -> Dict[str, Any]:
         """
         Determine scope for MCP tool execution.
-        Currently simplified: always uses `query_knowledge_base` tool.
+        Uses `query_knowledge_base` tool and allows multiple kb_ids.
         """
         discovery_data = self.load_discovery_data()
 
         server_name = "knowledge_bases_mcp"
         tool_name = "query_knowledge_base"
 
-        # Validate tool existence
         tools = discovery_data.get("tools", {}).get(server_name, [])
         if not any(t["name"] == tool_name for t in tools):
             err = f"[ScopingAgent] Tool {tool_name} not found"
@@ -49,8 +48,12 @@ class ScopingAgent:
 
         info = f"[ScopingAgent] Scoped query '{query}'"
         logger.info(f"{info} to {server_name}.{tool_name}")
+
         return {
             "server_name": server_name,
             "tool_name": tool_name,
-            "input": {"kb_id": kb_id, "query": query},
+            "input": {
+                "knowledge_base_ids": knowledge_base_ids,
+                "query": query,
+            },
         }

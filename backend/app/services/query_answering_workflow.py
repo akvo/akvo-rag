@@ -68,13 +68,13 @@ async def scoping_node(state: GraphState) -> GraphState:
     """Determine the scope (server, tool, input) using ScopingAgent."""
     agent = ScopingAgent()
 
-    # For now we assume KB ID is already known and passed in input
-    kb_id = state.get("scope", {}).get("kb_id", None)
-    if not kb_id:
-        raise ValueError("KB ID is required in state['scope']")
-    kb_id = int(kb_id)
+    knowledge_base_ids = state.get("scope", {}).get("knowledge_base_ids")
+    if not knowledge_base_ids:
+        raise ValueError("knowledge_base_ids is required in state['scope']")
 
-    scope = agent.scope_query(query=state["contextual_query"], kb_id=kb_id)
+    scope = agent.scope_query(
+        query=state["contextual_query"], knowledge_base_ids=knowledge_base_ids
+    )
     state["scope"] = scope
     return state
 

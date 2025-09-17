@@ -88,7 +88,7 @@ class TestQueryAnsweringWorkflow:
         fake_agent.scope_query.return_value = {
             "server_name": "s1",
             "tool_name": "t1",
-            "input": {"kb_id": 1, "query": "q"},
+            "input": {"knowledge_base_ids": [1], "query": "q"},
         }
         monkeypatch.setattr(
             "app.services.query_answering_workflow.ScopingAgent",
@@ -101,7 +101,7 @@ class TestQueryAnsweringWorkflow:
             "contextualize_prompt_str": "",
             "qa_prompt_str": "",
             "contextual_query": "q",
-            "scope": {"kb_id": 1},
+            "scope": {"knowledge_base_ids": [1]},
             "mcp_result": None,
             "context": [],
             "answer": "",
