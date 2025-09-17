@@ -95,7 +95,7 @@ class Settings(BaseSettings):
 
     # KB MCP Server
     KNOWLEDGE_BASES_MCP: str = os.getenv(
-        "KNOWLEDGE_BASES_MCP", "http:localhost:8100/mcp"
+        "KNOWLEDGE_BASES_MCP", "http:localhost:8100/mcp/"
     )
     KNOWLEDGE_BASES_API_KEY: str = os.getenv(
         "KNOWLEDGE_BASES_API_KEY", "your-kb-api-key-here"
