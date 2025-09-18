@@ -60,8 +60,8 @@ class TestRetrievalRequest(BaseModel):
     top_k: int
 
 
-@router.post("", response_model=KnowledgeBaseResponse)
-def create_knowledge_base(
+@router.post("", response_model=dict)
+async def create_knowledge_base(
     *,
     db: Session = Depends(get_db),
     kb_in: KnowledgeBaseCreate,
@@ -70,16 +70,24 @@ def create_knowledge_base(
     """
     Create new knowledge base.
     """
-    kb = KnowledgeBase(
-        name=kb_in.name, description=kb_in.description, user_id=current_user.id
-    )
-    db.add(kb)
-    db.commit()
-    db.refresh(kb)
-    logger.info(
-        f"Knowledge base created: {kb.name} for user {current_user.id}"
-    )
-    return kb
+    # TODO :: DELETE BELOW
+    # kb = KnowledgeBase(
+    #     name=kb_in.name,
+    #     description=kb_in.description,
+    #     user_id=current_user.id
+    # )
+    # db.add(kb)
+    # db.commit()
+    # db.refresh(kb)
+    # logger.info(
+    #     f"Knowledge base created: {kb.name} for user {current_user.id}"
+    # )
+    # return kb
+    # EOL DELETE
+
+    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+    result = await kb_mcp_endpoint_service.create_kb(data=kb_in.model_dump())
+    return result
 
 
 @router.get("", response_model=List[KnowledgeBaseResponse])
@@ -671,8 +679,8 @@ async def test_retrieval(
     #     raise HTTPException(status_code=500, detail=str(e))
     # EOL DELETE
 
-    kb_mcp_endpoint = KnowledgeBaseMCPEndpointService()
-    result = await kb_mcp_endpoint.test_retrieval(
+    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+    result = await kb_mcp_endpoint_service.test_retrieval(
         kb_id=request.kb_id,
         query=request.query,
         top_k=request.top_k,
