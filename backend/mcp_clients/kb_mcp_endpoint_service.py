@@ -1,4 +1,6 @@
+import json
 import httpx
+
 from fastapi import HTTPException, UploadFile
 from typing import Optional, List, Dict, Any
 from app.core.config import settings
@@ -30,8 +32,15 @@ class KnowledgeBaseMCPEndpointService:
             )
 
         if response.status_code >= 400:
+            try:
+                # Try parse JSON error from MCP
+                detail = response.json().get("detail", response.text)
+            except json.JSONDecodeError:
+                detail = response.text
+
             raise HTTPException(
-                status_code=response.status_code, detail=response.text
+                status_code=response.status_code,
+                detail=detail,
             )
 
         return response.json() if response.content else None
