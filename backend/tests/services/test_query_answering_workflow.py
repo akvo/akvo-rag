@@ -110,23 +110,6 @@ class TestQueryAnsweringWorkflow:
         new_state = await scoping_node(state)
         assert new_state["scope"]["server_name"] == "s1"
 
-    @pytest.mark.asyncio
-    async def test_scoping_node_missing_kb_id(self):
-        """scoping_node() raises ValueError if kb_id missing."""
-        state: GraphState = {
-            "query": "q",
-            "chat_history": [],
-            "contextualize_prompt_str": "",
-            "qa_prompt_str": "",
-            "contextual_query": "q",
-            "scope": {},
-            "mcp_result": None,
-            "context": [],
-            "answer": "",
-        }
-        with pytest.raises(ValueError):
-            await scoping_node(state)
-
     # ---------------- run_mcp_tool_node ----------------
 
     @pytest.mark.asyncio

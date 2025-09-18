@@ -29,7 +29,7 @@ class ScopingAgent:
             raise
 
     def scope_query(
-        self, query: str, knowledge_base_ids: Optional[list[int]] = None
+        self, query: str, scope: Optional[Dict[str, Any]] = {}
     ) -> Dict[str, Any]:
         """
         Determine scope for MCP tool execution.
@@ -49,11 +49,11 @@ class ScopingAgent:
         info = f"[ScopingAgent] Scoped query '{query}'"
         logger.info(f"{info} to {server_name}.{tool_name}")
 
+        input_param = scope
+        input_param["query"] = query
+
         return {
             "server_name": server_name,
             "tool_name": tool_name,
-            "input": {
-                "knowledge_base_ids": knowledge_base_ids,
-                "query": query,
-            },
+            "input": input_param,
         }

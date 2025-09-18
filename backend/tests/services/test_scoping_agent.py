@@ -54,13 +54,16 @@ class TestScopingAgent:
         """
         discovery_file.write_text(json.dumps(valid_discovery_data))
 
-        result = agent.scope_query("find documents", knowledge_base_ids=[42])
+        result = agent.scope_query(
+            "find documents", scope={"knowledge_base_ids": [42], "top_k": 5}
+        )
 
         assert result["server_name"] == "knowledge_bases_mcp"
         assert result["tool_name"] == "query_knowledge_base"
         assert result["input"] == {
             "knowledge_base_ids": [42],
             "query": "find documents",
+            "top_k": 5,
         }
 
     # -------------------- Error scenarios --------------------
@@ -80,4 +83,4 @@ class TestScopingAgent:
         with pytest.raises(
             ValueError, match="Tool query_knowledge_base not found"
         ):
-            agent.scope_query("find documents")
+            agent.scope_query(query="find documents")

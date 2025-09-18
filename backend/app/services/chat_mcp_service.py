@@ -4,6 +4,7 @@ import logging
 from sqlalchemy.orm import Session
 from app.models import Message
 from app.services.prompt_service import PromptService
+from app.services.system_settings_service import SystemSettingsService
 from app.services.query_answering_workflow import query_answering_workflow
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,9 @@ async def stream_mcp_response(
         raise ValueError("No knowledge_base_ids provided for this chat.")
 
     prompt_service = PromptService(db=db)
+    settings_service = SystemSettingsService(db=db)
+    # Get global top_k setting and use it for vector retrieval
+    top_k = settings_service.get_top_k()
 
     # Load chat history from DB only if messages length <= 1
     if len(messages.get("messages", [])) <= 1:
@@ -53,7 +57,7 @@ async def stream_mcp_response(
         "chat_history": chat_history,
         "contextualize_prompt_str": contextualize_prompt,
         "qa_prompt_str": qa_prompt,
-        "scope": {"knowledge_base_ids": knowledge_base_ids},
+        "scope": {"knowledge_base_ids": knowledge_base_ids, "top_k": top_k},
     }
 
     # Stream workflow events
