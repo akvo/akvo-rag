@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     KNOWLEDGE_BASES_API_KEY: str = os.getenv(
         "KNOWLEDGE_BASES_API_KEY", "your-kb-api-key-here"
     )
+    KNOWLEDGE_BASES_API_ENDPOINT: str = os.getenv(
+        "KNOWLEDGE_BASES_API_ENDPOINT", "http:localhost:8100"
+    )
 
     class Config:
         env_file = ".env"

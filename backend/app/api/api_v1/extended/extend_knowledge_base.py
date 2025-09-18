@@ -7,14 +7,12 @@ from app.db.session import get_db
 from app.models.user import User
 from app.core.security import get_current_user
 from app.models.knowledge import KnowledgeBase, Document, ProcessingTask
-from app.schemas.knowledge import (
-    KnowledgeBaseResponse,
-    DocumentResponse
-)
+from app.schemas.knowledge import KnowledgeBaseResponse, DocumentResponse
 
 from sqlalchemy import or_
 
 from app.api.api_v1.extended.util.util_user import get_super_user_ids
+from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
 router = APIRouter()
 
@@ -25,45 +23,69 @@ class ExtendKnowledgeBaseResponse(KnowledgeBaseResponse):
     is_superuser: Optional[bool] = False
 
 
-@router.get("", response_model=List[ExtendKnowledgeBaseResponse])
-def get_knowledge_bases(
+@router.get(
+    "",
+    response_model=List[dict],
+    description="List of all available knowledge bases from the MCP Server",
+    response_description="List of knowledge base objects with their metadata",
+)
+async def get_knowledge_bases(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     skip: int = 0,
-    limit: int = 100
+    limit: int = 100,
 ) -> Any:
     """
-    Retrieve knowledge bases.
-    - include knowledge base created by super user
+    Retrieve knowledge bases from KB MCP Server
+
+    Returns a list of knowledge base objects containing:
+    - name: The name of the knowledge base
+    - description: A description of what the knowledge base contains
+    - id: Unique identifier
+    - created_at: Creation timestamp
+    - updated_at: Last update timestamp
+    - documents: Array of associated documents (empty by default)
     """
-    super_user_ids = get_super_user_ids(db=db)
-    knowledge_bases = (
-        db.query(KnowledgeBase, User.is_superuser)
-        .join(User, KnowledgeBase.user_id == User.id, isouter=True)
-        .filter(or_(
-            KnowledgeBase.user_id == current_user.id,
-            KnowledgeBase.user_id.in_(super_user_ids)
-        ))
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
+    # TODO :: DELETE prev code
+    # super_user_ids = get_super_user_ids(db=db)
+    # knowledge_bases = (
+    #     db.query(KnowledgeBase, User.is_superuser)
+    #     .join(User, KnowledgeBase.user_id == User.id, isouter=True)
+    #     .filter(
+    #         or_(
+    #             KnowledgeBase.user_id == current_user.id,
+    #             KnowledgeBase.user_id.in_(super_user_ids),
+    #         )
+    #     )
+    #     .offset(skip)
+    #     .limit(limit)
+    #     .all()
+    # )
 
-    results = []
-    for kb, is_superuser in knowledge_bases:
-        kb_data = ExtendKnowledgeBaseResponse(
-            id=kb.id,
-            user_id=kb.user_id,
-            name=kb.name,
-            description=kb.description,
-            created_at=kb.created_at,
-            updated_at=kb.updated_at,
-            documents=kb.documents or [],
-            is_superuser=is_superuser,
-        )
-        results.append(kb_data)
+    # results = []
+    # for kb, is_superuser in knowledge_bases:
+    #     kb_data = ExtendKnowledgeBaseResponse(
+    #         id=kb.id,
+    #         user_id=kb.user_id,
+    #         name=kb.name,
+    #         description=kb.description,
+    #         created_at=kb.created_at,
+    #         updated_at=kb.updated_at,
+    #         documents=kb.documents or [],
+    #         is_superuser=is_superuser,
+    #     )
+    #     results.append(kb_data)
 
-    return results
+    # return results
+    # EOL TODO
+
+    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+    result = await kb_mcp_endpoint_service.list_kbs()
+    formatted = []
+    for res in result:
+        res["is_superuser"] = True
+        formatted.append(res)
+    return formatted
 
 
 @router.get("/{kb_id}", response_model=ExtendKnowledgeBaseResponse)
@@ -84,14 +106,17 @@ def get_knowledge_base(
         db.query(KnowledgeBase, User.is_superuser)
         .join(User, KnowledgeBase.user_id == User.id, isouter=True)
         .options(
-            joinedload(KnowledgeBase.documents)
-            .joinedload(Document.processing_tasks)
+            joinedload(KnowledgeBase.documents).joinedload(
+                Document.processing_tasks
+            )
         )
         .filter(KnowledgeBase.id == kb_id)
-        .filter(or_(
-            KnowledgeBase.user_id == current_user.id,
-            KnowledgeBase.user_id.in_(super_user_ids)
-        ))
+        .filter(
+            or_(
+                KnowledgeBase.user_id == current_user.id,
+                KnowledgeBase.user_id.in_(super_user_ids),
+            )
+        )
         .first()
     )
 
@@ -117,33 +142,33 @@ def get_knowledge_base(
 async def get_processing_tasks(
     kb_id: int,
     task_ids: str = Query(
-        ...,
-        description="Comma-separated list of task IDs to check status for"
+        ..., description="Comma-separated list of task IDs to check status for"
     ),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Get status of multiple processing tasks.
     """
     task_id_list = [int(id.strip()) for id in task_ids.split(",")]
 
-    kb = db.query(KnowledgeBase).filter(
-        KnowledgeBase.id == kb_id,
-        KnowledgeBase.user_id == current_user.id
-    ).first()
+    kb = (
+        db.query(KnowledgeBase)
+        .filter(
+            KnowledgeBase.id == kb_id, KnowledgeBase.user_id == current_user.id
+        )
+        .first()
+    )
 
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
     tasks = (
         db.query(ProcessingTask)
-        .options(
-            selectinload(ProcessingTask.document_upload)
-        )
+        .options(selectinload(ProcessingTask.document_upload))
         .filter(
             ProcessingTask.id.in_(task_id_list),
-            ProcessingTask.knowledge_base_id == kb_id
+            ProcessingTask.knowledge_base_id == kb_id,
         )
         .all()
     )
@@ -156,8 +181,9 @@ async def get_processing_tasks(
             "upload_id": task.document_upload_id,
             "file_name": (
                 task.document_upload.file_name
-                if task.document_upload else None
-            )
+                if task.document_upload
+                else None
+            ),
         }
         for task in tasks
     }
@@ -182,10 +208,13 @@ async def get_document(
         .filter(
             Document.id == doc_id,
             Document.knowledge_base_id == kb_id,
-        ).filter(or_(
-            KnowledgeBase.user_id == current_user.id,
-            KnowledgeBase.user_id.in_(super_user_ids)
-        ))
+        )
+        .filter(
+            or_(
+                KnowledgeBase.user_id == current_user.id,
+                KnowledgeBase.user_id.in_(super_user_ids),
+            )
+        )
         .first()
     )
 

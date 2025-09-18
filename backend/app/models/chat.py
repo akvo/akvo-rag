@@ -26,9 +26,13 @@ class Chat(Base, TimestampMixin):
     user = relationship("User", back_populates="chats")
 
     # KBs are external MCP IDs
-    knowledge_base_ids = relationship(
+    knowledge_bases = relationship(
         "ChatKnowledgeBase", cascade="all, delete-orphan", lazy="joined"
     )
+
+    @property
+    def knowledge_base_ids(self) -> list[int]:
+        return [kb.knowledge_base_id for kb in self.knowledge_bases]
 
 
 class Message(Base, TimestampMixin):
