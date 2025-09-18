@@ -27,7 +27,6 @@ class ExtendKnowledgeBaseResponse(KnowledgeBaseResponse):
     "",
     response_model=List[dict],
     description="List of all available knowledge bases from the MCP Server",
-    response_description="List of knowledge base objects with their metadata",
 )
 async def get_knowledge_bases(
     db: Session = Depends(get_db),
@@ -88,8 +87,12 @@ async def get_knowledge_bases(
     return formatted
 
 
-@router.get("/{kb_id}", response_model=ExtendKnowledgeBaseResponse)
-def get_knowledge_base(
+@router.get(
+    "/{kb_id}",
+    response_model=dict,
+    description="Get knowledge base detail by kb id from MCP Server",
+)
+async def get_knowledge_base(
     *,
     db: Session = Depends(get_db),
     kb_id: int,
@@ -99,42 +102,52 @@ def get_knowledge_base(
     Get knowledge base by ID.
     - include knowledge base created by super user
     """
-    from sqlalchemy.orm import joinedload
+    # TODO :: DELETE BELOW
+    # from sqlalchemy.orm import joinedload
 
-    super_user_ids = get_super_user_ids(db=db)
-    kb_data = (
-        db.query(KnowledgeBase, User.is_superuser)
-        .join(User, KnowledgeBase.user_id == User.id, isouter=True)
-        .options(
-            joinedload(KnowledgeBase.documents).joinedload(
-                Document.processing_tasks
-            )
-        )
-        .filter(KnowledgeBase.id == kb_id)
-        .filter(
-            or_(
-                KnowledgeBase.user_id == current_user.id,
-                KnowledgeBase.user_id.in_(super_user_ids),
-            )
-        )
-        .first()
-    )
+    # super_user_ids = get_super_user_ids(db=db)
+    # kb_data = (
+    #     db.query(KnowledgeBase, User.is_superuser)
+    #     .join(User, KnowledgeBase.user_id == User.id, isouter=True)
+    #     .options(
+    #         joinedload(KnowledgeBase.documents).joinedload(
+    #             Document.processing_tasks
+    #         )
+    #     )
+    #     .filter(KnowledgeBase.id == kb_id)
+    #     .filter(
+    #         or_(
+    #             KnowledgeBase.user_id == current_user.id,
+    #             KnowledgeBase.user_id.in_(super_user_ids),
+    #         )
+    #     )
+    #     .first()
+    # )
 
-    kb, is_superuser = kb_data
-    if not kb:
-        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    # kb, is_superuser = kb_data
+    # if not kb:
+    #     raise HTTPException(
+    #         status_code=404,
+    #         detail="Knowledge base not found"
+    #     )
 
-    result = ExtendKnowledgeBaseResponse(
-        id=kb.id,
-        user_id=kb.user_id,
-        name=kb.name,
-        description=kb.description,
-        created_at=kb.created_at,
-        updated_at=kb.updated_at,
-        documents=kb.documents or [],
-        is_superuser=is_superuser,
-    )
+    # result = ExtendKnowledgeBaseResponse(
+    #     id=kb.id,
+    #     user_id=kb.user_id,
+    #     name=kb.name,
+    #     description=kb.description,
+    #     created_at=kb.created_at,
+    #     updated_at=kb.updated_at,
+    #     documents=kb.documents or [],
+    #     is_superuser=is_superuser,
+    # )
 
+    # return result
+    # EOL DELETE
+
+    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+    result = await kb_mcp_endpoint_service.get_kb(kb_id=kb_id)
+    result["is_superuser"] = True
     return result
 
 

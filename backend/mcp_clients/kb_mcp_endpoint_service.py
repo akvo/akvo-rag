@@ -88,3 +88,10 @@ class KnowledgeBaseMCPEndpointService:
         return await self._request(
             "POST", f"/{kb_id}/documents/process", data=upload_results
         )
+
+    # ---- Retrieval testing ----
+    def test_retrieval(
+        self, kb_id: int, query: str, top_k: int = 5
+    ) -> Dict[str, Any]:
+        payload = {"kb_id": kb_id, "query": query, "top_k": top_k}
+        return self._request("POST", "/test-retrieval", data=payload)

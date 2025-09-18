@@ -47,6 +47,7 @@ from app.core.minio import get_minio_client
 from minio.error import MinioException
 from app.services.vector_store import VectorStoreFactory
 from app.services.embedding.embedding_factory import EmbeddingsFactory
+from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
 router = APIRouter()
 
@@ -625,45 +626,55 @@ async def test_retrieval(
     """
     Test retrieval quality for a given query against a knowledge base.
     """
-    try:
-        kb = (
-            db.query(KnowledgeBase)
-            .filter(
-                KnowledgeBase.id == request.kb_id,
-                KnowledgeBase.user_id == current_user.id,
-            )
-            .first()
-        )
+    # TODO :: DELETE BELOW
+    # try:
+    #     kb = (
+    #         db.query(KnowledgeBase)
+    #         .filter(
+    #             KnowledgeBase.id == request.kb_id,
+    #             KnowledgeBase.user_id == current_user.id,
+    #         )
+    #         .first()
+    #     )
 
-        if not kb:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Knowledge base {request.kb_id} not found",
-            )
+    #     if not kb:
+    #         raise HTTPException(
+    #             status_code=404,
+    #             detail=f"Knowledge base {request.kb_id} not found",
+    #         )
 
-        embeddings = EmbeddingsFactory.create()
+    #     embeddings = EmbeddingsFactory.create()
 
-        vector_store = VectorStoreFactory.create(
-            store_type=settings.VECTOR_STORE_TYPE,
-            collection_name=f"kb_{request.kb_id}",
-            embedding_function=embeddings,
-        )
+    #     vector_store = VectorStoreFactory.create(
+    #         store_type=settings.VECTOR_STORE_TYPE,
+    #         collection_name=f"kb_{request.kb_id}",
+    #         embedding_function=embeddings,
+    #     )
 
-        results = vector_store.similarity_search_with_score(
-            request.query, k=request.top_k
-        )
+    #     results = vector_store.similarity_search_with_score(
+    #         request.query, k=request.top_k
+    #     )
 
-        response = []
-        for doc, score in results:
-            response.append(
-                {
-                    "content": doc.page_content,
-                    "metadata": doc.metadata,
-                    "score": float(score),
-                }
-            )
+    #     response = []
+    #     for doc, score in results:
+    #         response.append(
+    #             {
+    #                 "content": doc.page_content,
+    #                 "metadata": doc.metadata,
+    #                 "score": float(score),
+    #             }
+    #         )
 
-        return {"results": response}
+    #     return {"results": response}
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # except Exception as e:
+    #     raise HTTPException(status_code=500, detail=str(e))
+    # EOL DELETE
+
+    kb_mcp_endpoint = KnowledgeBaseMCPEndpointService()
+    result = await kb_mcp_endpoint.test_retrieval(
+        kb_id=request.kb_id,
+        query=request.query,
+        top_k=request.top_k,
+    )
+    return result
