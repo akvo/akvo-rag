@@ -163,43 +163,52 @@ async def get_processing_tasks(
     """
     Get status of multiple processing tasks.
     """
+    # TODO :: DELETE BELOW
+    # task_id_list = [int(id.strip()) for id in task_ids.split(",")]
+
+    # kb = (
+    #     db.query(KnowledgeBase)
+    #     .filter(
+    #         KnowledgeBase.id == kb_id, KnowledgeBase.user_id == current_user.id
+    #     )
+    #     .first()
+    # )
+
+    # if not kb:
+    #     raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    # tasks = (
+    #     db.query(ProcessingTask)
+    #     .options(selectinload(ProcessingTask.document_upload))
+    #     .filter(
+    #         ProcessingTask.id.in_(task_id_list),
+    #         ProcessingTask.knowledge_base_id == kb_id,
+    #     )
+    #     .all()
+    # )
+
+    # return {
+    #     task.id: {
+    #         "document_id": task.document_id,
+    #         "status": task.status,
+    #         "error_message": task.error_message,
+    #         "upload_id": task.document_upload_id,
+    #         "file_name": (
+    #             task.document_upload.file_name
+    #             if task.document_upload
+    #             else None
+    #         ),
+    #     }
+    #     for task in tasks
+    # }
+    # EOL DELETE
+
     task_id_list = [int(id.strip()) for id in task_ids.split(",")]
-
-    kb = (
-        db.query(KnowledgeBase)
-        .filter(
-            KnowledgeBase.id == kb_id, KnowledgeBase.user_id == current_user.id
-        )
-        .first()
+    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+    result = await kb_mcp_endpoint_service.get_processing_tasks(
+        kb_id=kb_id, task_ids=task_id_list
     )
-
-    if not kb:
-        raise HTTPException(status_code=404, detail="Knowledge base not found")
-
-    tasks = (
-        db.query(ProcessingTask)
-        .options(selectinload(ProcessingTask.document_upload))
-        .filter(
-            ProcessingTask.id.in_(task_id_list),
-            ProcessingTask.knowledge_base_id == kb_id,
-        )
-        .all()
-    )
-
-    return {
-        task.id: {
-            "document_id": task.document_id,
-            "status": task.status,
-            "error_message": task.error_message,
-            "upload_id": task.document_upload_id,
-            "file_name": (
-                task.document_upload.file_name
-                if task.document_upload
-                else None
-            ),
-        }
-        for task in tasks
-    }
+    return result
 
 
 @router.get("/{kb_id}/documents/{doc_id}", response_model=DocumentResponse)
