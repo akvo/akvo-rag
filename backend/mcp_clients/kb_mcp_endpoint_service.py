@@ -52,26 +52,44 @@ class KnowledgeBaseMCPEndpointService:
 
     # ---- Knowledge Base CRUD ----
     async def create_kb(self, data: dict) -> Dict[str, Any]:
+        """
+        Create new knowledge base.
+        """
         return await self._request("POST", "", data=data)
 
     async def list_kbs(
         self, skip: int = 0, limit: int = 100
     ) -> List[Dict[str, Any]]:
+        """
+        Retrieve knowledge bases from KB MCP Server
+        """
         return await self._request(
             "GET", "", params={"skip": skip, "limit": limit}
         )
 
     async def get_kb(self, kb_id: int) -> Dict[str, Any]:
+        """
+        Get knowledge base by ID.
+        """
         return await self._request("GET", f"/{kb_id}")
 
     async def update_kb(self, kb_id: int, data: dict) -> Dict[str, Any]:
+        """
+        Update knowledge base.
+        """
         return await self._request("PUT", f"/{kb_id}", data=data)
 
     async def delete_kb(self, kb_id: int) -> Dict[str, Any]:
+        """
+        Delete knowledge base and all associated resources.
+        """
         return await self._request("DELETE", f"/{kb_id}")
 
     # ---- Document related ----
     async def get_document(self, kb_id: int, doc_id: int) -> Dict[str, Any]:
+        """
+        Get document details by ID.
+        """
         return await self._request("GET", f"/{kb_id}/documents/{doc_id}")
 
     async def upload_documents(
@@ -96,6 +114,9 @@ class KnowledgeBaseMCPEndpointService:
     async def preview_documents(
         self, kb_id: int, preview_request: dict
     ) -> Dict[int, Any]:
+        """
+        Preview multiple documents' chunks.
+        """
         return await self._request(
             "POST", f"/{kb_id}/documents/preview", data=preview_request
         )
@@ -103,6 +124,9 @@ class KnowledgeBaseMCPEndpointService:
     async def process_documents(
         self, kb_id: int, upload_results: List[dict]
     ) -> Dict[str, Any]:
+        """
+        Process multiple documents asynchronously.
+        """
         return await self._request(
             "POST", f"/{kb_id}/documents/process", data=upload_results
         )
@@ -113,7 +137,8 @@ class KnowledgeBaseMCPEndpointService:
     ) -> Dict[int, dict]:
         """
         Get status of multiple processing tasks for a knowledge base.
-        task_ids is a list of integers; MCP expects comma-separated query param.
+        task_ids is a list of integers;
+        MCP expects comma-separated query param.
         """
         task_ids_str = ",".join(str(tid) for tid in task_ids)
         params = {"task_ids": task_ids_str}
@@ -127,3 +152,10 @@ class KnowledgeBaseMCPEndpointService:
     ) -> Dict[str, Any]:
         payload = {"kb_id": kb_id, "query": query, "top_k": top_k}
         return await self._request("POST", "/test-retrieval", data=payload)
+
+    # ---- Cleanup ----
+    async def cleanup_temp_files(self) -> Dict[str, Any]:
+        """
+        Trigger cleanup of expired temporary files in MCP.
+        """
+        return await self._request("POST", "/cleanup")

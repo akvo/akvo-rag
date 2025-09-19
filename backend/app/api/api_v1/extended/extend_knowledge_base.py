@@ -100,7 +100,6 @@ async def get_knowledge_base(
 ) -> Any:
     """
     Get knowledge base by ID.
-    - include knowledge base created by super user
     """
     # TODO :: DELETE BELOW
     # from sqlalchemy.orm import joinedload
@@ -223,24 +222,32 @@ async def get_document(
     Get document details by ID.
     - include knowledge base created by super user
     """
-    super_user_ids = get_super_user_ids(db=db)
-    document = (
-        db.query(Document)
-        .join(KnowledgeBase)
-        .filter(
-            Document.id == doc_id,
-            Document.knowledge_base_id == kb_id,
-        )
-        .filter(
-            or_(
-                KnowledgeBase.user_id == current_user.id,
-                KnowledgeBase.user_id.in_(super_user_ids),
-            )
-        )
-        .first()
+    # TODO :: DELETE BELOW
+    # super_user_ids = get_super_user_ids(db=db)
+    # document = (
+    #     db.query(Document)
+    #     .join(KnowledgeBase)
+    #     .filter(
+    #         Document.id == doc_id,
+    #         Document.knowledge_base_id == kb_id,
+    #     )
+    #     .filter(
+    #         or_(
+    #             KnowledgeBase.user_id == current_user.id,
+    #             KnowledgeBase.user_id.in_(super_user_ids),
+    #         )
+    #     )
+    #     .first()
+    # )
+
+    # if not document:
+    #     raise HTTPException(status_code=404, detail="Document not found")
+
+    # return document
+    # EOL DELETE
+
+    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+    result = await kb_mcp_endpoint_service.get_document(
+        kb_id=kb_id, doc_id=doc_id
     )
-
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-
-    return document
+    return result

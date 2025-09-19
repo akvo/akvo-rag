@@ -564,30 +564,36 @@ async def cleanup_temp_files(
     """
     Clean up expired temporary files.
     """
-    expired_time = datetime.utcnow() - timedelta(hours=24)
-    expired_uploads = (
-        db.query(DocumentUpload)
-        .filter(DocumentUpload.created_at < expired_time)
-        .all()
-    )
+    # TODO :: DELETE BELOW
+    # expired_time = datetime.utcnow() - timedelta(hours=24)
+    # expired_uploads = (
+    #     db.query(DocumentUpload)
+    #     .filter(DocumentUpload.created_at < expired_time)
+    #     .all()
+    # )
 
-    minio_client = get_minio_client()
-    for upload in expired_uploads:
-        try:
-            minio_client.remove_object(
-                bucket_name=settings.MINIO_BUCKET_NAME,
-                object_name=upload.temp_path,
-            )
-        except MinioException as e:
-            logger.error(
-                f"Failed to delete temp file {upload.temp_path}: {str(e)}"
-            )
+    # minio_client = get_minio_client()
+    # for upload in expired_uploads:
+    #     try:
+    #         minio_client.remove_object(
+    #             bucket_name=settings.MINIO_BUCKET_NAME,
+    #             object_name=upload.temp_path,
+    #         )
+    #     except MinioException as e:
+    #         logger.error(
+    #             f"Failed to delete temp file {upload.temp_path}: {str(e)}"
+    #         )
 
-        db.delete(upload)
+    #     db.delete(upload)
 
-    db.commit()
+    # db.commit()
 
-    return {"message": f"Cleaned up {len(expired_uploads)} expired uploads"}
+    # return {"message": f"Cleaned up {len(expired_uploads)} expired uploads"}
+    # EOL DELETE
+
+    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+    result = await kb_mcp_endpoint_service.cleanup_temp_files()
+    return result
 
 
 # TODO :: REPLACE with route from extend_knowledge_base.py
@@ -643,32 +649,34 @@ async def cleanup_temp_files(
 # EOL REPLACE
 
 
-@router.get("/{kb_id}/documents/{doc_id}", response_model=DocumentResponse)
-async def get_document(
-    *,
-    db: Session = Depends(get_db),
-    kb_id: int,
-    doc_id: int,
-    current_user: User = Depends(get_current_user),
-) -> Any:
-    """
-    Get document details by ID.
-    """
-    document = (
-        db.query(Document)
-        .join(KnowledgeBase)
-        .filter(
-            Document.id == doc_id,
-            Document.knowledge_base_id == kb_id,
-            KnowledgeBase.user_id == current_user.id,
-        )
-        .first()
-    )
+# TODO :: REPLACE with route from extend_knowledge_base.py
+# @router.get("/{kb_id}/documents/{doc_id}", response_model=DocumentResponse)
+# async def get_document(
+#     *,
+#     db: Session = Depends(get_db),
+#     kb_id: int,
+#     doc_id: int,
+#     current_user: User = Depends(get_current_user),
+# ) -> Any:
+#     """
+#     Get document details by ID.
+#     """
+#     document = (
+#         db.query(Document)
+#         .join(KnowledgeBase)
+#         .filter(
+#             Document.id == doc_id,
+#             Document.knowledge_base_id == kb_id,
+#             KnowledgeBase.user_id == current_user.id,
+#         )
+#         .first()
+#     )
 
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
+#     if not document:
+#         raise HTTPException(status_code=404, detail="Document not found")
 
-    return document
+#     return document
+# EOL REPLACE
 
 
 @router.post("/test-retrieval")
