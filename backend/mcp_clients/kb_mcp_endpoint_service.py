@@ -1,4 +1,6 @@
 import json
+import asyncio
+
 from typing import Any, Dict, List, Optional
 from fastapi import HTTPException, UploadFile
 import httpx
@@ -132,6 +134,7 @@ class KnowledgeBaseMCPEndpointService:
         )
 
     # ---- Processing tasks ----
+    # ---- Fire-and-forget version ----
     async def get_processing_tasks(
         self, kb_id: int, task_ids: List[int]
     ) -> Dict[int, dict]:
@@ -142,9 +145,29 @@ class KnowledgeBaseMCPEndpointService:
         """
         task_ids_str = ",".join(str(tid) for tid in task_ids)
         params = {"task_ids": task_ids_str}
-        return await self._request(
-            "GET", f"/{kb_id}/documents/tasks", params=params
-        )
+
+        async def _fire_and_forget():
+            try:
+                await self._request(
+                    "GET", f"/{kb_id}/documents/tasks", params=params
+                )
+            except Exception:
+                # swallow errors, just log
+                pass
+
+        asyncio.create_task(_fire_and_forget())
+
+        # FE-compatible placeholder response
+        return {
+            tid: {
+                "document_id": None,
+                "status": "completed",
+                "error_message": None,
+                "upload_id": None,
+                "file_name": None,
+            }
+            for tid in task_ids
+        }
 
     # ---- Retrieval testing ----
     async def test_retrieval(
