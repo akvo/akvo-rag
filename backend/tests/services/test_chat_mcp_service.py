@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 from types import SimpleNamespace
 
 from app.services.chat_mcp_service import stream_mcp_response
@@ -13,43 +13,27 @@ class TestChatMCPService:
     async def test_stream_mcp_response_single_message_success(
         self, monkeypatch
     ):
-        """Stream response with DB chat history (messages length <= 1)."""
         fake_db = MagicMock()
         fake_message = SimpleNamespace(role="user", content="hi")
         fake_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
             fake_message
         ]
 
-        # Mock PromptService
         fake_prompt_service = MagicMock()
-        fake_prompt_service.get_full_contextualize_prompt.return_value = (
-            "context prompt"
-        )
-        fake_prompt_service.get_full_qa_strict_prompt.return_value = (
-            "qa prompt"
-        )
+        fake_prompt_service.get_full_contextualize_prompt.return_value = "ctx"
+        fake_prompt_service.get_full_qa_strict_prompt.return_value = "qa"
         monkeypatch.setattr(
             "app.services.chat_mcp_service.PromptService",
             lambda db: fake_prompt_service,
         )
 
-        # Mock workflow astream_events
-        async def fake_astream(initial_state, stream_mode):
-            yield {
-                "event": "on_chain_stream",
-                "name": "generate",
-                "data": {"chunk": "Hello"},
-            }
+        async def fake_astream(inputs):
+            for token in ["Hello", " world"]:
+                yield token
 
         monkeypatch.setattr(
-            "app.services.chat_mcp_service.query_answering_workflow.astream_events",
-            fake_astream,
-        )
-
-        # Mock workflow ainvoke
-        monkeypatch.setattr(
-            "app.services.chat_mcp_service.query_answering_workflow.ainvoke",
-            AsyncMock(return_value={"answer": "Final answer"}),
+            "app.services.chat_mcp_service.create_stuff_documents_chain",
+            lambda **kwargs: SimpleNamespace(astream=fake_astream),
         )
 
         chunks = []
@@ -62,16 +46,16 @@ class TestChatMCPService:
         ):
             chunks.append(chunk)
 
-        # Assertions
+        # Should include token chunks
         assert any("Hello" in c for c in chunks)
-        fake_db.add_all.assert_called()
-        fake_db.commit.assert_called()
+        assert any("world" in c for c in chunks)
+        # Should include final d: metadata
+        assert any(c.startswith("d:") for c in chunks)
 
     @pytest.mark.asyncio
     async def test_stream_mcp_response_multiple_messages_success(
         self, monkeypatch
     ):
-        """Stream response with messages from frontend (length > 1)."""
         fake_db = MagicMock()
         messages = {
             "messages": [
@@ -81,31 +65,20 @@ class TestChatMCPService:
         }
 
         fake_prompt_service = MagicMock()
-        fake_prompt_service.get_full_contextualize_prompt.return_value = (
-            "context prompt"
-        )
-        fake_prompt_service.get_full_qa_strict_prompt.return_value = (
-            "qa prompt"
-        )
+        fake_prompt_service.get_full_contextualize_prompt.return_value = "ctx"
+        fake_prompt_service.get_full_qa_strict_prompt.return_value = "qa"
         monkeypatch.setattr(
             "app.services.chat_mcp_service.PromptService",
             lambda db: fake_prompt_service,
         )
 
-        async def fake_astream(initial_state, stream_mode):
-            yield {
-                "event": "on_chain_stream",
-                "name": "generate",
-                "data": {"chunk": "World"},
-            }
+        async def fake_astream(inputs):
+            for token in ["World", "!"]:
+                yield token
 
         monkeypatch.setattr(
-            "app.services.chat_mcp_service.query_answering_workflow.astream_events",
-            fake_astream,
-        )
-        monkeypatch.setattr(
-            "app.services.chat_mcp_service.query_answering_workflow.ainvoke",
-            AsyncMock(return_value={"answer": "Final answer"}),
+            "app.services.chat_mcp_service.create_stuff_documents_chain",
+            lambda **kwargs: SimpleNamespace(astream=fake_astream),
         )
 
         chunks = []
@@ -119,14 +92,11 @@ class TestChatMCPService:
             chunks.append(chunk)
 
         assert any("World" in c for c in chunks)
-        fake_db.add_all.assert_called()
-        fake_db.commit.assert_called()
-
-    # ---------------- Edge / Error Cases ----------------
+        assert any("!" in c for c in chunks)
+        assert any(c.startswith("d:") for c in chunks)
 
     @pytest.mark.asyncio
     async def test_stream_mcp_response_no_chunks(self, monkeypatch):
-        """Workflow yields no chunks at all."""
         fake_db = MagicMock()
 
         fake_prompt_service = MagicMock()
@@ -137,17 +107,13 @@ class TestChatMCPService:
             lambda db: fake_prompt_service,
         )
 
-        async def fake_astream(initial_state, stream_mode):
-            if False:  # never yield
+        async def fake_astream(inputs):
+            if False:
                 yield
 
         monkeypatch.setattr(
-            "app.services.chat_mcp_service.query_answering_workflow.astream_events",
-            fake_astream,
-        )
-        monkeypatch.setattr(
-            "app.services.chat_mcp_service.query_answering_workflow.ainvoke",
-            AsyncMock(return_value={"answer": ""}),
+            "app.services.chat_mcp_service.create_stuff_documents_chain",
+            lambda **kwargs: SimpleNamespace(astream=fake_astream),
         )
 
         chunks = []
@@ -160,13 +126,13 @@ class TestChatMCPService:
         ):
             chunks.append(chunk)
 
-        assert chunks == []
-        fake_db.add_all.assert_called()
-        fake_db.commit.assert_called()
+        # Even if no chunks, should yield final d: line
+        assert chunks == [
+            'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
+        ]
 
     @pytest.mark.asyncio
     async def test_stream_mcp_response_db_commit_error(self, monkeypatch):
-        """DB commit failure raises exception."""
         fake_db = MagicMock()
         fake_db.commit.side_effect = Exception("DB commit failed")
 
@@ -178,20 +144,13 @@ class TestChatMCPService:
             lambda db: fake_prompt_service,
         )
 
-        async def fake_astream(initial_state, stream_mode):
-            yield {
-                "event": "on_chain_stream",
-                "name": "generate",
-                "data": {"chunk": "Hello"},
-            }
+        async def fake_astream(inputs):
+            for token in ["Hello"]:
+                yield token
 
         monkeypatch.setattr(
-            "app.services.chat_mcp_service.query_answering_workflow.astream_events",
-            fake_astream,
-        )
-        monkeypatch.setattr(
-            "app.services.chat_mcp_service.query_answering_workflow.ainvoke",
-            AsyncMock(return_value={"answer": "Final"}),
+            "app.services.chat_mcp_service.create_stuff_documents_chain",
+            lambda **kwargs: SimpleNamespace(astream=fake_astream),
         )
 
         with pytest.raises(Exception) as e:
@@ -207,7 +166,6 @@ class TestChatMCPService:
 
     @pytest.mark.asyncio
     async def test_stream_mcp_response_messages_truncate(self, monkeypatch):
-        """Messages exceeding max_history_length are truncated."""
         fake_db = MagicMock()
         messages = {
             "messages": [
@@ -223,22 +181,14 @@ class TestChatMCPService:
             lambda db: fake_prompt_service,
         )
 
-        async def fake_astream(initial_state, stream_mode):
-            # verify truncation applied
-            assert len(initial_state["chat_history"]) <= 10
-            yield {
-                "event": "on_chain_stream",
-                "name": "generate",
-                "data": {"chunk": "chunk"},
-            }
+        async def fake_astream(inputs):
+            assert len(inputs["chat_history"]) <= 10
+            for token in ["chunk"]:
+                yield token
 
         monkeypatch.setattr(
-            "app.services.chat_mcp_service.query_answering_workflow.astream_events",
-            fake_astream,
-        )
-        monkeypatch.setattr(
-            "app.services.chat_mcp_service.query_answering_workflow.ainvoke",
-            AsyncMock(return_value={"answer": "Final"}),
+            "app.services.chat_mcp_service.create_stuff_documents_chain",
+            lambda **kwargs: SimpleNamespace(astream=fake_astream),
         )
 
         chunks = []
@@ -253,5 +203,4 @@ class TestChatMCPService:
             chunks.append(chunk)
 
         assert any("chunk" in c for c in chunks)
-        fake_db.add_all.assert_called()
-        fake_db.commit.assert_called()
+        assert any(c.startswith("d:") for c in chunks)

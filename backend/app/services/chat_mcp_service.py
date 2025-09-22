@@ -2,10 +2,26 @@ import json
 import base64
 import logging
 from sqlalchemy.orm import Session
+
 from app.models import Message
 from app.services.prompt_service import PromptService
 from app.services.system_settings_service import SystemSettingsService
-from app.services.query_answering_workflow import query_answering_workflow
+
+from app.services.query_answering_workflow import (
+    contextualize_node,
+    scoping_node,
+    run_mcp_tool_node,
+    post_processing_node,
+)
+
+from app.services.llm.llm_factory import LLMFactory
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    MessagesPlaceholder,
+    PromptTemplate,
+)
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.messages import HumanMessage, AIMessage
 
 logger = logging.getLogger(__name__)
 
@@ -19,95 +35,182 @@ async def stream_mcp_response(
     max_history_length: int = 10,
 ):
     """
-    Stream a response from the MCP-integrated workflow.
-    Combines serialized context + answer in one SSE chunk for frontend parsing.
-    Persists final response to DB.
+    Best-practice streaming:
+      - Run MCP for scoping/retrieval (context)
+      - Stream context prefix first (base64 + __LLM_RESPONSE__)
+      - Stream tokens directly from qa_chain.astream
+      - Persist user + assistant at the end
+      - Use Vercel protocol lines: 0:"...", d:{...}, 3:{...}
     """
     if not knowledge_base_ids:
         raise ValueError("No knowledge_base_ids provided for this chat.")
 
     prompt_service = PromptService(db=db)
     settings_service = SystemSettingsService(db=db)
-    # Get global top_k setting and use it for vector retrieval
     top_k = settings_service.get_top_k()
 
-    # Load chat history from DB only if messages length <= 1
-    if len(messages.get("messages", [])) <= 1:
-        chat_history_query = (
-            db.query(Message)
-            .filter(Message.chat_id == chat_id)
-            .order_by(Message.created_at.asc())  # chronological order
-            .limit(max_history_length)
-            .all()
+    try:
+        # 1) Persist user and placeholder assistant early
+        user_message = Message(content=query, role="user", chat_id=chat_id)
+        db.add(user_message)
+        db.commit()
+
+        bot_message = Message(content="", role="assistant", chat_id=chat_id)
+        db.add(bot_message)
+        db.commit()
+
+        # 2) Build chat_history (from DB if frontend didn't provide)
+        if len(messages.get("messages", [])) <= 1:
+            chat_history_query = (
+                db.query(Message)
+                .filter(Message.chat_id == chat_id)
+                .order_by(Message.created_at.asc())
+                .limit(max_history_length)
+                .all()
+            )
+            chat_history = [
+                {"role": m.role, "content": m.content}
+                for m in chat_history_query
+            ]
+        else:
+            chat_history = messages.get("messages", [])[-max_history_length:]
+
+        # 3) Prepare initial state for MCP nodes
+        contextualize_prompt = prompt_service.get_full_contextualize_prompt()
+        qa_prompt = prompt_service.get_full_qa_strict_prompt()
+
+        state = {
+            "query": query,
+            "chat_history": chat_history,
+            "contextualize_prompt_str": contextualize_prompt,
+            "qa_prompt_str": qa_prompt,
+            "scope": {
+                "knowledge_base_ids": knowledge_base_ids,
+                "top_k": top_k,
+            },
+        }
+
+        # 4) Run MCP nodes up to post-processing to
+        # get `state["context"]` and `state["contextual_query"]`
+        # note: contextualize_node and post_processing_node are sync,
+        # scoping and run_mcp_tool_node are async
+        state = contextualize_node(state)
+        state = await scoping_node(state)
+        state = await run_mcp_tool_node(state)
+        state = post_processing_node(state)
+
+        # 5) If context exists, stream it first (base64 + separator)
+        context_prefix = ""
+        if state.get("context"):
+            serializable_context = [
+                {
+                    "page_content": doc.page_content.replace('"', '\\"'),
+                    "metadata": doc.metadata,
+                }
+                for doc in state["context"]
+            ]
+            escaped_context = json.dumps({"context": serializable_context})
+            base64_context = base64.b64encode(
+                escaped_context.encode()
+            ).decode()
+            separator = "__LLM_RESPONSE__"
+            context_prefix = base64_context + separator
+            # Vercel protocol: send context marker first
+            yield f'0:"{context_prefix}"\n'
+
+        # 6) Build the QA chain and stream tokens directly from the LLM chain
+        llm = LLMFactory.create()
+
+        qa_prompt_template = ChatPromptTemplate.from_messages(
+            [
+                ("system", state["qa_prompt_str"]),
+                MessagesPlaceholder("chat_history"),
+                ("human", "{input}"),
+            ]
         )
-        chat_history = [
-            {"role": m.role, "content": m.content} for m in chat_history_query
-        ]
-    else:
-        # Use messages passed from frontend, limited to last max_history_length
-        chat_history = messages.get("messages", [])[-max_history_length:]
+        document_prompt = PromptTemplate.from_template(
+            "\n\n- {page_content}\n\n"
+        )
 
-    # Build prompts
-    contextualize_prompt = prompt_service.get_full_contextualize_prompt()
-    qa_prompt = prompt_service.get_full_qa_strict_prompt()
+        qa_chain = create_stuff_documents_chain(
+            llm=llm,
+            prompt=qa_prompt_template,
+            document_prompt=document_prompt,
+            document_variable_name="context",
+        )
 
-    # Initial workflow state
-    initial_state = {
-        "query": query,
-        "chat_history": chat_history,
-        "contextualize_prompt_str": contextualize_prompt,
-        "qa_prompt_str": qa_prompt,
-        "scope": {"knowledge_base_ids": knowledge_base_ids, "top_k": top_k},
-    }
+        # Prepare chat_history for the chain (HumanMessage/AIMessage)
+        chain_chat_history = []
+        for m in chat_history:
+            if m["role"] == "user":
+                chain_chat_history.append(HumanMessage(content=m["content"]))
+            elif m["role"] == "assistant":
+                # If stored with context prefix, strip it for chain input
+                content = m["content"]
+                if "__LLM_RESPONSE__" in content:
+                    content = content.split("__LLM_RESPONSE__")[-1]
+                chain_chat_history.append(AIMessage(content=content))
 
-    # Stream workflow events
-    async for event in query_answering_workflow.astream_events(
-        initial_state, stream_mode="values"
-    ):
-        if (
-            event["event"] == "on_chain_stream"
-            and event.get("name") == "generate"
-        ):
-            data = event.get("data", {})
-            chunk = data.get("chunk", "")
-            if chunk:
-                yield f"data: {chunk}\n\n"
+        # Input to generation: prefer contextual_query if available
+        generation_input = state.get("contextual_query", query)
 
-    # Get final state to include context + answer
-    final_state = await query_answering_workflow.ainvoke(initial_state)
+        full_response = ""
 
-    # Combine serialized context + answer for final persistence and streaming
-    full_response = ""
-
-    # Serialize context documents
-    if final_state.get("context"):
-        serializable_context = [
+        # Stream tokens as they arrive from the QA chain
+        async for chunk in qa_chain.astream(
             {
-                "page_content": doc.page_content.replace('"', '\\"'),
-                "metadata": doc.metadata,
+                "input": generation_input,
+                "context": state.get("context", []),
+                "chat_history": chain_chat_history,
             }
-            for doc in final_state["context"]
-        ]
-        escaped_context = json.dumps({"context": serializable_context})
-        base64_context = base64.b64encode(escaped_context.encode()).decode()
-        separator = "__LLM_RESPONSE__"
-        full_response += base64_context + separator
-        yield f'0:"{base64_context}{separator}"\n'
+        ):
+            # handle both string tokens and the old dict style if present
+            if isinstance(chunk, str):
+                token = chunk
+            elif isinstance(chunk, dict) and "answer" in chunk:
+                token = chunk["answer"]
+            else:
+                # ignore unexpected chunk types
+                continue
 
-    # Append final answer
-    if final_state.get("answer"):
-        answer_chunk = final_state["answer"]
-        full_response += answer_chunk
-        escaped_chunk = answer_chunk.replace('"', '\\"').replace("\n", "\\n")
-        yield f'0:"{escaped_chunk}"\n'
+            full_response += token
+            escaped = token.replace('"', '\\"').replace("\n", "\\n")
+            yield f'0:"{escaped}"\n'
 
-    # Persist both context + answer
-    db.add_all(
-        [
-            Message(content=query, role="user", chat_id=chat_id),
-            Message(content=full_response, role="assistant", chat_id=chat_id),
-        ]
-    )
-    db.commit()
+        # 7) Persist final assistant message
+        # (context prefix + accumulated tokens)
+        bot_message.content = context_prefix + full_response
+        db.commit()
 
-    logger.info(f"[Chat {chat_id}] Messages persisted with MCP integration")
+        # 8) Send final metadata / finish signal
+        yield 'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
+
+    except Exception as e:
+        # log full traceback
+        logger.exception("stream_mcp_response failed: %s", e)
+
+        error_message = f"Error generating response: {str(e)}"
+        # Use json.dumps to safely escape the error string
+        yield f'3:{json.dumps({"error": error_message})}\n'
+
+        # Persist error as assistant message (so chat shows failure)
+        try:
+            # If bot_message exists, update it;
+            # otherwise add a new assistant message
+            bot_message.content = error_message
+            db.commit()
+        except Exception:
+            # fallback: create a new assistant message
+            db.add(
+                Message(
+                    content=error_message, role="assistant", chat_id=chat_id
+                )
+            )
+            db.commit()
+
+    finally:
+        # ensure DB connection cleaned up
+        try:
+            db.close()
+        except Exception:
+            pass
