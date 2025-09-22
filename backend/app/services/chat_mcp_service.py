@@ -48,6 +48,7 @@ async def stream_mcp_response(
     prompt_service = PromptService(db=db)
     settings_service = SystemSettingsService(db=db)
     top_k = settings_service.get_top_k()
+    bot_message = None
 
     try:
         # 1) Persist user and placeholder assistant early
@@ -101,7 +102,11 @@ async def stream_mcp_response(
 
         # 5) If context exists, stream it first (base64 + separator)
         context_prefix = ""
-        if state.get("context"):
+        if (
+            state.get("context")
+            and isinstance(state["context"], list)
+            and state["context"]
+        ):
             serializable_context = [
                 {
                     "page_content": doc.page_content.replace('"', '\\"'),
@@ -193,20 +198,20 @@ async def stream_mcp_response(
         # Use json.dumps to safely escape the error string
         yield f'3:{json.dumps({"error": error_message})}\n'
 
-        # Persist error as assistant message (so chat shows failure)
         try:
-            # If bot_message exists, update it;
-            # otherwise add a new assistant message
-            bot_message.content = error_message
-            db.commit()
-        except Exception:
-            # fallback: create a new assistant message
-            db.add(
-                Message(
+            if bot_message is not None:
+                bot_message.content = error_message
+                db.commit()
+            else:
+                # fallback: persist a new error assistant message
+                bot_message = Message(
                     content=error_message, role="assistant", chat_id=chat_id
                 )
-            )
-            db.commit()
+                db.add(bot_message)
+                db.commit()
+        except Exception:
+            # swallow secondary errors
+            pass
 
     finally:
         # ensure DB connection cleaned up
