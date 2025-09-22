@@ -8,6 +8,7 @@ from httpx import AsyncClient, ASGITransport
 from app.schemas.chat import CreateMessagePayload
 from app.api.api_v1.auth import get_current_user
 
+
 # ------------------ Fixtures ------------------
 
 
@@ -70,15 +71,12 @@ def db_mock(app: FastAPI):
 
     class FakeDB:
         def query(self, model):
-            # When PromptVersion.content is queried, return a fake prompt
-            if "PromptVersion" in str(model):
-                return FakeQuery(("stub prompt",))
-            # When Chat is queried, return fake chat
             if "Chat" in str(model):
                 return FakeQuery(fake_chat)
             return FakeQuery()
 
         def add_all(self, items): ...
+        def add(self, item): ...  # ✅ add for error fallback
         def commit(self): ...
 
     async def override_get_db():
@@ -89,49 +87,21 @@ def db_mock(app: FastAPI):
 
 
 @pytest.fixture
-def stub_mcp_server(monkeypatch):
-    async def fake_mcp_stream(*args, **kwargs):
-        yield "data: chunk1\n\n"
-        yield "data: chunk2\n\n"
+def stub_langgraph(monkeypatch):
+    """Stub out LangGraph processing so we don’t call the real engine."""
 
-    # Stub stream_mcp_response (used directly in your endpoint)
+    async def fake_astream(inputs):
+        for token in ["chunk1", "chunk2"]:
+            yield token
+
+    fake_chain = SimpleNamespace(astream=fake_astream)
+
     monkeypatch.setattr(
-        "app.services.chat_mcp_service.stream_mcp_response",
-        fake_mcp_stream,
+        "app.services.chat_mcp_service.create_stuff_documents_chain",
+        lambda **kwargs: fake_chain,
     )
 
-    # Stub workflow astream_events
-    async def fake_astream_events(initial_state, stream_mode="values"):
-        yield {
-            "event": "on_chain_stream",
-            "name": "generate",
-            "data": {"chunk": "chunk1"},
-        }
-        yield {
-            "event": "on_chain_stream",
-            "name": "generate",
-            "data": {"chunk": "chunk2"},
-        }
-
-    # Stub workflow ainvoke (final state after streaming)
-    async def fake_ainvoke(initial_state):
-        return {"answer": "stubbed final answer"}
-
-    patch_path = "app.services.chat_mcp_service.query_answering_workflow"
-    monkeypatch.setattr(
-        f"{patch_path}.astream_events",
-        fake_astream_events,
-    )
-    monkeypatch.setattr(
-        f"{patch_path}.ainvoke",
-        fake_ainvoke,
-    )
-
-    return {
-        "stream": fake_mcp_stream,
-        "astream_events": fake_astream_events,
-        "ainvoke": fake_ainvoke,
-    }
+    return {"chain": fake_chain}
 
 
 # ------------------ Test Class ------------------
@@ -142,10 +112,11 @@ def stub_mcp_server(monkeypatch):
 class TestMCPIntegrationEndpoint:
 
     async def test_integration_mcp_endpoint_success(
-        self, client, stub_mcp_server, db_mock, override_current_user
+        self, client, stub_langgraph, db_mock, override_current_user
     ):
         payload = CreateMessagePayload(
-            id="stringID", messages=[{"role": "user", "content": "Query KB"}]
+            id="stringID",
+            messages=[{"role": "user", "content": "Query KB"}],
         )
 
         response = await client.post(
@@ -154,6 +125,11 @@ class TestMCPIntegrationEndpoint:
         )
 
         assert response.status_code == 200
+
+        # Collect streaming body
         text = response.text
-        assert "chunk1" in text
-        assert "chunk2" in text
+
+        # Assert streamed chunks are present
+        assert '0:"chunk1"' in text
+        assert '0:"chunk2"' in text
+        assert 'd:{"finishReason":"stop"' in text
