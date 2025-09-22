@@ -91,14 +91,25 @@ def stub_langgraph(monkeypatch):
     """Stub out LangGraph processing so we don’t call the real engine."""
 
     async def fake_astream(inputs):
-        for token in ["chunk1", "chunk2"]:
-            yield token
+        yield "chunk1"
+        yield "chunk2"
 
     fake_chain = SimpleNamespace(astream=fake_astream)
 
+    def fake_factory(**kwargs):
+        print("✅ Using fake create_stuff_documents_chain")
+        return fake_chain
+
     monkeypatch.setattr(
         "app.services.chat_mcp_service.create_stuff_documents_chain",
-        lambda **kwargs: fake_chain,
+        fake_factory,
+        raising=False,
+    )
+
+    monkeypatch.setattr(
+        "app.api.api_v1.extended.extend_chat.create_stuff_documents_chain",
+        fake_factory,
+        raising=False,
     )
 
     return {"chain": fake_chain}
@@ -113,9 +124,19 @@ def stub_langgraph_failure(monkeypatch):
 
     fake_chain = SimpleNamespace(astream=fake_astream)
 
+    def fake_factory(**kwargs):
+        print("✅ Using fake failing create_stuff_documents_chain")
+        return fake_chain
+
     monkeypatch.setattr(
         "app.services.chat_mcp_service.create_stuff_documents_chain",
-        lambda **kwargs: fake_chain,
+        fake_factory,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "app.api.api_v1.extended.extend_chat.create_stuff_documents_chain",
+        fake_factory,
+        raising=False,
     )
 
     return {"chain": fake_chain}

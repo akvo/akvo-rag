@@ -103,8 +103,8 @@ async def create_message_mcp_integration(
         async for chunk in stream_mcp_response(
             query=last_message["content"],
             messages=messages,
-            # knowledge_base_ids=knowledge_base_ids,
-            knowledge_base_ids=[3],  # need to delete (use static for now)
+            knowledge_base_ids=knowledge_base_ids,
+            # knowledge_base_ids=[3],  # need to delete (use static for now)
             chat_id=chat_id,
             db=db,
         ):
