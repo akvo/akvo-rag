@@ -76,7 +76,7 @@ def db_mock(app: FastAPI):
             return FakeQuery()
 
         def add_all(self, items): ...
-        def add(self, item): ...  # ✅ add for error fallback
+        def add(self, item): ...
         def commit(self): ...
 
     async def override_get_db():
@@ -93,6 +93,23 @@ def stub_langgraph(monkeypatch):
     async def fake_astream(inputs):
         for token in ["chunk1", "chunk2"]:
             yield token
+
+    fake_chain = SimpleNamespace(astream=fake_astream)
+
+    monkeypatch.setattr(
+        "app.services.chat_mcp_service.create_stuff_documents_chain",
+        lambda **kwargs: fake_chain,
+    )
+
+    return {"chain": fake_chain}
+
+
+@pytest.fixture
+def stub_langgraph_failure(monkeypatch):
+    """Stub LangGraph to raise an exception during streaming."""
+
+    async def fake_astream(inputs):
+        raise RuntimeError("Simulated LangGraph failure")
 
     fake_chain = SimpleNamespace(astream=fake_astream)
 
@@ -133,3 +150,25 @@ class TestMCPIntegrationEndpoint:
         assert '0:"chunk1"' in text
         assert '0:"chunk2"' in text
         assert 'd:{"finishReason":"stop"' in text
+
+    async def test_integration_mcp_endpoint_failure(
+        self, client, stub_langgraph_failure, db_mock, override_current_user
+    ):
+        """Simulate LangGraph failure and ensure error is streamed."""
+        payload = CreateMessagePayload(
+            id="stringID",
+            messages=[{"role": "user", "content": "Bad query"}],
+        )
+
+        response = await client.post(
+            "/api/chat/1/messages/mcp_integration",
+            json=payload.model_dump(),
+        )
+
+        assert response.status_code == 200
+
+        text = response.text
+
+        # Assert error chunk is present
+        assert "3:" in text
+        assert "Error generating response" in text
