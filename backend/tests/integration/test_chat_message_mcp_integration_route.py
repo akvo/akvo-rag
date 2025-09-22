@@ -1,19 +1,18 @@
 import pytest
 import pytest_asyncio
-
-from fastapi import FastAPI
 from types import SimpleNamespace
 from httpx import AsyncClient, ASGITransport
-
+from fastapi import FastAPI
 from app.schemas.chat import CreateMessagePayload
 from app.api.api_v1.auth import get_current_user
+from app.services import chat_mcp_service
 
-
-# ------------------ Fixtures ------------------
+# ------------------ App / Client Fixtures ------------------
 
 
 @pytest.fixture
 def app() -> FastAPI:
+    """Return the FastAPI app."""
     from app.main import app
 
     return app
@@ -29,25 +28,30 @@ async def client(app: FastAPI) -> AsyncClient:
 
 
 @pytest.fixture
-def override_current_user(app):
+def override_current_user(app: FastAPI):
+    """Stub current_user dependency."""
     user = SimpleNamespace(id=1)
     app.dependency_overrides[get_current_user] = lambda: user
     yield
     app.dependency_overrides.clear()
 
 
+# ------------------ DB Fixture ------------------
+
+
 @pytest.fixture
-def db_mock(app: FastAPI):
+def stub_chat_db(app: FastAPI):
     """Provide a fake DB via dependency override."""
     from app.db.session import get_db
 
-    fake_kb = SimpleNamespace(id=3)
-    fake_chat = SimpleNamespace(id=1, user_id=1, knowledge_bases=[fake_kb])
+    class FakeMessage:
+        def __init__(self, role: str, content: str):
+            self.role = role
+            self.content = content
+
+    fake_messages = [FakeMessage("user", "Hello")]
 
     class FakeQuery:
-        def __init__(self, return_value=None):
-            self._return_value = return_value
-
         def options(self, *args, **kwargs):
             return self
 
@@ -63,133 +67,186 @@ def db_mock(app: FastAPI):
         def join(self, *args, **kwargs):
             return self
 
-        def all(self):
-            return [] if self._return_value is None else [self._return_value]
-
         def first(self):
-            return self._return_value
+            return SimpleNamespace(
+                id=1,
+                user_id=1,
+                knowledge_bases=[SimpleNamespace(id=3)],
+                messages=fake_messages,
+            )
+
+        def all(self):
+            return fake_messages
 
     class FakeDB:
         def query(self, model):
-            if "Chat" in str(model):
-                return FakeQuery(fake_chat)
             return FakeQuery()
 
-        def add_all(self, items): ...
-        def add(self, item): ...
-        def commit(self): ...
+        def add(self, obj):
+            pass
 
-    async def override_get_db():
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+
+    async def fake_get_db():
         yield FakeDB()
 
-    app.dependency_overrides[get_db] = override_get_db
-    return FakeDB()
+    app.dependency_overrides[get_db] = fake_get_db
+    yield
+    app.dependency_overrides.pop(get_db, None)
+
+
+# ------------------ MCP Streaming Fixtures ------------------
 
 
 @pytest.fixture
-def stub_langgraph(monkeypatch):
-    """Stub out LangGraph processing so we don’t call the real engine."""
+def stub_stream_mcp(monkeypatch):
+    """Stub stream_mcp_response to yield test tokens."""
 
-    async def fake_astream(inputs):
-        yield "chunk1"
-        yield "chunk2"
-
-    fake_chain = SimpleNamespace(astream=fake_astream)
-
-    def fake_factory(**kwargs):
-        print("✅ Using fake create_stuff_documents_chain")
-        return fake_chain
+    async def fake_stream_mcp_response(**kwargs):
+        for token in ["chunk1", "chunk2"]:
+            yield f'0:"{token}"\n'
+        yield 'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
 
     monkeypatch.setattr(
-        "app.services.chat_mcp_service.create_stuff_documents_chain",
-        fake_factory,
-        raising=False,
+        chat_mcp_service, "stream_mcp_response", fake_stream_mcp_response
     )
 
-    monkeypatch.setattr(
-        "app.api.api_v1.extended.extend_chat.create_stuff_documents_chain",
-        fake_factory,
-        raising=False,
-    )
 
-    return {"chain": fake_chain}
+# ------------------ System / Prompt Fixtures ------------------
 
 
 @pytest.fixture
-def stub_langgraph_failure(monkeypatch):
-    """Stub LangGraph to raise an exception during streaming."""
+def stub_system_settings(monkeypatch):
+    """Stub SystemSettingsService.get_top_k."""
+    from app.services.system_settings_service import SystemSettingsService
 
-    async def fake_astream(inputs):
-        raise RuntimeError("Simulated LangGraph failure")
+    monkeypatch.setattr(SystemSettingsService, "get_top_k", lambda self: 10)
 
-    fake_chain = SimpleNamespace(astream=fake_astream)
 
-    def fake_factory(**kwargs):
-        print("✅ Using fake failing create_stuff_documents_chain")
-        return fake_chain
+@pytest.fixture
+def stub_prompt_service(monkeypatch):
+    from app.services.prompt_service import PromptService
 
+    # Contextualize prompt stub
     monkeypatch.setattr(
-        "app.services.chat_mcp_service.create_stuff_documents_chain",
-        fake_factory,
-        raising=False,
-    )
-    monkeypatch.setattr(
-        "app.api.api_v1.extended.extend_chat.create_stuff_documents_chain",
-        fake_factory,
-        raising=False,
+        PromptService,
+        "get_full_contextualize_prompt",
+        lambda self: "stub context",
     )
 
-    return {"chain": fake_chain}
+    # QA strict prompt stub must include {context} as input variable
+    def stub_qa_strict_prompt(self, context_placeholder="{context}"):
+        # Return a string including {context} so the chain validation passes
+        return "stub system message {context} {input}"
+
+    monkeypatch.setattr(
+        PromptService,
+        "get_full_qa_strict_prompt",
+        stub_qa_strict_prompt,
+    )
 
 
-# ------------------ Test Class ------------------
+# ------------------ Stub LLM ------------------
+
+
+@pytest.fixture
+def stub_llm(monkeypatch):
+    from app.services.llm.llm_factory import LLMFactory
+    from langchain_core.runnables import Runnable
+    from types import SimpleNamespace
+
+    class FakeLLM(Runnable):
+        async def astream(self, *args, **kwargs):
+            for token in ["chunk1", "chunk2"]:
+                yield token
+
+        def invoke(self, *args, **kwargs):
+            return SimpleNamespace(content="stub query")
+
+    monkeypatch.setattr(LLMFactory, "create", lambda: FakeLLM())
+
+
+# ------------------ Integration Tests ------------------
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 class TestMCPIntegrationEndpoint:
 
-    async def test_integration_mcp_endpoint_success(
-        self, client, stub_langgraph, db_mock, override_current_user
+    async def test_success(
+        self,
+        client,
+        app,
+        override_current_user,
+        stub_chat_db,
+        stub_stream_mcp,
+        stub_system_settings,
+        stub_prompt_service,
+        stub_llm,
     ):
         payload = CreateMessagePayload(
-            id="stringID",
-            messages=[{"role": "user", "content": "Query KB"}],
+            id="stringID", messages=[{"role": "user", "content": "Query KB"}]
         )
-
         response = await client.post(
-            "/api/chat/1/messages/mcp_integration",
-            json=payload.model_dump(),
+            "/api/chat/1/messages/mcp_integration", json=payload.model_dump()
         )
-
         assert response.status_code == 200
-
-        # Collect streaming body
         text = response.text
-
-        # Assert streamed chunks are present
         assert '0:"chunk1"' in text
         assert '0:"chunk2"' in text
         assert 'd:{"finishReason":"stop"' in text
 
-    async def test_integration_mcp_endpoint_failure(
-        self, client, stub_langgraph_failure, db_mock, override_current_user
+    async def test_last_message_not_user(
+        self,
+        client,
+        app,
+        override_current_user,
+        stub_chat_db,
+        stub_system_settings,
     ):
-        """Simulate LangGraph failure and ensure error is streamed."""
         payload = CreateMessagePayload(
-            id="stringID",
-            messages=[{"role": "user", "content": "Bad query"}],
+            id="stringID", messages=[{"role": "assistant", "content": "Hello"}]
         )
-
         response = await client.post(
-            "/api/chat/1/messages/mcp_integration",
-            json=payload.model_dump(),
+            "/api/chat/1/messages/mcp_integration", json=payload.model_dump()
         )
+        assert response.status_code == 400
+        assert "Last message must be from user" in response.text
 
-        assert response.status_code == 200
+    async def test_chat_not_found(
+        self, client, app, override_current_user, stub_system_settings
+    ):
+        # Override DB to return None
+        from app.db.session import get_db
 
-        text = response.text
+        async def fake_get_db():
+            class DB:
+                def query(self, model):
+                    class Q:
+                        def options(self, *args, **kwargs):
+                            return self
 
-        # Assert error chunk is present
-        assert "3:" in text
-        assert "Error generating response" in text
+                        def filter(self, *args, **kwargs):
+                            return self
+
+                        def first(self):
+                            return None
+
+                    return Q()
+
+            yield DB()
+
+        app.dependency_overrides[get_db] = fake_get_db
+
+        payload = CreateMessagePayload(
+            id="stringID", messages=[{"role": "user", "content": "Hello"}]
+        )
+        response = await client.post(
+            "/api/chat/1/messages/mcp_integration", json=payload.model_dump()
+        )
+        assert response.status_code == 404
+        assert "Chat not found" in response.text
