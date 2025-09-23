@@ -12,7 +12,6 @@ from app.schemas.chat import (
 from app.api.api_v1.auth import get_current_user
 
 # from fastapi import HTTPException
-# from app.models.knowledge import KnowledgeBase
 # from sqlalchemy import or_
 # from app.api.api_v1.extended.util.util_user import get_super_user_ids
 

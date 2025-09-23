@@ -6,7 +6,6 @@ import logging
 from app.db.session import get_db
 from app.models.user import User
 from app.core.security import get_current_user
-from app.models.knowledge import KnowledgeBase, Document, ProcessingTask
 from app.schemas.knowledge import KnowledgeBaseResponse, DocumentResponse
 
 from sqlalchemy import or_
