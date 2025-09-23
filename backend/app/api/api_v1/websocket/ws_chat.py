@@ -11,14 +11,42 @@ from sqlalchemy import or_
 from pydantic import BaseModel, Field, ValidationError
 
 from app.db.session import SessionLocal
-from app.models.knowledge import KnowledgeBase
 from app.models.user import User
 from app.models.chat import Chat
 from app.api.api_v1.extended.util.util_user import get_super_user_ids
-from app.services.chat_service import generate_response
+
 
 # TODO :: NEED TO IMPLEMENT GENERATE RESPONSE FROM MCP HERE
 # AND REMOVE KNOWLEDGE BASE RELATED MODEL
+
+# TODO :: DELETE BELOW
+# from app.services.chat_service import generate_response
+# from app.models.knowledge import KnowledgeBase
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy.dialects.mysql import LONGTEXT
+from app.models.base import Base, TimestampMixin
+
+
+class KnowledgeBase(Base, TimestampMixin):
+    __tablename__ = "knowledge_bases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(LONGTEXT)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    # 🚧 NOTE:
+    # This is a placeholder "fake" model.
+    # It exists only so old imports/references don’t crash.
+    # The corresponding table will be dropped by migration.
+    # Remove once all code paths using KnowledgeBase are cleaned up.
+
+
+# EOL DELETE
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -52,9 +80,7 @@ async def safe_send_json(websocket: WebSocket, data: dict):
 # -------------------------------------
 # Auth + Validation
 # -------------------------------------
-async def authenticate_and_get_user(
-    websocket: WebSocket, db: Session
-) -> tuple[User, KnowledgeBase]:
+async def authenticate_and_get_user(websocket: WebSocket, db: Session):
     init_data = await websocket.receive_json()
 
     if init_data.get("type") != "auth":
@@ -253,24 +279,26 @@ async def websocket_chat(websocket: WebSocket):
             )
             assistant_response = ""
 
-            async for chunk in generate_response(
-                query=last_message["content"],
-                messages={"messages": messages},
-                knowledge_base_ids=knowledge_base_ids,
-                chat_id=chat_id,
-                generate_last_n_messages=True,
-                db=db,
-            ):
-                if websocket.client_state != WebSocketState.CONNECTED:
-                    logger.warning(
-                        "WebSocket closed during response streaming"
-                    )
-                    break
+            # TODO :: USE MCP IMPLEMENTATION
+            # async for chunk in generate_response(
+            #     query=last_message["content"],
+            #     messages={"messages": messages},
+            #     knowledge_base_ids=knowledge_base_ids,
+            #     chat_id=chat_id,
+            #     generate_last_n_messages=True,
+            #     db=db,
+            # ):
+            #     if websocket.client_state != WebSocketState.CONNECTED:
+            #         logger.warning(
+            #             "WebSocket closed during response streaming"
+            #         )
+            #         break
 
-                assistant_response += chunk
-                await safe_send_json(
-                    websocket, {"type": "response_chunk", "content": chunk}
-                )
+            #     assistant_response += chunk
+            #     await safe_send_json(
+            #         websocket, {"type": "response_chunk", "content": chunk}
+            #     )
+            # EOL MCP IMPLEMENTATION
 
             await safe_send_json(
                 websocket,

@@ -13,7 +13,6 @@ from app.schemas.chat import (
     MessageResponse,
 )
 from app.api.api_v1.auth import get_current_user
-from app.services.chat_service import generate_response
 
 router = APIRouter()
 
