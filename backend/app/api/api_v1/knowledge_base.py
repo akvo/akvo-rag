@@ -30,12 +30,6 @@ from app.schemas.knowledge import (
     DocumentResponse,
     PreviewRequest,
 )
-from app.services.document_processor import (
-    process_document_background,
-    upload_document,
-    preview_document,
-    PreviewResult,
-)
 from app.core.config import settings
 from app.core.minio import get_minio_client
 from minio.error import MinioException
@@ -385,7 +379,7 @@ async def preview_kb_documents(
     preview_request: PreviewRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Dict[int, PreviewResult]:
+):
     """
     Preview multiple documents' chunks.
     """

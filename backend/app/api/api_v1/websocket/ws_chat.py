@@ -17,6 +17,9 @@ from app.models.chat import Chat
 from app.api.api_v1.extended.util.util_user import get_super_user_ids
 from app.services.chat_service import generate_response
 
+# TODO :: NEED TO IMPLEMENT GENERATE RESPONSE FROM MCP HERE
+# AND REMOVE KNOWLEDGE BASE RELATED MODEL
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
