@@ -1,23 +1,13 @@
-import hashlib
-from typing import List, Any, Dict
+from typing import List, Any
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     UploadFile,
-    File,
     BackgroundTasks,
-    Query,
 )
 from sqlalchemy.orm import Session
-from langchain_chroma import Chroma
-from sqlalchemy import text
 import logging
-from datetime import datetime, timedelta
 from pydantic import BaseModel
-from sqlalchemy.orm import selectinload
-import time
-import asyncio
 
 from app.db.session import get_db
 from app.models.user import User
@@ -28,11 +18,6 @@ from app.schemas.knowledge import (
     KnowledgeBaseUpdate,
     PreviewRequest,
 )
-from app.core.config import settings
-from app.core.minio import get_minio_client
-from minio.error import MinioException
-from app.services.vector_store import VectorStoreFactory
-from app.services.embedding.embedding_factory import EmbeddingsFactory
 from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
 router = APIRouter()
