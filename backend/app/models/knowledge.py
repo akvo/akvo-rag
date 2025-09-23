@@ -17,6 +17,7 @@ from datetime import datetime
 import sqlalchemy as sa
 
 
+# TODO :: DELETE THIS MODEL
 class KnowledgeBase(Base, TimestampMixin):
     __tablename__ = "knowledge_bases"
 

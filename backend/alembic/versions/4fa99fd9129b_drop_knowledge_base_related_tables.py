@@ -4,6 +4,16 @@ Revision ID: 4fa99fd9129b
 Revises: f6f5943ad151
 Create Date: 2025-09-23 11:04:22.646338
 
+⚠️ WARNING: Destructive migration DATA LOSS
+
+This migration will:
+- TRUNCATE chat_knowledge_bases, messages, and chats (permanent data loss)
+- DROP all knowledge base related tables (knowledge_bases, documents
+    document_uploads, processing_tasks, document_chunks)
+
+Downgrade will recreate the dropped tables, but chat/message data
+cannot be restored after truncation.
+
 """
 
 from typing import Sequence, Union
@@ -20,6 +30,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # --- Step 1: Delete and reset chat-related tables ---
+    # Delete data while respecting FKs
+    op.execute("DELETE FROM chat_knowledge_bases;")
+    op.execute("DELETE FROM messages;")
+    op.execute("DELETE FROM chats;")
+
+    # Reset AUTO_INCREMENT counters
+    op.execute("ALTER TABLE messages AUTO_INCREMENT = 1;")
+    op.execute("ALTER TABLE chats AUTO_INCREMENT = 1;")
+
+    # --- Step 2: Drop FKs and tables in dependency order ---
+
     # --- document_chunks ---
     op.drop_constraint(
         "document_chunks_ibfk_1", "document_chunks", type_="foreignkey"
@@ -225,3 +247,5 @@ def downgrade() -> None:
             ["document_id"], ["documents.id"], name="document_chunks_ibfk_2"
         ),
     )
+
+    # NOTE: chats/messages/chat_knowledge_bases remain empty after downgrade

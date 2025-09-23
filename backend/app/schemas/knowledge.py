@@ -2,15 +2,20 @@ from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel
 
+
+# TODO :: CHECK IF WE ALSO NEED TO DELETE THIS SCHEMA
 class KnowledgeBaseBase(BaseModel):
     name: str
     description: Optional[str] = None
 
+
 class KnowledgeBaseCreate(KnowledgeBaseBase):
     pass
 
+
 class KnowledgeBaseUpdate(KnowledgeBaseBase):
     pass
+
 
 class DocumentBase(BaseModel):
     file_name: str
@@ -19,8 +24,10 @@ class DocumentBase(BaseModel):
     file_size: int
     content_type: str
 
+
 class DocumentCreate(DocumentBase):
     knowledge_base_id: int
+
 
 class DocumentUploadBase(BaseModel):
     file_name: str
@@ -31,23 +38,28 @@ class DocumentUploadBase(BaseModel):
     status: str = "pending"
     error_message: Optional[str] = None
 
+
 class DocumentUploadCreate(DocumentUploadBase):
     knowledge_base_id: int
+
 
 class DocumentUploadResponse(DocumentUploadBase):
     id: int
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
+
 
 class ProcessingTaskBase(BaseModel):
     status: str
     error_message: Optional[str] = None
 
+
 class ProcessingTaskCreate(ProcessingTaskBase):
     document_id: int
     knowledge_base_id: int
+
 
 class ProcessingTask(ProcessingTaskBase):
     id: int
@@ -59,6 +71,7 @@ class ProcessingTask(ProcessingTaskBase):
     class Config:
         from_attributes = True
 
+
 class DocumentResponse(DocumentBase):
     id: int
     knowledge_base_id: int
@@ -68,6 +81,7 @@ class DocumentResponse(DocumentBase):
 
     class Config:
         from_attributes = True
+
 
 class KnowledgeBaseResponse(KnowledgeBaseBase):
     id: int
@@ -79,7 +93,8 @@ class KnowledgeBaseResponse(KnowledgeBaseBase):
     class Config:
         from_attributes = True
 
+
 class PreviewRequest(BaseModel):
     document_ids: List[int]
     chunk_size: int = 1000
-    chunk_overlap: int = 200 
+    chunk_overlap: int = 200
