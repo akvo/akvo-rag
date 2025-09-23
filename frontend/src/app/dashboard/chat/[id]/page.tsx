@@ -57,7 +57,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     isLoading,
     setMessages,
   } = useChat({
-    api: `/api/chat/${params.id}/messages`,
+    api: `/api/chat/${params.id}/messages/mcp_integration`,
     headers: {
       Authorization: `Bearer ${
         typeof window !== "undefined"
