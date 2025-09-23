@@ -25,9 +25,7 @@ from app.core.security import get_current_user
 
 from app.schemas.knowledge import (
     KnowledgeBaseCreate,
-    KnowledgeBaseResponse,
     KnowledgeBaseUpdate,
-    DocumentResponse,
     PreviewRequest,
 )
 from app.core.config import settings
@@ -133,7 +131,7 @@ async def create_knowledge_base(
 # EOL TODO
 
 
-@router.put("/{kb_id}", response_model=KnowledgeBaseResponse)
+@router.put("/{kb_id}")
 async def update_knowledge_base(
     *,
     db: Session = Depends(get_db),

@@ -6,7 +6,6 @@ import logging
 from app.db.session import get_db
 from app.models.user import User
 from app.core.security import get_current_user
-from app.schemas.knowledge import KnowledgeBaseResponse, DocumentResponse
 
 from sqlalchemy import or_
 
@@ -18,8 +17,10 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-class ExtendKnowledgeBaseResponse(KnowledgeBaseResponse):
-    is_superuser: Optional[bool] = False
+# TODO :: DELETE BELOW
+# class ExtendKnowledgeBaseResponse(KnowledgeBaseResponse):
+#     is_superuser: Optional[bool] = False
+# EOL DELETE
 
 
 @router.get(
@@ -209,7 +210,7 @@ async def get_processing_tasks(
     return result
 
 
-@router.get("/{kb_id}/documents/{doc_id}", response_model=DocumentResponse)
+@router.get("/{kb_id}/documents/{doc_id}")
 async def get_document(
     *,
     db: Session = Depends(get_db),
