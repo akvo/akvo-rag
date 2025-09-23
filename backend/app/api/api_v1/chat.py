@@ -1,74 +1,14 @@
-from typing import List, Any
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from app.db.session import get_db
 from app.models.user import User
-from app.models.chat import Chat, Message
-from app.schemas.chat import (
-    ChatCreate,
-    ChatResponse,
-    ChatUpdate,
-    MessageCreate,
-    MessageResponse,
-)
+from app.models.chat import Chat
+from app.schemas.chat import ChatResponse
 from app.api.api_v1.auth import get_current_user
 
 router = APIRouter()
-
-
-# TODO :: DELETE BELOW
-# @router.post("/", response_model=ChatResponse)
-# def create_chat(
-#     *,
-#     db: Session = Depends(get_db),
-#     chat_in: ChatCreate,
-#     current_user: User = Depends(get_current_user)
-# ) -> Any:
-#     # Verify knowledge bases exist and belong to user
-#     knowledge_bases = (
-#         db.query(KnowledgeBase)
-#         .filter(
-#             KnowledgeBase.id.in_(chat_in.knowledge_base_ids),
-#             KnowledgeBase.user_id == current_user.id,
-#         )
-#         .all()
-#     )
-#     if len(knowledge_bases) != len(chat_in.knowledge_base_ids):
-#         raise HTTPException(
-#             status_code=400, detail="One or more knowledge bases not found"
-#         )
-
-#     chat = Chat(
-#         title=chat_in.title,
-#         user_id=current_user.id,
-#     )
-#     chat.knowledge_bases = knowledge_bases
-
-#     db.add(chat)
-#     db.commit()
-#     db.refresh(chat)
-#     return chat
-# EOL DELETE
-
-
-# TODO :: DELETE BELOW
-# @router.get("/", response_model=List[ChatResponse])
-# def get_chats(
-#     db: Session = Depends(get_db),
-#     current_user: User = Depends(get_current_user),
-#     skip: int = 0,
-#     limit: int = 100,
-# ) -> Any:
-#     chats = (
-#         db.query(Chat)
-#         .filter(Chat.user_id == current_user.id)
-#         .offset(skip)
-#         .limit(limit)
-#         .all()
-#     )
-#     return chats
-# EOL DELETE
 
 
 @router.get("/{chat_id}", response_model=ChatResponse)
@@ -116,14 +56,15 @@ async def create_message(
     knowledge_base_ids = [kb.id for kb in chat.knowledge_bases]
 
     async def response_stream():
-        async for chunk in generate_response(
-            query=last_message["content"],
-            messages=messages,
-            knowledge_base_ids=knowledge_base_ids,
-            chat_id=chat_id,
-            db=db,
-        ):
-            yield chunk
+        # async for chunk in generate_response(
+        #     query=last_message["content"],
+        #     messages=messages,
+        #     knowledge_base_ids=knowledge_base_ids,
+        #     chat_id=chat_id,
+        #     db=db,
+        # ):
+        #     yield chunk
+        return "OK"
 
     return StreamingResponse(
         response_stream(),
