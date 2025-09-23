@@ -56,21 +56,6 @@ async def create_knowledge_base(
     """
     Create new knowledge base.
     """
-    # TODO :: DELETE BELOW
-    # kb = KnowledgeBase(
-    #     name=kb_in.name,
-    #     description=kb_in.description,
-    #     user_id=current_user.id
-    # )
-    # db.add(kb)
-    # db.commit()
-    # db.refresh(kb)
-    # logger.info(
-    #     f"Knowledge base created: {kb.name} for user {current_user.id}"
-    # )
-    # return kb
-    # EOL DELETE
-
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     result = await kb_mcp_endpoint_service.create_kb(data=kb_in.model_dump())
     return result
@@ -142,31 +127,6 @@ async def update_knowledge_base(
     """
     Update knowledge base.
     """
-    # TODO :: DELETE BELOW
-    # kb = (
-    #     db.query(KnowledgeBase)
-    #     .filter(
-    #         KnowledgeBase.id == kb_id,
-    #         KnowledgeBase.user_id == current_user.id
-    #     )
-    #     .first()
-    # )
-
-    # if not kb:
-    #     raise HTTPException(status_code=404, detail="Knowledge base not found")
-
-    # for field, value in kb_in.dict(exclude_unset=True).items():
-    #     setattr(kb, field, value)
-
-    # db.add(kb)
-    # db.commit()
-    # db.refresh(kb)
-    # logger.info(
-    #     f"Knowledge base updated: {kb.name} for user {current_user.id}"
-    # )
-    # return kb
-    # EOL DELETE
-
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     result = await kb_mcp_endpoint_service.update_kb(
         kb_id=kb_id, data=kb_in.model_dump()
@@ -184,84 +144,6 @@ async def delete_knowledge_base(
     """
     Delete knowledge base and all associated resources.
     """
-    # TODO :: DELETE BELOW
-    # logger = logging.getLogger(__name__)
-
-    # kb = (
-    #     db.query(KnowledgeBase)
-    #     .filter(
-    #         KnowledgeBase.id == kb_id, KnowledgeBase.user_id == current_user.id
-    #     )
-    #     .first()
-    # )
-    # if not kb:
-    #     raise HTTPException(status_code=404, detail="Knowledge base not found")
-
-    # try:
-    #     # Get all document file paths before deletion
-    #     document_paths = [doc.file_path for doc in kb.documents]
-
-    #     # Initialize services
-    #     minio_client = get_minio_client()
-    #     embeddings = EmbeddingsFactory.create()
-
-    #     vector_store = VectorStoreFactory.create(
-    #         store_type=settings.VECTOR_STORE_TYPE,
-    #         collection_name=f"kb_{kb_id}",
-    #         embedding_function=embeddings,
-    #     )
-
-    #     # Clean up external resources first
-    #     cleanup_errors = []
-
-    #     # 1. Clean up MinIO files
-    #     try:
-    #         # Delete all objects with prefix kb_{kb_id}/
-    #         objects = minio_client.list_objects(
-    #             settings.MINIO_BUCKET_NAME, prefix=f"kb_{kb_id}/"
-    #         )
-    #         for obj in objects:
-    #             minio_client.remove_object(
-    #                 settings.MINIO_BUCKET_NAME, obj.object_name
-    #             )
-    #         logger.info(f"Cleaned up MinIO files for knowledge base {kb_id}")
-    #     except MinioException as e:
-    #         cleanup_errors.append(f"Failed to clean up MinIO files: {str(e)}")
-    #         logger.error(f"MinIO cleanup error for kb {kb_id}: {str(e)}")
-
-    #     # 2. Clean up vector store
-    #     try:
-    #         vector_store._store.delete_collection(f"kb_{kb_id}")
-    #         logger.info(f"Cleaned up vector store for knowledge base {kb_id}")
-    #     except Exception as e:
-    #         cleanup_errors.append(f"Failed to clean up vector store: {str(e)}")
-    #         logger.error(
-    #             f"Vector store cleanup error for kb {kb_id}: {str(e)}"
-    #         )
-
-    #     # Finally, delete database records in a single transaction
-    #     db.delete(kb)
-    #     db.commit()
-
-    #     # Report any cleanup errors in the response
-    #     if cleanup_errors:
-    #         return {
-    #             "message": "Knowledge base deleted with cleanup warnings",
-    #             "warnings": cleanup_errors,
-    #         }
-
-    #     return {
-    #         "message": "Knowledge base and all associated resources deleted successfully"
-    #     }
-    # except Exception as e:
-    #     db.rollback()
-    #     logger.error(f"Failed to delete knowledge base {kb_id}: {str(e)}")
-    #     raise HTTPException(
-    #         status_code=500,
-    #         detail=f"Failed to delete knowledge base: {str(e)}",
-    #     )
-    # EOL DELETE
-
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     result = await kb_mcp_endpoint_service.delete_kb(kb_id=kb_id)
     return result
@@ -278,92 +160,6 @@ async def upload_kb_documents(
     """
     Upload multiple documents to MinIO.
     """
-    # TODO :: DELETE BELOW
-    # kb = (
-    #     db.query(KnowledgeBase)
-    #     .filter(
-    #         KnowledgeBase.id == kb_id, KnowledgeBase.user_id == current_user.id
-    #     )
-    #     .first()
-    # )
-    # if not kb:
-    #     raise HTTPException(status_code=404, detail="Knowledge base not found")
-
-    # results = []
-    # for file in files:
-    #     # 1. 计算文件 hash
-    #     file_content = await file.read()
-    #     file_hash = hashlib.sha256(file_content).hexdigest()
-
-    #     # 2. 检查是否存在完全相同的文件（名称和hash都相同）
-    #     existing_document = (
-    #         db.query(Document)
-    #         .filter(
-    #             Document.file_name == file.filename,
-    #             Document.file_hash == file_hash,
-    #             Document.knowledge_base_id == kb_id,
-    #         )
-    #         .first()
-    #     )
-
-    #     if existing_document:
-    #         # 完全相同的文件，直接返回
-    #         results.append(
-    #             {
-    #                 "document_id": existing_document.id,
-    #                 "file_name": existing_document.file_name,
-    #                 "status": "exists",
-    #                 "message": "文件已存在且已处理完成",
-    #                 "skip_processing": True,
-    #             }
-    #         )
-    #         continue
-
-    #     # 3. 上传到临时目录
-    #     temp_path = f"kb_{kb_id}/temp/{file.filename}"
-    #     await file.seek(0)
-    #     try:
-    #         minio_client = get_minio_client()
-    #         file_size = len(file_content)  # 使用之前读取的文件内容长度
-    #         minio_client.put_object(
-    #             bucket_name=settings.MINIO_BUCKET_NAME,
-    #             object_name=temp_path,
-    #             data=file.file,
-    #             length=file_size,  # 指定文件大小
-    #             content_type=file.content_type,
-    #         )
-    #     except MinioException as e:
-    #         logger.error(f"Failed to upload file to MinIO: {str(e)}")
-    #         raise HTTPException(
-    #             status_code=500, detail="Failed to upload file"
-    #         )
-
-    #     # 4. 创建上传记录
-    #     upload = DocumentUpload(
-    #         knowledge_base_id=kb_id,
-    #         file_name=file.filename,
-    #         file_hash=file_hash,
-    #         file_size=len(file_content),
-    #         content_type=file.content_type,
-    #         temp_path=temp_path,
-    #     )
-    #     db.add(upload)
-    #     db.commit()
-    #     db.refresh(upload)
-
-    #     results.append(
-    #         {
-    #             "upload_id": upload.id,
-    #             "file_name": file.filename,
-    #             "temp_path": temp_path,
-    #             "status": "pending",
-    #             "skip_processing": False,
-    #         }
-    #     )
-
-    # return results
-    # EOL DELETE
-
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     result = await kb_mcp_endpoint_service.upload_documents(
         kb_id=kb_id, files=files
@@ -381,51 +177,6 @@ async def preview_kb_documents(
     """
     Preview multiple documents' chunks.
     """
-    # TODO :: DELETE BELOW
-    # results = {}
-    # for doc_id in preview_request.document_ids:
-    #     document = (
-    #         db.query(Document)
-    #         .join(KnowledgeBase)
-    #         .filter(
-    #             Document.id == doc_id,
-    #             Document.knowledge_base_id == kb_id,
-    #             KnowledgeBase.user_id == current_user.id,
-    #         )
-    #         .first()
-    #     )
-
-    #     if document:
-    #         file_path = document.file_path
-    #     else:
-    #         upload = (
-    #             db.query(DocumentUpload)
-    #             .join(KnowledgeBase)
-    #             .filter(
-    #                 DocumentUpload.id == doc_id,
-    #                 DocumentUpload.knowledge_base_id == kb_id,
-    #                 KnowledgeBase.user_id == current_user.id,
-    #             )
-    #             .first()
-    #         )
-
-    #         if not upload:
-    #             raise HTTPException(
-    #                 status_code=404, detail=f"Document {doc_id} not found"
-    #             )
-
-    #         file_path = upload.temp_path
-
-    #     preview = await preview_document(
-    #         file_path,
-    #         chunk_size=preview_request.chunk_size,
-    #         chunk_overlap=preview_request.chunk_overlap,
-    #     )
-    #     results[doc_id] = preview
-
-    # return results
-    # EOL DELETE
-
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     result = await kb_mcp_endpoint_service.preview_documents(
         kb_id=kb_id, preview_request=preview_request.model_dump()
@@ -444,102 +195,11 @@ async def process_kb_documents(
     """
     Process multiple documents asynchronously.
     """
-    # TODO :: DELETE BELOW
-    # start_time = time.time()
-
-    # kb = (
-    #     db.query(KnowledgeBase)
-    #     .filter(
-    #         KnowledgeBase.id == kb_id, KnowledgeBase.user_id == current_user.id
-    #     )
-    #     .first()
-    # )
-
-    # if not kb:
-    #     raise HTTPException(status_code=404, detail="Knowledge base not found")
-
-    # task_info = []
-    # upload_ids = []
-
-    # for result in upload_results:
-    #     if result.get("skip_processing"):
-    #         continue
-    #     upload_ids.append(result["upload_id"])
-
-    # if not upload_ids:
-    #     return {"tasks": []}
-
-    # uploads = (
-    #     db.query(DocumentUpload)
-    #     .filter(DocumentUpload.id.in_(upload_ids))
-    #     .all()
-    # )
-    # uploads_dict = {upload.id: upload for upload in uploads}
-
-    # all_tasks = []
-    # for upload_id in upload_ids:
-    #     upload = uploads_dict.get(upload_id)
-    #     if not upload:
-    #         continue
-
-    #     task = ProcessingTask(
-    #         document_upload_id=upload_id,
-    #         knowledge_base_id=kb_id,
-    #         status="pending",
-    #     )
-    #     all_tasks.append(task)
-
-    # db.add_all(all_tasks)
-    # db.commit()
-
-    # for task in all_tasks:
-    #     db.refresh(task)
-
-    # task_data = []
-    # for i, upload_id in enumerate(upload_ids):
-    #     if i < len(all_tasks):
-    #         task = all_tasks[i]
-    #         upload = uploads_dict.get(upload_id)
-
-    #         task_info.append({"upload_id": upload_id, "task_id": task.id})
-
-    #         if upload:
-    #             task_data.append(
-    #                 {
-    #                     "task_id": task.id,
-    #                     "upload_id": upload_id,
-    #                     "temp_path": upload.temp_path,
-    #                     "file_name": upload.file_name,
-    #                 }
-    #             )
-
-    # background_tasks.add_task(add_processing_tasks_to_queue, task_data, kb_id)
-
-    # return {"tasks": task_info}
-    # EOL DELETE
-
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     result = await kb_mcp_endpoint_service.process_documents(
         kb_id=kb_id, upload_results=upload_results
     )
     return result
-
-
-# TODO :: DELETE BELOW
-# async def add_processing_tasks_to_queue(task_data, kb_id):
-#     """Helper function to add document processing tasks to the queue without blocking the main response."""
-#     for data in task_data:
-#         asyncio.create_task(
-#             process_document_background(
-#                 data["temp_path"],
-#                 data["file_name"],
-#                 kb_id,
-#                 data["task_id"],
-#                 None,
-#             )
-#         )
-#     logger.info(f"Added {len(task_data)} document processing tasks to queue")
-# EOL DELETE
 
 
 @router.post("/cleanup")
@@ -550,33 +210,6 @@ async def cleanup_temp_files(
     """
     Clean up expired temporary files.
     """
-    # TODO :: DELETE BELOW
-    # expired_time = datetime.utcnow() - timedelta(hours=24)
-    # expired_uploads = (
-    #     db.query(DocumentUpload)
-    #     .filter(DocumentUpload.created_at < expired_time)
-    #     .all()
-    # )
-
-    # minio_client = get_minio_client()
-    # for upload in expired_uploads:
-    #     try:
-    #         minio_client.remove_object(
-    #             bucket_name=settings.MINIO_BUCKET_NAME,
-    #             object_name=upload.temp_path,
-    #         )
-    #     except MinioException as e:
-    #         logger.error(
-    #             f"Failed to delete temp file {upload.temp_path}: {str(e)}"
-    #         )
-
-    #     db.delete(upload)
-
-    # db.commit()
-
-    # return {"message": f"Cleaned up {len(expired_uploads)} expired uploads"}
-    # EOL DELETE
-
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     result = await kb_mcp_endpoint_service.cleanup_temp_files()
     return result
@@ -675,51 +308,6 @@ async def test_retrieval(
     """
     Test retrieval quality for a given query against a knowledge base.
     """
-    # TODO :: DELETE BELOW
-    # try:
-    #     kb = (
-    #         db.query(KnowledgeBase)
-    #         .filter(
-    #             KnowledgeBase.id == request.kb_id,
-    #             KnowledgeBase.user_id == current_user.id,
-    #         )
-    #         .first()
-    #     )
-
-    #     if not kb:
-    #         raise HTTPException(
-    #             status_code=404,
-    #             detail=f"Knowledge base {request.kb_id} not found",
-    #         )
-
-    #     embeddings = EmbeddingsFactory.create()
-
-    #     vector_store = VectorStoreFactory.create(
-    #         store_type=settings.VECTOR_STORE_TYPE,
-    #         collection_name=f"kb_{request.kb_id}",
-    #         embedding_function=embeddings,
-    #     )
-
-    #     results = vector_store.similarity_search_with_score(
-    #         request.query, k=request.top_k
-    #     )
-
-    #     response = []
-    #     for doc, score in results:
-    #         response.append(
-    #             {
-    #                 "content": doc.page_content,
-    #                 "metadata": doc.metadata,
-    #                 "score": float(score),
-    #             }
-    #         )
-
-    #     return {"results": response}
-
-    # except Exception as e:
-    #     raise HTTPException(status_code=500, detail=str(e))
-    # EOL DELETE
-
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     result = await kb_mcp_endpoint_service.test_retrieval(
         kb_id=request.kb_id,
