@@ -30,6 +30,9 @@ if [ "$ENVIRONMENT" = "development" ]; then
     echo "Starting application in development mode..."
     uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*" --reload
 else
+    echo "Running MCP discovery manager..."
+    python mcp_clients/mcp_discovery_manager.py
+    
     echo "Starting application in production mode..."
     uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*"
 fi
