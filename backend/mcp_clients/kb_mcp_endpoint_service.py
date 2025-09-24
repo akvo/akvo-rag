@@ -1,10 +1,12 @@
-import json
 import asyncio
+import logging
 
 from typing import Any, Dict, List, Optional
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException, UploadFile, status
 import httpx
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class KnowledgeBaseMCPEndpointService:
@@ -25,90 +27,125 @@ class KnowledgeBaseMCPEndpointService:
         data: Optional[dict] = None,
         params: Optional[dict] = None,
         files: Optional[List[tuple]] = None,
+        timeout: float = 30.0,
+        retries: int = 3,
+        backoff_factor: float = 1.0,
     ) -> Any:
         """
-        Generic async request to MCP.
+        Generic async request to MCP with retries and error handling.
         Handles JSON body, query params, or multipart file uploads.
         """
+
         url = f"{self.base_url}/api/v1/knowledge-base{endpoint}"
+        request_kwargs = {
+            "headers": self.headers,
+            "params": params,
+            "timeout": timeout,
+        }
 
-        async with httpx.AsyncClient() as client:
-            request_kwargs = {"headers": self.headers, "params": params}
-            if files:
-                request_kwargs["files"] = files
-            elif data:
-                request_kwargs["json"] = data
+        if files:
+            request_kwargs["files"] = files
+        elif data:
+            request_kwargs["json"] = data
 
-            response = await client.request(method, url, **request_kwargs)
+        last_exception: Optional[Exception] = None
 
-        if response.status_code >= 400:
+        for attempt in range(retries):
             try:
-                detail = response.json().get("detail", response.text)
-            except json.JSONDecodeError:
-                detail = response.text
-            raise HTTPException(
-                status_code=response.status_code, detail=detail
-            )
+                async with httpx.AsyncClient() as client:
+                    response = await client.request(
+                        method, url, **request_kwargs
+                    )
 
-        return response.json() if response.content else None
+                if response.is_error:
+                    try:
+                        detail = response.json().get("detail", response.text)
+                    except Exception:
+                        detail = response.text
+
+                    logger.warning(
+                        f"MCP error (status={response.status_code}) "
+                        f"for {method} {url}: {detail}"
+                    )
+
+                    # Retry only for transient errors
+                    if (
+                        response.status_code in (502, 503, 504)
+                        and attempt < retries - 1
+                    ):
+                        await asyncio.sleep(backoff_factor * (2**attempt))
+                        continue
+
+                    raise HTTPException(
+                        status_code=response.status_code,
+                        detail=detail,
+                    )
+
+                return response.json() if response.content else None
+
+            except httpx.TimeoutException as e:
+                last_exception = e
+                logger.error(f"Timeout calling {method} {url}: {e}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(backoff_factor * (2**attempt))
+                    continue
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail="Upstream MCP server did not respond in time.",
+                )
+            except httpx.RequestError as e:
+                last_exception = e
+                logger.error(f"Request error calling {method} {url}: {e}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(backoff_factor * (2**attempt))
+                    continue
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Could not connect to MCP server.",
+                )
+
+        # If we exhaust retries without raising inside the loop
+        if last_exception:
+            ex_msg = f"Request failed after {retries}"
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"{ex_msg} attempts: {last_exception}",
+            )
 
     # ---- Knowledge Base CRUD ----
     async def create_kb(self, data: dict) -> Dict[str, Any]:
-        """
-        Create new knowledge base.
-        """
         return await self._request("POST", "", data=data)
 
     async def list_kbs(
         self, skip: int = 0, limit: int = 100
     ) -> List[Dict[str, Any]]:
-        """
-        Retrieve knowledge bases from KB MCP Server
-        """
         return await self._request(
             "GET", "", params={"skip": skip, "limit": limit}
         )
 
     async def get_kb(self, kb_id: int) -> Dict[str, Any]:
-        """
-        Get knowledge base by ID.
-        """
         return await self._request("GET", f"/{kb_id}")
 
     async def update_kb(self, kb_id: int, data: dict) -> Dict[str, Any]:
-        """
-        Update knowledge base.
-        """
         return await self._request("PUT", f"/{kb_id}", data=data)
 
     async def delete_kb(self, kb_id: int) -> Dict[str, Any]:
-        """
-        Delete knowledge base and all associated resources.
-        """
         return await self._request("DELETE", f"/{kb_id}")
 
     # ---- Document related ----
     async def get_document(self, kb_id: int, doc_id: int) -> Dict[str, Any]:
-        """
-        Get document details by ID.
-        """
         return await self._request("GET", f"/{kb_id}/documents/{doc_id}")
 
     async def upload_documents(
         self, kb_id: int, files: List[UploadFile]
     ) -> List[Dict[str, Any]]:
-        """
-        Upload multiple documents to MCP.
-        Sends as multipart/form-data.
-        """
         file_payload = []
         for f in files:
-            content = await f.read()  # Read file bytes for httpx
+            content = await f.read()
             file_payload.append(
                 ("files", (f.filename, content, f.content_type))
             )
-            await f.seek(0)  # Reset pointer so MCP can read UploadFile again
-
+            await f.seek(0)
         return await self._request(
             "POST", f"/{kb_id}/documents/upload", files=file_payload
         )
@@ -116,9 +153,6 @@ class KnowledgeBaseMCPEndpointService:
     async def preview_documents(
         self, kb_id: int, preview_request: dict
     ) -> Dict[int, Any]:
-        """
-        Preview multiple documents' chunks.
-        """
         return await self._request(
             "POST", f"/{kb_id}/documents/preview", data=preview_request
         )
@@ -126,23 +160,14 @@ class KnowledgeBaseMCPEndpointService:
     async def process_documents(
         self, kb_id: int, upload_results: List[dict]
     ) -> Dict[str, Any]:
-        """
-        Process multiple documents asynchronously.
-        """
         return await self._request(
             "POST", f"/{kb_id}/documents/process", data=upload_results
         )
 
     # ---- Processing tasks ----
-    # ---- Fire-and-forget version ----
     async def get_processing_tasks(
         self, kb_id: int, task_ids: List[int]
     ) -> Dict[int, dict]:
-        """
-        Get status of multiple processing tasks for a knowledge base.
-        task_ids is a list of integers;
-        MCP expects comma-separated query param.
-        """
         task_ids_str = ",".join(str(tid) for tid in task_ids)
         params = {"task_ids": task_ids_str}
 
@@ -151,13 +176,13 @@ class KnowledgeBaseMCPEndpointService:
                 await self._request(
                     "GET", f"/{kb_id}/documents/tasks", params=params
                 )
-            except Exception:
-                # swallow errors, just log
-                pass
+            except Exception as e:
+                logger.warning(
+                    f"Fire-and-forget task fetch failed for kb_id={kb_id}: {e}"
+                )
 
         asyncio.create_task(_fire_and_forget())
 
-        # FE-compatible placeholder response
         return {
             tid: {
                 "document_id": None,
@@ -178,7 +203,4 @@ class KnowledgeBaseMCPEndpointService:
 
     # ---- Cleanup ----
     async def cleanup_temp_files(self) -> Dict[str, Any]:
-        """
-        Trigger cleanup of expired temporary files in MCP.
-        """
         return await self._request("POST", "/cleanup")
