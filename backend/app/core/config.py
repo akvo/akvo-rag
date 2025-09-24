@@ -1,5 +1,5 @@
 import os
-from typing import List, Optional
+from typing import Optional
 
 from pydantic_settings import BaseSettings
 
@@ -36,9 +36,6 @@ class Settings(BaseSettings):
     # Chat Provider settings
     CHAT_PROVIDER: str = os.getenv("CHAT_PROVIDER", "openai")
 
-    # Embeddings settings
-    EMBEDDINGS_PROVIDER: str = os.getenv("EMBEDDINGS_PROVIDER", "openai")
-
     # OpenAI settings
     OPENAI_API_BASE: str = os.getenv(
         "OPENAI_API_BASE", "https://api.openai.com/v1"
@@ -47,15 +44,9 @@ class Settings(BaseSettings):
         "OPENAI_API_KEY", "your-openai-api-key-here"
     )
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4")
-    OPENAI_EMBEDDINGS_MODEL: str = os.getenv(
-        "OPENAI_EMBEDDINGS_MODEL", "text-embedding-ada-002"
-    )
 
     # DashScope settings
     DASH_SCOPE_API_KEY: str = os.getenv("DASH_SCOPE_API_KEY", "")
-    DASH_SCOPE_EMBEDDINGS_MODEL: str = os.getenv(
-        "DASH_SCOPE_EMBEDDINGS_MODEL", ""
-    )
 
     # Deepseek settings
     DEEPSEEK_API_KEY: str = ""
@@ -65,9 +56,6 @@ class Settings(BaseSettings):
     # Ollama settings
     OLLAMA_API_BASE: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "deepseek-r1:7b"
-    OLLAMA_EMBEDDINGS_MODEL: str = os.getenv(
-        "OLLAMA_EMBEDDINGS_MODEL", "nomic-embed-text"
-    )  # Added this line
 
     # KB MCP Server
     KNOWLEDGE_BASES_MCP: str = os.getenv(

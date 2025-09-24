@@ -293,12 +293,8 @@ docker compose -f docker-compose.dev.yml up -d --build
 
 | Parameter                   | Description                | Default                | Applicable                    |
 | --------------------------- | -------------------------- | ---------------------- | ----------------------------- |
-| EMBEDDINGS_PROVIDER         | Embedding Service Provider | openai                 | ✅                             |
 | OPENAI_API_KEY              | OpenAI API Key             | -                      | Required for OpenAI Embedding |
-| OPENAI_EMBEDDINGS_MODEL     | OpenAI Embedding Model     | text-embedding-ada-002 | Required for OpenAI Embedding |
 | DASH_SCOPE_API_KEY          | DashScope API Key          | -                      | Required for DashScope        |
-| DASH_SCOPE_EMBEDDINGS_MODEL | DashScope Embedding Model  | -                      | Required for DashScope        |
-| OLLAMA_EMBEDDINGS_MODEL     | Ollama Embedding Model     | deepseek-r1:7b         | Required for Ollama Embedding |
 
 
 ### Other Configuration

@@ -279,12 +279,8 @@ docker compose -f docker-compose.dev.yml up -d --build
 
 | 配置项                      | 说明                     | 默认值                 | 适用场景                     |
 | --------------------------- | ------------------------ | ---------------------- | ---------------------------- |
-| EMBEDDINGS_PROVIDER         | Embedding 服务提供商     | openai                 | ✅                            |
 | OPENAI_API_KEY              | OpenAI API 密钥          | -                      | 使用 OpenAI Embedding 时必填 |
-| OPENAI_EMBEDDINGS_MODEL     | OpenAI Embedding 模型    | text-embedding-ada-002 | 使用 OpenAI Embedding 时必填 |
 | DASH_SCOPE_API_KEY          | DashScope API 密钥       | -                      | 使用 DashScope 时必填        |
-| DASH_SCOPE_EMBEDDINGS_MODEL | DashScope Embedding 模型 | -                      | 使用 DashScope 时必填        |
-| OLLAMA_EMBEDDINGS_MODEL     | Ollama Embedding 模型    | -                      | 使用 Ollama Embedding 时必填 |
 
 
 ### 其他配置
