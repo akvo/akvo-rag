@@ -15,6 +15,10 @@ class KnowledgeBaseUpdate(KnowledgeBaseBase):
     pass
 
 
+class KnowledgeBaseResponse(KnowledgeBaseBase):
+    id: int
+
+
 class PreviewRequest(BaseModel):
     document_ids: List[int]
     chunk_size: int = 1000

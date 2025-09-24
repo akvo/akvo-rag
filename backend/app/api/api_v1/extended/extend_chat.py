@@ -86,7 +86,6 @@ async def create_message_mcp_integration(
             query=last_message["content"],
             messages=messages,
             knowledge_base_ids=knowledge_base_ids,
-            # knowledge_base_ids=[3],  # need to delete (use static for now)
             chat_id=chat_id,
             db=db,
         ):

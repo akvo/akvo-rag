@@ -33,6 +33,7 @@ async def stream_mcp_response(
     chat_id: int,
     db: Session,
     max_history_length: int = 10,
+    generate_last_n_messages: bool = False,
 ):
     """
     Best-practice streaming:
@@ -61,7 +62,7 @@ async def stream_mcp_response(
         db.commit()
 
         # 2) Build chat_history (from DB if frontend didn't provide)
-        if len(messages.get("messages", [])) <= 1:
+        if len(messages.get("messages", [])) <= 1 or generate_last_n_messages:
             chat_history_query = (
                 db.query(Message)
                 .filter(Message.chat_id == chat_id)
