@@ -88,7 +88,7 @@ async def upload_kb_documents(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Upload multiple documents to MinIO.
+    Upload multiple documents to MCP.
     """
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     result = await kb_mcp_endpoint_service.upload_documents(

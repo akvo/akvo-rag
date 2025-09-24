@@ -37,7 +37,7 @@ ollama --version
 # 下载对话模型
 ollama pull deepseek-r1:7b
 
-# 下载向量模型  
+# 下载向量模型
 ollama pull nomic-embed-text
 ````
 
@@ -69,22 +69,12 @@ OLLAMA_MODEL=deepseek-r1:7b
 EMBEDDINGS_PROVIDER=ollama
 OLLAMA_EMBEDDINGS_MODEL=nomic-embed-text
 
-# 向量数据库配置
-VECTOR_STORE_TYPE=chroma
-CHROMA_DB_HOST=chromadb
-CHROMA_DB_PORT=8000
-
 # MySQL 配置
 MYSQL_SERVER=db
 MYSQL_USER=ragwebui
 MYSQL_PASSWORD=ragwebui
 MYSQL_DATABASE=ragwebui
 
-# MinIO 配置
-MINIO_ENDPOINT=minio:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-MINIO_BUCKET_NAME=documents
 ````
 
 注意：这里使用的是 Docker Compose 的服务名而不是 localhost，这样容器之间才能正确通信。
@@ -102,8 +92,6 @@ docker compose up -d --build
 - 前端界面 (Next.js)
 - 后端 API (FastAPI)
 - MySQL 数据库
-- ChromaDB 向量数据库
-- MinIO 对象存储
 - Ollama 服务
 
 ### 4. 验证部署
@@ -112,7 +100,6 @@ docker compose up -d --build
 
 - 前端界面：<http://localhost:3000>
 - API 文档：<http://localhost:8000/redoc>
-- MinIO 控制台：<http://localhost:9001>
 
 ## 📚 使用指南
 

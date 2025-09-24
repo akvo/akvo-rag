@@ -1,13 +1,13 @@
 from typing import Any, List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from langchain_chroma import Chroma
 
 from app import models
 from app.db.session import get_db
 from app.core.security import get_api_key_user
 from app.core.config import settings
 
+# from langchain_chroma import Chroma
 # from app.services.vector_store import VectorStoreFactory
 # from app.services.embedding.embedding_factory import EmbeddingsFactory
 

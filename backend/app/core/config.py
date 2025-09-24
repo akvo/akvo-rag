@@ -39,12 +39,6 @@ class Settings(BaseSettings):
     # Embeddings settings
     EMBEDDINGS_PROVIDER: str = os.getenv("EMBEDDINGS_PROVIDER", "openai")
 
-    # MinIO settings
-    MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", "localhost:9000")
-    MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-    MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY", "minioadmin")
-    MINIO_BUCKET_NAME: str = os.getenv("MINIO_BUCKET_NAME", "documents")
-
     # OpenAI settings
     OPENAI_API_BASE: str = os.getenv(
         "OPENAI_API_BASE", "https://api.openai.com/v1"
@@ -63,19 +57,6 @@ class Settings(BaseSettings):
         "DASH_SCOPE_EMBEDDINGS_MODEL", ""
     )
 
-    # Vector Store settings
-    VECTOR_STORE_TYPE: str = os.getenv("VECTOR_STORE_TYPE", "chroma")
-
-    # Chroma DB settings
-    CHROMA_DB_HOST: str = os.getenv("CHROMA_DB_HOST", "chromadb")
-    CHROMA_DB_PORT: int = int(os.getenv("CHROMA_DB_PORT", "8000"))
-
-    # Qdrant DB settings
-    QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6333")
-    QDRANT_PREFER_GRPC: bool = (
-        os.getenv("QDRANT_PREFER_GRPC", "true").lower() == "true"
-    )
-
     # Deepseek settings
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_API_BASE: str = "https://api.deepseek.com/v1"  # 默认 API 地址
@@ -87,11 +68,6 @@ class Settings(BaseSettings):
     OLLAMA_EMBEDDINGS_MODEL: str = os.getenv(
         "OLLAMA_EMBEDDINGS_MODEL", "nomic-embed-text"
     )  # Added this line
-
-    # Vector Store batch processing
-    VECTOR_STORE_BATCH_SIZE: int = int(
-        os.getenv("VECTOR_STORE_BATCH_SIZE", "100")
-    )
 
     # KB MCP Server
     KNOWLEDGE_BASES_MCP: str = os.getenv(

@@ -44,8 +44,6 @@ It also provides OpenAPI interfaces for convenient knowledge base access via API
 
 - 🎯 **Robust Architecture**
   - Frontend-backend separation design
-  - Distributed file storage
-  - High-performance vector database: Support for ChromaDB, Qdrant with easy switching through Factory pattern
 
 ## 🖼️ Screenshots
 
@@ -231,15 +229,13 @@ Access the following URLs after service startup:
 
 - 🌐 Frontend UI: http://127.0.0.1.nip.io
 - 📚 API Documentation: http://127.0.0.1.nip.io/redoc
-- 💾 MinIO Console: http://127.0.0.1.nip.io:9001
 
 ## 🏗️ Architecture
 
 ### Backend Stack
 
 - 🐍 **Python FastAPI**: High-performance async web framework
-- 🗄️ **MySQL + ChromaDB**: Relational + Vector databases
-- 📦 **MinIO**: Distributed object storage
+- 🗄️ **MySQL**: Relational
 - 🔗 **Langchain**: LLM application framework
 - 🔒 **JWT + OAuth2**: Authentication
 
@@ -304,24 +300,6 @@ docker compose -f docker-compose.dev.yml up -d --build
 | DASH_SCOPE_EMBEDDINGS_MODEL | DashScope Embedding Model  | -                      | Required for DashScope        |
 | OLLAMA_EMBEDDINGS_MODEL     | Ollama Embedding Model     | deepseek-r1:7b         | Required for Ollama Embedding |
 
-### Vector Database Configuration
-
-| Parameter          | Description                       | Default               | Applicable            |
-| ------------------ | --------------------------------- | --------------------- | --------------------- |
-| VECTOR_STORE_TYPE  | Vector Store Type                 | chroma                | ✅                     |
-| CHROMA_DB_HOST     | ChromaDB Server Address           | localhost             | Required for ChromaDB |
-| CHROMA_DB_PORT     | ChromaDB Port                     | 8000                  | Required for ChromaDB |
-| QDRANT_URL         | Qdrant Vector Store URL           | http://localhost:6333 | Required for Qdrant   |
-| QDRANT_PREFER_GRPC | Prefer gRPC Connection for Qdrant | true                  | Optional for Qdrant   |
-
-### Object Storage Configuration
-
-| Parameter         | Description          | Default        | Required |
-| ----------------- | -------------------- | -------------- | -------- |
-| MINIO_ENDPOINT    | MinIO Server Address | localhost:9000 | ✅        |
-| MINIO_ACCESS_KEY  | MinIO Access Key     | minioadmin     | ✅        |
-| MINIO_SECRET_KEY  | MinIO Secret Key     | minioadmin     | ✅        |
-| MINIO_BUCKET_NAME | MinIO Bucket Name    | documents      | ✅        |
 
 ### Other Configuration
 
@@ -350,7 +328,7 @@ Runs the complete test suite with verbose output.
 
 **Run Unit Tests Only**
 ```bash
-cd backend  
+cd backend
 ./test-unit.sh
 ```
 Runs only unit tests, excluding integration and end-to-end tests.
@@ -406,7 +384,6 @@ Thanks to these open source projects:
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [Langchain](https://python.langchain.com/)
 - [Next.js](https://nextjs.org/)
-- [ChromaDB](https://www.trychroma.com/)
 
 
 ![star history](https://api.star-history.com/svg?repos=rag-web-ui/rag-web-ui&type=Date)
