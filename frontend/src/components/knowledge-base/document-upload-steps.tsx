@@ -270,8 +270,6 @@ export function DocumentUploadSteps({
       setTaskStatuses(initialStatuses);
 
       // Start polling for task status
-      // TODO :: I think after click process poll task status doesn't need to be here.
-      // just close the modal
       setTimeout(() => {
         pollTaskStatus(data.tasks.map((t) => t.task_id));
       }, 2000);
