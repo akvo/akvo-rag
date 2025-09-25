@@ -46,7 +46,7 @@ class TestScopingAgent:
         assert "tools" in data
         assert "knowledge_bases_mcp" in data["tools"]
 
-    def test_scope_query_success(
+    async def test_scope_query_success(
         self, agent, discovery_file, valid_discovery_data
     ):
         """
@@ -54,7 +54,7 @@ class TestScopingAgent:
         """
         discovery_file.write_text(json.dumps(valid_discovery_data))
 
-        result = agent.scope_query(
+        result = await agent.scope_query(
             "find documents", scope={"knowledge_base_ids": [42], "top_k": 5}
         )
 
