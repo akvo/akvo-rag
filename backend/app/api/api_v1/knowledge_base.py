@@ -3,7 +3,6 @@ from fastapi import (
     APIRouter,
     Depends,
     UploadFile,
-    BackgroundTasks,
 )
 from sqlalchemy.orm import Session
 import logging
@@ -118,7 +117,6 @@ async def preview_kb_documents(
 async def process_kb_documents(
     kb_id: int,
     upload_results: List[dict],
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -148,7 +146,6 @@ async def cleanup_temp_files(
 @router.post("/test-retrieval")
 async def test_retrieval(
     request: TestRetrievalRequest,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Any:
