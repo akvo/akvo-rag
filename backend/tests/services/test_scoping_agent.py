@@ -5,6 +5,7 @@ from app.services.scoping_agent import ScopingAgent
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
 class TestScopingAgent:
     """Unit tests for ScopingAgent."""
 
@@ -47,12 +48,26 @@ class TestScopingAgent:
         assert "knowledge_bases_mcp" in data["tools"]
 
     async def test_scope_query_success(
-        self, agent, discovery_file, valid_discovery_data
+        self, agent, discovery_file, valid_discovery_data, monkeypatch
     ):
         """
         scope_query() returns scoped tool execution info when tool exists.
         """
         discovery_file.write_text(json.dumps(valid_discovery_data))
+
+        # Async mock of _ask_llm
+        async def fake__ask_llm(query, data, scope):
+            return {
+                "server_name": "knowledge_bases_mcp",
+                "tool_name": "query_knowledge_base",
+                "input": {
+                    "knowledge_base_ids": scope["knowledge_base_ids"],
+                    "query": query,
+                    "top_k": scope["top_k"],
+                },
+            }
+
+        monkeypatch.setattr(agent, "_ask_llm", fake__ask_llm)
 
         result = await agent.scope_query(
             "find documents", scope={"knowledge_base_ids": [42], "top_k": 5}
@@ -75,12 +90,23 @@ class TestScopingAgent:
         with pytest.raises(FileNotFoundError):
             agent.load_discovery_data()
 
-    def test_scope_query_tool_not_found(self, agent, discovery_file):
-        """scope_query() raises ValueError if required tool is missing."""
+    async def test_scope_query_tool_not_found(
+        self, agent, discovery_file, monkeypatch
+    ):
+        """
+        scope_query() raises ValueError if required tool
+        is missing or LLM fails.
+        """
         invalid_data = {"tools": {"knowledge_bases_mcp": []}, "resources": {}}
         discovery_file.write_text(json.dumps(invalid_data))
 
+        # Async mock to simulate no suggestion from LLM
+        async def fake__ask_llm(*_, **__):
+            return None
+
+        monkeypatch.setattr(agent, "_ask_llm", fake__ask_llm)
+
         with pytest.raises(
-            ValueError, match="Tool query_knowledge_base not found"
+            ValueError, match="did not return a valid suggestion"
         ):
-            agent.scope_query(query="find documents")
+            await agent.scope_query(query="find documents")
