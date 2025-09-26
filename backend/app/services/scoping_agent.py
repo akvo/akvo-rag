@@ -9,6 +9,9 @@ from app.services.llm.llm_factory import LLMFactory
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+# TODO :: How we handle if kb_ids already provided
+# Scoping agent can't talk with other KBs if kb_ids already provided
+
 
 def _extract_json(raw_output: str) -> str:
     """
@@ -47,11 +50,26 @@ class ScopingAgent:
             raise
 
     async def _ask_llm(
-        self, query: str, discovery_data: Dict[str, Any]
+        self,
+        query: str,
+        discovery_data: Dict[str, Any],
+        scope: Optional[Dict[str, Any]] = {},
     ) -> Dict[str, Any]:
         """
         Ask LLM to decide which server, tool, and input parameters to use.
         """
+
+        # Check if knowledge_base_ids already provided
+        # Retrieve KB IDs from scope
+        knowledge_base_ids = scope.get("knowledge_base_ids", [])
+
+        kb_instruction = (
+            "Use ONLY the provided knowledge_base_ids and do NOT choose new IDs."
+            if knowledge_base_ids
+            else "No KB IDs provided; select appropriately."
+        )
+
+        # Prepare servers_info
         servers_info = []
         for server_name, resources in discovery_data.get(
             "resources", {}
@@ -74,9 +92,15 @@ class ScopingAgent:
                 }
             )
 
-        system_prompt = """
-            You are a strict scoping agent. Your task is to choose the best MCP server, the appropriate tool, and construct the input JSON for the tool according to its inputSchema. Follow these rules strictly:
+        # System prompt header
+        system_prompt = f"""
+            You are a strict scoping agent. Your task is to choose the best MCP server, the appropriate tool, and construct the input JSON for the tool according to its inputSchema.
+            {kb_instruction}
+        """
 
+        # System prompt rule
+        system_prompt += """
+            Follow these rules strictly:
             1. Always respond with a single valid JSON object with exactly these keys:
             {
                 "server_name": "...",
@@ -87,6 +111,7 @@ class ScopingAgent:
             2. Never return anything outside this JSON object.
             - Do NOT include markdown, code fences, explanations, or comments.
             - Do NOT return only part of the keys.
+            - Do NOT hallucinate tool or server names; use only the provided servers_info.
 
             3. Ensure all required keys in the tool's inputSchema are present in "input".
             4. If a parameter is optional, include it only if necessary.
@@ -104,6 +129,7 @@ class ScopingAgent:
         user_prompt = {
             "query": query,
             "servers_info": servers_info,
+            "provided_kb_ids": knowledge_base_ids,  # explicitly pass KB IDs
         }
 
         resp = await self.llm.ainvoke(
@@ -127,7 +153,7 @@ class ScopingAgent:
                 "tool_name": "query_knowledge_base",
                 "input": {
                     "query": query,
-                    "knowledge_base_ids": [],
+                    "knowledge_base_ids": knowledge_base_ids,
                 },
             }
             logger.warning(
@@ -168,7 +194,7 @@ class ScopingAgent:
         Determine scope for MCP tool execution using LLM + schema validation.
         """
         discovery_data = self.load_discovery_data()
-        suggestion = await self._ask_llm(query, discovery_data)
+        suggestion = await self._ask_llm(query, discovery_data, scope)
 
         if not suggestion:
             raise ValueError(
