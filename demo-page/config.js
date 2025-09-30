@@ -10,6 +10,10 @@ window.config_default = {
       kb_id: 38,
       label: "Living Income Benchmark Knowledge Base",
     },
+    {
+      kb_id: 48,
+      label: "Kefaas Knowledge Base",
+    },
   ],
   wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
 };
@@ -56,5 +60,11 @@ window.config_local_lib = {
 window.config_living_income_1 = {
   title: "LIB #1",
   kb_id: 28,
+  wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
+};
+
+window.config_kefaas = {
+  title: "Kefaas Knowledge Base",
+  kb_id: 48,
   wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
 };
