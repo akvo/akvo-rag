@@ -11,7 +11,7 @@ from app.api.api_v1.auth import get_current_user
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.get("/", response_model=List[schemas.APIKey])
+@router.get("", response_model=List[schemas.APIKey])
 def read_api_keys(
     db: Session = Depends(get_db),
     skip: int = 0,
@@ -26,7 +26,7 @@ def read_api_keys(
     )
     return api_keys
 
-@router.post("/", response_model=schemas.APIKey)
+@router.post("", response_model=schemas.APIKey)
 def create_api_key(
     *,
     db: Session = Depends(get_db),
