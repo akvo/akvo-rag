@@ -39,6 +39,7 @@ def get_current_user(
         raise credentials_exception
     return user
 
+
 # Support set user as super user
 @router.post("/register", response_model=UserResponse)
 def register(*, db: Session = Depends(get_db), user_in: UserCreate) -> Any:
@@ -81,6 +82,7 @@ def register(*, db: Session = Depends(get_db), user_in: UserCreate) -> Any:
             detail=msg,
         ) from e
 
+
 @router.post("/token", response_model=Token)
 def login_access_token(
     db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
@@ -108,6 +110,7 @@ def login_access_token(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+
 @router.post("/test-token", response_model=UserResponse)
 def test_token(current_user: User = Depends(get_current_user)) -> Any:
     """
@@ -115,12 +118,14 @@ def test_token(current_user: User = Depends(get_current_user)) -> Any:
     """
     return current_user
 
+
 @router.get("/me", response_model=UserResponse)
 def user_me(current_user: User = Depends(get_current_user)) -> Any:
     """
     Get user profile.
     """
     return current_user
+
 
 @router.put("/user", response_model=UserResponse)
 def update_user_by_email(

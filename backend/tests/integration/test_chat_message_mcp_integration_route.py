@@ -118,7 +118,7 @@ class TestMCPIntegrationEndpoint:
 
         # Patch stream_mcp_response in the router's module
         with patch(
-            "app.api.api_v1.extended.extend_chat.stream_mcp_response",
+            "app.api.api_v1.chat.stream_mcp_response",
             fake_stream,
         ):
             response = await client.post(
@@ -185,7 +185,7 @@ class TestMCPIntegrationEndpoint:
             yield 'd:{"finishReason":"stop"}\n'
 
         with patch(
-            "app.api.api_v1.extended.extend_chat.stream_mcp_response",
+            "app.api.api_v1.chat.stream_mcp_response",
             fail_stream,
         ):
             response = await client.post(
