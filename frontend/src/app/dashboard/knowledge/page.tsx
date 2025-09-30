@@ -132,7 +132,7 @@ export default function KnowledgeBasePage() {
 
                 <div className="flex space-x-2">
                   <Link
-                    // TODO :: handle kb_owner later, currently ignore kb owner
+                    // ignore kb owner
                     href={`/dashboard/knowledge/${kb.id}?kb_owner=${kb.user_id === user?.id ? 1 : 1}`}
                     className="inline-flex items-center justify-center rounded-md bg-secondary w-8 h-8"
                   >

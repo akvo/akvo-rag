@@ -11,10 +11,6 @@ from utils.rag_util import (
 )
 
 
-# TODO :: implement same logic like collect_pdf_urls in tdt.py
-# to avoid lost of pdfs when collect_pdf_urls is meet the max_pdfs
-# but in current active page still have more pdfs
-
 BASE_LIST_API = "https://globalplasticshub.org/api/resources"
 BASE_DETAIL_API = "https://globalplasticshub.org/api/detail"
 SAVE_DIR = "./downloads/unep"
