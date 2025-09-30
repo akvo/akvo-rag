@@ -2,7 +2,6 @@ from fastapi import APIRouter
 
 from app.api.api_v1.extended import (
     extend_chat,
-    extend_auth,
     extend_knowledge_base,
     prompt,
     system_settings,
@@ -10,7 +9,6 @@ from app.api.api_v1.extended import (
 
 api_router = APIRouter()
 
-api_router.include_router(extend_auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(
     extend_knowledge_base.router,
     prefix="/knowledge-base",
