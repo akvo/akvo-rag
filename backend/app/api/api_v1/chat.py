@@ -93,7 +93,7 @@ def delete_chat(
     db.commit()
     return {"status": "success"}
 
-@router.post("/{chat_id}/messages/mcp_integration")
+@router.post("/{chat_id}/messages")
 async def create_message_mcp_integration(
     *,
     db: Session = Depends(get_db),
