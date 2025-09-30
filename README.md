@@ -230,6 +230,41 @@ Access the following URLs after service startup:
 - 🌐 Frontend UI: http://127.0.0.1.nip.io
 - 📚 API Documentation: http://127.0.0.1.nip.io/redoc
 
+## 🔌 MCP Server Setup (Required)
+
+RAG Web UI now depends on a running **MCP (Model Context Protocol) server** for querying knowledge bases. This server provides the **knowledge base query layer** for RAG Web UI. Without it, the application will not function correctly.
+
+### 1. MCP Server Repository
+
+We use the [Vector Knowledge Base MCP Server](https://github.com/akvo/vector-knowledge-base-mcp-server/). Please follow the installation guide in that repository to set up and run the MCP server.
+
+### 2. Environment Variables
+
+In your `.env` file, configure the MCP server connection:
+
+```env
+# MCP Servers config
+KNOWLEDGE_BASES_MCP=https://api.knowledge.example.com/mcp/
+KNOWLEDGE_BASES_API_KEY=supersecretapikey
+KNOWLEDGE_BASES_API_ENDPOINT=https://api.knowledge.example.com
+```
+
+- `KNOWLEDGE_BASES_MCP` → MCP base URL (server endpoint)
+- `KNOWLEDGE_BASES_API_KEY` → API key for authentication
+- `KNOWLEDGE_BASES_API_ENDPOINT` → API endpoint for queries
+
+### 3. Verification
+
+By default, the MCP server runs on **port 8100**. After starting both the MCP server and RAG Web UI, confirm connectivity:
+
+```bash
+curl http://127.0.0.1:8100/api/health
+```
+
+Expected output includes a successful MCP server connection.
+You can also test by uploading a document and sending a query in the Web UI.
+
+
 ## 🏗️ Architecture
 
 ### Backend Stack
@@ -274,6 +309,16 @@ docker compose -f docker-compose.dev.yml up -d --build
 | MYSQL_DATABASE              | MySQL Database Name        | ragwebui  | ✅        |
 | SECRET_KEY                  | JWT Secret Key             | -         | ✅        |
 | ACCESS_TOKEN_EXPIRE_MINUTES | JWT Token Expiry (minutes) | 30        | ✅        |
+
+
+### MCP Configuration
+
+| Parameter                    | Description                                | Example Value                          | Required |
+| ---------------------------- | ------------------------------------------ | -------------------------------------- | -------- |
+| KNOWLEDGE_BASES_MCP          | MCP Base URL (server endpoint)             | https://api.knowledge.example.com/mcp/ | ✅        |
+| KNOWLEDGE_BASES_API_KEY      | API key for MCP authentication             | supersecretapikey                      | ✅        |
+| KNOWLEDGE_BASES_API_ENDPOINT | MCP API query endpoint (used for requests) | https://api.knowledge.example.com      | ✅        |
+
 
 ### LLM Configuration
 
