@@ -8,7 +8,6 @@ services:
     depends_on:
       - frontend
       - backend
-      - minio
     networks:
       - app_network
     healthcheck:
@@ -41,8 +40,6 @@ services:
       - app_network
     depends_on:
       - db
-      - chromadb
-      - minio
     restart: on-failure
     deploy:
       restart_policy:
@@ -95,51 +92,8 @@ services:
     networks:
       - app_network
 
-  chromadb:
-    image: chromadb/chroma:${CHROMADB_IMAGE_VERSION}
-    platform: linux/amd64
-    ports:
-      - "8001:8000"
-    volumes:
-      - chroma_data:/chroma/chroma
-    networks:
-      - app_network
-
-  minio:
-    image: minio/minio:latest
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
-    volumes:
-      - minio_data:/data
-    command: server --console-address ":9001" /data
-    networks:
-      - app_network
-
-  script:
-    build:
-      context: ./script
-      dockerfile: Dockerfile
-    depends_on:
-      - backend
-    environment:
-      - RAG_EMAIL=${RAG_EMAIL}
-      - RAG_USERNAME=${RAG_USERNAME}
-      - RAG_PASSWORD=${RAG_PASSWORD}
-    volumes:
-      - ./script:/app
-    tty: true
-    command: ["tail", "-f", "/dev/null"]
-    networks:
-      - app_network
-
 volumes:
   mysql_data:
-  chroma_data:
-  minio_data:
 
 networks:
   app_network:

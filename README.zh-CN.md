@@ -52,23 +52,22 @@ RAG Web UI 是一个基于 RAG (Retrieval-Augmented Generation) 技术的智能�
 - 🎯 **合理架构**
   - 前后端分离设计
   - 分布式文件存储
-  - 高性能向量数据库: 支持 ChromaDB、Qdrant，通过 Factory 模式，可以方便的切换向量数据库
 
 ## 🖼️ 截图
 
 <div align="center">
   <img src="./docs/images/screenshot1.png" alt="Knowledge Base Management" width="800">
   <p><em>知识库管理 Dashboard</em></p>
-  
+
   <img src="./docs/images/screenshot2.png" alt="Chat Interface" width="800">
   <p><em>文档处理 Dashboard</em></p>
-  
+
   <img src="./docs/images/screenshot3.png" alt="Document Processing" width="800">
   <p><em>文档列表</em></p>
-  
+
   <img src="./docs/images/screenshot4.png" alt="System Settings" width="800">
   <p><em>带引用序号的智能对话界面</em></p>
-  
+
   <img src="./docs/images/screenshot5.png" alt="Analytics Dashboard" width="800">
   <p><em>API Key 管理</em></p>
 
@@ -76,7 +75,7 @@ RAG Web UI 是一个基于 RAG (Retrieval-Augmented Generation) 技术的智能�
   <p><em>API 参考</em></p>
 </div>
 
- 
+
 ## 项目流程图
 
 ```mermaid
@@ -84,40 +83,40 @@ graph TB
     %% Role Definitions
     client["Caller/User"]
     open_api["Open API"]
-    
+
     subgraph import_process["Document Ingestion Process"]
         direction TB
         %% File Storage and Document Processing Flow
         docs["Document Input<br/>(PDF/MD/TXT/DOCX)"]
         job_id["Return Job ID"]
-        
+
         nfs["NFS"]
 
         subgraph async_process["Asynchronous Document Processing"]
             direction TB
             preprocess["Document Preprocessing<br/>(Text Extraction/Cleaning)"]
             split["Text Splitting<br/>(Segmentation/Overlap)"]
-            
+
             subgraph embedding_process["Embedding Service"]
                 direction LR
                 embedding_api["Embedding API"] --> embedding_server["Embedding Server"]
             end
-            
+
             store[(Vector Database)]
-            
+
             %% Internal Flow of Asynchronous Processing
             preprocess --> split
             split --> embedding_api
             embedding_server --> store
         end
-        
+
         subgraph job_query["Job Status Query"]
             direction TB
             job_status["Job Status<br/>(Processing/Completed/Failed)"]
         end
     end
-    
-    %% Query Service Flow  
+
+    %% Query Service Flow
     subgraph query_process["Query Service"]
         direction LR
         user_history["User History"] --> query["User Query<br/>(Based on User History)"]
@@ -129,7 +128,7 @@ graph TB
         llm --> response["Final Response"]
         query -.-> rerank
     end
-    
+
     %% Main Flow Connections
     client --> |"1.Upload Document"| docs
     docs --> |"2.Generate"| job_id
@@ -146,7 +145,7 @@ graph TB
     %% Status Query Flow
     client --> |"4.Poll"| job_status
     job_status --> |"5.Return Progress"| client
-    
+
     %% Database connects to Query Service
     store --> retrieve
 
@@ -213,15 +212,13 @@ docker compose up -d --build
 
 - 🌐 前端界面: http://127.0.0.1.nip.io
 - 📚 API 文档: http://127.0.0.1.nip.io/redoc
-- 💾 MinIO 控制台: http://127.0.0.1.nip.io:9001
 
 ## 🏗️ 技术架构
 
 ### 后端技术栈
 
 - 🐍 **Python FastAPI**: 高性能异步 Web 框架
-- 🗄️ **MySQL + ChromaDB**: 关系型数据库 + 向量数据库
-- 📦 **MinIO**: 对象存储
+- 🗄️ **MySQL**: 关系型数据库
 - 🔗 **Langchain**: LLM 应用开发框架
 - 🔒 **JWT + OAuth2**: 身份认证
 
@@ -282,31 +279,9 @@ docker compose -f docker-compose.dev.yml up -d --build
 
 | 配置项                      | 说明                     | 默认值                 | 适用场景                     |
 | --------------------------- | ------------------------ | ---------------------- | ---------------------------- |
-| EMBEDDINGS_PROVIDER         | Embedding 服务提供商     | openai                 | ✅                            |
 | OPENAI_API_KEY              | OpenAI API 密钥          | -                      | 使用 OpenAI Embedding 时必填 |
-| OPENAI_EMBEDDINGS_MODEL     | OpenAI Embedding 模型    | text-embedding-ada-002 | 使用 OpenAI Embedding 时必填 |
 | DASH_SCOPE_API_KEY          | DashScope API 密钥       | -                      | 使用 DashScope 时必填        |
-| DASH_SCOPE_EMBEDDINGS_MODEL | DashScope Embedding 模型 | -                      | 使用 DashScope 时必填        |
-| OLLAMA_EMBEDDINGS_MODEL     | Ollama Embedding 模型    | -                      | 使用 Ollama Embedding 时必填 |
 
-### 向量数据库配置
-
-| 配置项             | 说明                      | 默认值                | 适用场景             |
-| ------------------ | ------------------------- | --------------------- | -------------------- |
-| VECTOR_STORE_TYPE  | 向量存储类型              | chroma                | ✅                    |
-| CHROMA_DB_HOST     | ChromaDB 服务器地址       | localhost             | 使用 ChromaDB 时必填 |
-| CHROMA_DB_PORT     | ChromaDB 端口             | 8000                  | 使用 ChromaDB 时必填 |
-| QDRANT_URL         | Qdrant 向量存储 URL       | http://localhost:6333 | 使用 Qdrant 时必填   |
-| QDRANT_PREFER_GRPC | Qdrant 优先使用 gRPC 连接 | true                  | 使用 Qdrant 时可选   |
-
-### 对象存储配置
-
-| 配置项            | 说明             | 默认值         | 必填 |
-| ----------------- | ---------------- | -------------- | ---- |
-| MINIO_ENDPOINT    | MinIO 服务器地址 | localhost:9000 | ✅    |
-| MINIO_ACCESS_KEY  | MinIO 访问密钥   | minioadmin     | ✅    |
-| MINIO_SECRET_KEY  | MinIO 密钥       | minioadmin     | ✅    |
-| MINIO_BUCKET_NAME | MinIO 存储桶名称 | documents      | ✅    |
 
 ### 其他配置
 
@@ -359,7 +334,6 @@ docker compose -f docker-compose.dev.yml up -d --build
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [Langchain](https://python.langchain.com/)
 - [Next.js](https://nextjs.org/)
-- [ChromaDB](https://www.trychroma.com/)
 
 
 ![star history](https://api.star-history.com/svg?repos=rag-web-ui/rag-web-ui&type=Date)
@@ -368,4 +342,4 @@ docker compose -f docker-compose.dev.yml up -d --build
 
 <div align="center">
   如果这个项目对你有帮助，请考虑给它一个 ⭐️
-</div> 
+</div>

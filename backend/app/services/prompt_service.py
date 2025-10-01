@@ -18,10 +18,10 @@ class PromptService:
 
     def get_active_prompt_content(self, prompt_name: PromptNameEnum) -> str:
         prompt = (
-            self.db.query(PromptVersion.content)
+            self.db.query(PromptVersion)
             .join(PromptDefinition)
             .filter(PromptDefinition.name == prompt_name.value)
-            .filter(PromptVersion.is_active == True)
+            .filter(PromptVersion.is_active is True)
             .order_by(PromptVersion.version_number.desc())
             .first()
         )
@@ -31,7 +31,7 @@ class PromptService:
                 f"Prompt not found or not active for: {prompt_name}"
             )
 
-        return prompt[0]
+        return prompt.content
 
     def build_full_prompt(
         self, dynamic: str, static: str, closing: str = ""
