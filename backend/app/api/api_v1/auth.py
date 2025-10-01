@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.token import Token
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -33,12 +33,14 @@ def get_current_user(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    
+
     user = db.query(User).filter(User.username == username).first()
     if user is None:
         raise credentials_exception
     return user
 
+
+# Support set user as super user
 @router.post("/register", response_model=UserResponse)
 def register(*, db: Session = Depends(get_db), user_in: UserCreate) -> Any:
     """
@@ -52,7 +54,7 @@ def register(*, db: Session = Depends(get_db), user_in: UserCreate) -> Any:
                 status_code=400,
                 detail="A user with this email already exists.",
             )
-        
+
         # Check if user with this username exists
         user = db.query(User).filter(User.username == user_in.username).first()
         if user:
@@ -60,22 +62,26 @@ def register(*, db: Session = Depends(get_db), user_in: UserCreate) -> Any:
                 status_code=400,
                 detail="A user with this username already exists.",
             )
-        
+
         # Create new user
         user = User(
             email=user_in.email,
             username=user_in.username,
             hashed_password=security.get_password_hash(user_in.password),
+            is_superuser=user_in.is_superuser,
+            is_active=user_in.is_active,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
         return user
     except RequestException as e:
+        msg = "Network error or server is unreachable. Please try again later."
         raise HTTPException(
             status_code=503,
-            detail="Network error or server is unreachable. Please try again later.",
+            detail=msg,
         ) from e
+
 
 @router.post("/token", response_model=Token)
 def login_access_token(
@@ -97,12 +103,13 @@ def login_access_token(
             detail="Inactive user",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = security.create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
 
 @router.post("/test-token", response_model=UserResponse)
 def test_token(current_user: User = Depends(get_current_user)) -> Any:
@@ -110,3 +117,34 @@ def test_token(current_user: User = Depends(get_current_user)) -> Any:
     Test access token by getting current user.
     """
     return current_user
+
+
+@router.get("/me", response_model=UserResponse)
+def user_me(current_user: User = Depends(get_current_user)) -> Any:
+    """
+    Get user profile.
+    """
+    return current_user
+
+
+@router.put("/user", response_model=UserResponse)
+def update_user_by_email(
+    *,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    user_in: UserUpdate,
+) -> Any:
+    user = db.query(User).filter(User.email == user_in.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="A user with this email not found.",
+        )
+    # DO NOT UPDATE USERNAME IF USER EXIST
+    # user.email = user_in.email
+    # user.username = user.username or user_in.username
+    user.is_active = user_in.is_active
+    user.is_superuser = user_in.is_superuser
+    db.commit()
+    db.refresh(user)
+    return user

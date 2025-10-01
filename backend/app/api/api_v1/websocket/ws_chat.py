@@ -7,15 +7,15 @@ from typing import Optional, Literal, List
 from fastapi import WebSocket, WebSocketDisconnect, APIRouter
 from starlette.websockets import WebSocketState
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import or_
 from pydantic import BaseModel, Field, ValidationError
 
-from app.db.session import SessionLocal
-from app.models.knowledge import KnowledgeBase
+from app.db.session import get_db
 from app.models.user import User
-from app.models.chat import Chat
-from app.api.api_v1.extended.util.util_user import get_super_user_ids
-from app.services.chat_service import generate_response
+from app.models.chat import Chat, ChatKnowledgeBase
+from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
+from app.schemas.knowledge import KnowledgeBaseResponse
+from app.services.chat_mcp_service import stream_mcp_response
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -49,9 +49,8 @@ async def safe_send_json(websocket: WebSocket, data: dict):
 # -------------------------------------
 # Auth + Validation
 # -------------------------------------
-async def authenticate_and_get_user(
-    websocket: WebSocket, db: Session
-) -> tuple[User, KnowledgeBase]:
+async def authenticate_and_get_user(websocket: WebSocket, db: Session):
+    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     init_data = await websocket.receive_json()
 
     if init_data.get("type") != "auth":
@@ -98,18 +97,17 @@ async def authenticate_and_get_user(
         db.refresh(user)
         logger.info(f"Created new visitor user: {visitor_email}")
 
-    super_user_ids = get_super_user_ids(db=db)
-    kb = (
-        db.query(KnowledgeBase)
-        .filter(
-            KnowledgeBase.id == kb_id,
-            or_(
-                KnowledgeBase.user_id == user.id,
-                KnowledgeBase.user_id.in_(super_user_ids),
-            ),
+    kb = None
+    try:
+        kb_res = await kb_mcp_endpoint_service.get_kb(kb_id=kb_id)
+        kb = KnowledgeBaseResponse(
+            id=kb_res.get("id"),
+            name=kb_res.get("name"),
+            description=kb_res.get("description"),
         )
-        .first()
-    )
+    except Exception as e:
+        logger.error(f"Error get KB from MCP: {e}")
+
     if not kb:
         await safe_send_json(
             websocket,
@@ -131,12 +129,16 @@ async def authenticate_and_get_user(
 # -------------------------------------
 # Create/Retrieve Chat
 # -------------------------------------
-def get_or_create_chat(db: Session, user: User, kb: KnowledgeBase) -> Chat:
+def get_or_create_chat(db: Session, user: User, kb_id: int) -> Chat:
     chat = (
         db.query(Chat)
         .options(selectinload(Chat.knowledge_bases))
         .filter(Chat.user_id == user.id)
-        .filter(Chat.knowledge_bases.any(KnowledgeBase.id == kb.id))
+        .filter(
+            Chat.knowledge_bases.any(
+                ChatKnowledgeBase.knowledge_base_id == kb_id
+            )
+        )
         .first()
     )
     if not chat:
@@ -145,7 +147,7 @@ def get_or_create_chat(db: Session, user: User, kb: KnowledgeBase) -> Chat:
         chat_title = f"Chat started at {timestamp}"
 
         chat = Chat(user_id=user.id, title=chat_title)
-        chat.knowledge_bases.append(kb)
+        chat.knowledge_bases.append(ChatKnowledgeBase(knowledge_base_id=kb_id))
         db.add(chat)
         db.commit()
         db.refresh(chat)
@@ -177,7 +179,7 @@ async def validate_chat_payload(
 # -------------------------------------
 @router.websocket("/chat")
 async def websocket_chat(websocket: WebSocket):
-    db = SessionLocal()
+    db = next(get_db())
     await websocket.accept()
     logger.info("WebSocket connection accepted")
 
@@ -239,9 +241,11 @@ async def websocket_chat(websocket: WebSocket):
                     f"Getting or creating chat for user {user.id}"
                     + " and kb {kb.id}"
                 )
-                chat = get_or_create_chat(db, user, kb)
+                chat = get_or_create_chat(db=db, user=user, kb_id=kb.id)
                 chat_id = chat.id
-                knowledge_base_ids = [kb.id for kb in chat.knowledge_bases]
+                knowledge_base_ids = [
+                    ckb.knowledge_base_id for ckb in chat.knowledge_bases
+                ]
                 chat_created = True
 
             await safe_send_json(
@@ -250,13 +254,13 @@ async def websocket_chat(websocket: WebSocket):
             )
             assistant_response = ""
 
-            async for chunk in generate_response(
+            async for chunk in stream_mcp_response(
                 query=last_message["content"],
                 messages={"messages": messages},
                 knowledge_base_ids=knowledge_base_ids,
                 chat_id=chat_id,
-                generate_last_n_messages=True,
                 db=db,
+                generate_last_n_messages=True,
             ):
                 if websocket.client_state != WebSocketState.CONNECTED:
                     logger.warning(
@@ -268,6 +272,7 @@ async def websocket_chat(websocket: WebSocket):
                 await safe_send_json(
                     websocket, {"type": "response_chunk", "content": chunk}
                 )
+            # EOL MCP IMPLEMENTATION
 
             await safe_send_json(
                 websocket,

@@ -44,8 +44,6 @@ It also provides OpenAPI interfaces for convenient knowledge base access via API
 
 - 🎯 **Robust Architecture**
   - Frontend-backend separation design
-  - Distributed file storage
-  - High-performance vector database: Support for ChromaDB, Qdrant with easy switching through Factory pattern
 
 ## 🖼️ Screenshots
 
@@ -231,15 +229,48 @@ Access the following URLs after service startup:
 
 - 🌐 Frontend UI: http://127.0.0.1.nip.io
 - 📚 API Documentation: http://127.0.0.1.nip.io/redoc
-- 💾 MinIO Console: http://127.0.0.1.nip.io:9001
+
+## 🔌 MCP Server Setup (Required)
+
+RAG Web UI now depends on a running **MCP (Model Context Protocol) server** for querying knowledge bases. This server provides the **knowledge base query layer** for RAG Web UI. Without it, the application will not function correctly.
+
+### 1. MCP Server Repository
+
+We use the [Vector Knowledge Base MCP Server](https://github.com/akvo/vector-knowledge-base-mcp-server/). Please follow the installation guide in that repository to set up and run the MCP server.
+
+### 2. Environment Variables
+
+In your `.env` file, configure the MCP server connection:
+
+```env
+# MCP Servers config
+KNOWLEDGE_BASES_MCP=https://api.knowledge.example.com/mcp/
+KNOWLEDGE_BASES_API_KEY=supersecretapikey
+KNOWLEDGE_BASES_API_ENDPOINT=https://api.knowledge.example.com
+```
+
+- `KNOWLEDGE_BASES_MCP` → MCP base URL (server endpoint)
+- `KNOWLEDGE_BASES_API_KEY` → API key for authentication
+- `KNOWLEDGE_BASES_API_ENDPOINT` → API endpoint for queries
+
+### 3. Verification
+
+By default, the MCP server runs on **port 8100**. After starting both the MCP server and RAG Web UI, confirm connectivity:
+
+```bash
+curl http://127.0.0.1:8100/api/health
+```
+
+Expected output includes a successful MCP server connection.
+You can also test by uploading a document and sending a query in the Web UI.
+
 
 ## 🏗️ Architecture
 
 ### Backend Stack
 
 - 🐍 **Python FastAPI**: High-performance async web framework
-- 🗄️ **MySQL + ChromaDB**: Relational + Vector databases
-- 📦 **MinIO**: Distributed object storage
+- 🗄️ **MySQL**: Relational
 - 🔗 **Langchain**: LLM application framework
 - 🔒 **JWT + OAuth2**: Authentication
 
@@ -279,6 +310,16 @@ docker compose -f docker-compose.dev.yml up -d --build
 | SECRET_KEY                  | JWT Secret Key             | -         | ✅        |
 | ACCESS_TOKEN_EXPIRE_MINUTES | JWT Token Expiry (minutes) | 30        | ✅        |
 
+
+### MCP Configuration
+
+| Parameter                    | Description                                | Example Value                          | Required |
+| ---------------------------- | ------------------------------------------ | -------------------------------------- | -------- |
+| KNOWLEDGE_BASES_MCP          | MCP Base URL (server endpoint)             | https://api.knowledge.example.com/mcp/ | ✅        |
+| KNOWLEDGE_BASES_API_KEY      | API key for MCP authentication             | supersecretapikey                      | ✅        |
+| KNOWLEDGE_BASES_API_ENDPOINT | MCP API query endpoint (used for requests) | https://api.knowledge.example.com      | ✅        |
+
+
 ### LLM Configuration
 
 | Parameter         | Description           | Default                   | Applicable            |
@@ -297,31 +338,9 @@ docker compose -f docker-compose.dev.yml up -d --build
 
 | Parameter                   | Description                | Default                | Applicable                    |
 | --------------------------- | -------------------------- | ---------------------- | ----------------------------- |
-| EMBEDDINGS_PROVIDER         | Embedding Service Provider | openai                 | ✅                             |
 | OPENAI_API_KEY              | OpenAI API Key             | -                      | Required for OpenAI Embedding |
-| OPENAI_EMBEDDINGS_MODEL     | OpenAI Embedding Model     | text-embedding-ada-002 | Required for OpenAI Embedding |
 | DASH_SCOPE_API_KEY          | DashScope API Key          | -                      | Required for DashScope        |
-| DASH_SCOPE_EMBEDDINGS_MODEL | DashScope Embedding Model  | -                      | Required for DashScope        |
-| OLLAMA_EMBEDDINGS_MODEL     | Ollama Embedding Model     | deepseek-r1:7b         | Required for Ollama Embedding |
 
-### Vector Database Configuration
-
-| Parameter          | Description                       | Default               | Applicable            |
-| ------------------ | --------------------------------- | --------------------- | --------------------- |
-| VECTOR_STORE_TYPE  | Vector Store Type                 | chroma                | ✅                     |
-| CHROMA_DB_HOST     | ChromaDB Server Address           | localhost             | Required for ChromaDB |
-| CHROMA_DB_PORT     | ChromaDB Port                     | 8000                  | Required for ChromaDB |
-| QDRANT_URL         | Qdrant Vector Store URL           | http://localhost:6333 | Required for Qdrant   |
-| QDRANT_PREFER_GRPC | Prefer gRPC Connection for Qdrant | true                  | Optional for Qdrant   |
-
-### Object Storage Configuration
-
-| Parameter         | Description          | Default        | Required |
-| ----------------- | -------------------- | -------------- | -------- |
-| MINIO_ENDPOINT    | MinIO Server Address | localhost:9000 | ✅        |
-| MINIO_ACCESS_KEY  | MinIO Access Key     | minioadmin     | ✅        |
-| MINIO_SECRET_KEY  | MinIO Secret Key     | minioadmin     | ✅        |
-| MINIO_BUCKET_NAME | MinIO Bucket Name    | documents      | ✅        |
 
 ### Other Configuration
 
@@ -350,7 +369,7 @@ Runs the complete test suite with verbose output.
 
 **Run Unit Tests Only**
 ```bash
-cd backend  
+cd backend
 ./test-unit.sh
 ```
 Runs only unit tests, excluding integration and end-to-end tests.
@@ -406,7 +425,6 @@ Thanks to these open source projects:
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [Langchain](https://python.langchain.com/)
 - [Next.js](https://nextjs.org/)
-- [ChromaDB](https://www.trychroma.com/)
 
 
 ![star history](https://api.star-history.com/svg?repos=rag-web-ui/rag-web-ui&type=Date)

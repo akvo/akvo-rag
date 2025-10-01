@@ -11,10 +11,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      chromadb:
-        condition: service_started
-      minio:
-        condition: service_started
     restart: on-failure
     deploy:
       restart_policy:
@@ -62,42 +58,6 @@ services:
       retries: 5
       start_period: 10s
 
-  chromadb:
-    image: chromadb/chroma:1.0.4
-    ports:
-      - "8001:8000"
-    volumes:
-      - chroma_data:/data
-    networks:
-      - app_network
-
-  # For Qdrant, Remove the comment and run the following command to start the service
-  # qdrant:
-  #   image: qdrant/qdrant:latest
-  #   ports:
-  #     - "6333:6333" # REST API
-  #     - "6334:6334" # GRPC
-  #   volumes:
-  #     - qdrant_data:/qdrant/storage
-  #   environment:
-  #     - QDRANT_ALLOW_RECOVERY_MODE=true
-  #   networks:
-  #     - app_network
-
-  minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-    ports:
-      - "9000:9000" # API port
-      - "9001:9001" # Console port
-    environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
-    volumes:
-      - minio_data:/data
-    command: server --console-address ":9001" /data
-    networks:
-      - app_network
-
   nginx:
     image: nginx:alpine
     ports:
@@ -107,15 +67,11 @@ services:
     depends_on:
       - frontend
       - backend
-      - minio
     networks:
       - app_network
 
 volumes:
   mysql_data:
-  chroma_data:
-  minio_data:
-  # qdrant_data:
 
 networks:
   app_network:

@@ -1,4 +1,8 @@
-from .api_key import APIKey, APIKeyCreate, APIKeyUpdate, APIKeyInDB
-from .user import UserBase, UserCreate, UserUpdate, UserResponse
-from .token import Token, TokenPayload
-from .knowledge import KnowledgeBaseBase, KnowledgeBaseCreate, KnowledgeBaseUpdate, KnowledgeBaseResponse
+from .api_key import APIKey, APIKeyCreate, APIKeyUpdate, APIKeyInDB  # noqa
+from .user import UserBase, UserCreate, UserUpdate, UserResponse  # noqa
+from .token import Token, TokenPayload  # noqa
+from .knowledge import (  # noqa
+    KnowledgeBaseBase,
+    KnowledgeBaseCreate,
+    KnowledgeBaseUpdate,
+)
