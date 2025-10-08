@@ -13,9 +13,9 @@ class FastMCPClientService:
         self.transport.client = httpx.AsyncClient(
             headers={
                 "Connection": "keep-alive",
-                "Keep-Alive": "timeout=600, max=1000",
+                "Keep-Alive": "timeout=3600, max=10000",
             },
-            timeout=httpx.Timeout(600.0),
+            timeout=httpx.Timeout(900.0),
         )
         # auth
         self.api_key = api_key
