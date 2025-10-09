@@ -21,7 +21,6 @@ fi
 # Function to safely run MCP discovery
 # -------------------------------------------
 run_mcp_discovery_manager() {
-    # TODO :: Make sure this running and not failing
     echo "🚀 Running MCP discovery manager..."
     if ! python mcp_clients/mcp_discovery_manager.py; then
         echo "⚠️ MCP discovery manager failed, continuing startup..."
