@@ -8,12 +8,11 @@ PIP_CACHE_DIR="/app/.pip"
 
 if [ "$ENVIRONMENT" = "development" ]; then
     echo "Installing system dependencies..."
-    apt-get update && apt-get install -y \
+    apt-get update -qq && apt-get install -y -qq \
         build-essential \
         default-libmysqlclient-dev \
         pkg-config \
-        netcat-traditional \
-        && rm -rf /var/lib/apt/lists/*
+        netcat-traditional
 
     echo "⏳ Installing Python dependencies..."
     mkdir -p "$PIP_CACHE_DIR"
@@ -44,6 +43,18 @@ else
 fi
 
 # -------------------------------------------
+# Function to safely run Seed Prompt
+# -------------------------------------------
+run_initial_prompt_seeder() {
+    echo "🚀 Running MCP discovery manager..."
+    if ! python -m app.seeder.seed_prompts; then
+        echo "⚠️ Initial prompt seeder failed, continuing startup..."
+    else
+        echo "✅ Initial prompt seeder finished successfully"
+    fi
+}
+
+# -------------------------------------------
 # Function to safely run MCP discovery
 # -------------------------------------------
 run_mcp_discovery_manager() {
@@ -68,6 +79,9 @@ if [ "$ENVIRONMENT" = "development" ]; then
         --proxy-headers \
         --forwarded-allow-ips="*" \
         --reload &
+
+    # Run initial prompt seeder once at startup
+    run_initial_prompt_seeder &
 
     # Run MCP discovery after API is up
     run_mcp_discovery_manager &
