@@ -4,16 +4,19 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.core.config import settings
 from fastapi import Depends, HTTPException, status, Security
-from fastapi.security import OAuth2PasswordBearer, APIKeyHeader
+from fastapi.security import OAuth2PasswordBearer, APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.user import User
+from app.models.app import App
 from app.services.api_key import APIKeyService
+from app.services.app_service import AppService
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login/access-token")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+app_bearer_scheme = HTTPBearer(auto_error=False)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
@@ -81,6 +84,41 @@ def get_api_key_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Inactive API key",
         )
-    
+
     APIKeyService.update_last_used(db=db, api_key=api_key_obj)
-    return api_key_obj.user 
+    return api_key_obj.user
+
+
+def get_current_app(
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Security(app_bearer_scheme),
+) -> App:
+    """
+    Validate Bearer token for app authentication.
+    Returns the App if token is valid and status is active.
+    Raises 401 for invalid/missing token, 403 for inactive app.
+    """
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Access token missing",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token = credentials.credentials
+
+    app = AppService.get_app_by_access_token(db=db, access_token=access_token)
+    if not app:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Access token not recognized",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not AppService.is_app_active(app):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="App is not active",
+        )
+
+    return app
