@@ -11,30 +11,291 @@ DEFAULT_MCP_SERVERS = {
         "type": "rest",
         "tools": [
             {
-                "name": "get_current_weather",
-                "description": "Get the current weather data for a given location.",
-                "endpoint": "/weather/current",
+                "name": "get_weather_forecast",
+                "description": "Get multi-day weather forecasts for a given location.",
+                "endpoint": "/mcp",
                 "method": "POST",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "location": {"type": "string"},
+                        "latitude": {"type": "number"},
+                        "longitude": {"type": "number"},
+                        "days": {"type": "integer"},
                     },
-                    "required": ["location"],
+                    "required": ["latitude", "longitude"],
                 },
             },
             {
-                "name": "get_forecast",
-                "description": "Get weather forecast for given location and days.",
-                "endpoint": "/weather/forecast",
+                "name": "get_current_weather",
+                "description": "Fetch current weather conditions for a given location.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "latitude": {"type": "number"},
+                        "longitude": {"type": "number"},
+                    },
+                    "required": ["latitude", "longitude"],
+                },
+            },
+            {
+                "name": "get_historical_weather",
+                "description": "Get historical weather data for a specific date and location.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "latitude": {"type": "number"},
+                        "longitude": {"type": "number"},
+                        "start_date": {"type": "string"},
+                        "end_date": {"type": "string"},
+                    },
+                    "required": [
+                        "latitude", "longitude", "start_date", "end_date"
+                    ],
+                },
+            },
+            {
+                "name": "analyze_weather_trends",
+                "description": "Analyze weather trends over a specified period for a location.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "latitude": {"type": "number"},
+                        "longitude": {"type": "number"},
+                        "period": {"type": "string"},
+                    },
+                    "required": [
+                        "latitude", "longitude", "period"
+                    ],
+                },
+            },
+            {
+                "name": "get_tomorrow_weather",
+                "description": "Get weather forecast for tomorrow for a given location.",
+                "endpoint": "/mcp",
                 "method": "POST",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "location": {"type": "string"},
-                        "days": {"type": "integer"},
                     },
-                    "required": ["location"],
+                    "required": [
+                        "location"
+                    ],
+                },
+            },
+            {
+                "name": "get_weather_alerts",
+                "description": "Fetch active weather alerts for a specified location.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "location": {"type": "string"},
+                    },
+                    "required": [
+                        "location"
+                    ],
+                },
+            },
+            {
+                "name": "get_google_weather_current_conditions",
+                "description": "Fetch current weather conditions from Google Weather for a given location.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "latitude": {"type": "number"},
+                        "longitude": {"type": "number"},
+                    },
+                    "required": [
+                        "latitude", "longitude"
+                    ],
+                },
+            },
+            {
+                "name": "get_openweathermap_weather",
+                "description": "Fetch current weather data from OpenWeatherMap for a given location.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "lat": {"type": "number"},
+                        "lon": {"type": "number"},
+                    },
+                    "required": [
+                        "lat", "lon"
+                    ],
+                },
+            },
+            {
+                "name": "get_accuweather_current_conditions",
+                "description": "Fetch current weather conditions from AccuWeather for a given location key.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "location_key": {"type": "string"},
+                    },
+                    "required": [
+                        "location_key"
+                    ],
+                },
+            },
+            {
+                "name": "predict_weather_alert",
+                "description": "Predict potential weather alerts based on location.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "latitude": {"type": "number"},
+                        "longitude": {"type": "number"},
+                    },
+                    "required": [
+                        "latitude", "longitude"
+                    ],
+                },
+            },
+            {
+                "name": "list_villages",
+                "description": "List villages in a specified state and/or district.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "state": {"type": "string"},
+                        "district": {"type": "string"},
+                    },
+                    "required": [
+                        "state"
+                    ],
+                },
+            },
+            {
+                "name": "reverse_geocode",
+                "description": "Get location details from latitude and longitude.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "location_name": {"type": "string"},
+                    },
+                    "required": [
+                        "location_name"
+                    ],
+                },
+            },
+            {
+                "name": "get_administrative_bounds",
+                "description": "Get administrative boundaries for a given village ID.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "village_id": {"type": "string"},
+                    },
+                    "required": [
+                        "village_id"
+                    ],
+                },
+            },
+            {
+                "name": "get_crop_calendar",
+                "description": "Get crop calendar information for a specific region and/or crop type.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "region": {"type": "string"},
+                        "crop_type": {"type": "string"},
+                    },
+                    "required": [
+                        "region"
+                    ],
+                },
+            },
+            {
+                "name": "get_prominent_crops",
+                "description": "Get prominent crops for a specific region and season.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "region": {"type": "string"},
+                        "season": {"type": "string"},
+                    },
+                    "required": [
+                        "region", "season"
+                    ],
+                },
+            },
+            {
+                "name": "estimate_crop_stage",
+                "description": "Estimate the growth stage of a crop based on planting date and current date.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "crop": {"type": "string"},
+                        "plant_date": {"type": "string"},
+                        "current_date": {"type": "string"},
+                    },
+                    "required": [
+                        "crop", "plant_date", "current_date"
+                    ],
+                },
+            },
+            {
+                "name": "generate_weather_alert",
+                "description": "Estimate the growth stage of a crop based on planting date and current date.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "crop": {"type": "string"},
+                        "weather_data": {"type": "dict"},
+                        "growth_stage": {"type": "string"},
+                        "latitude": {"type": "number"},
+                        "longitude": {"type": "number"},
+                    },
+                    "required": [
+                        "crop", "weather_data", "growth_stage",
+                        "latitude", "longitude"
+                    ],
+                },
+            },
+            {
+                "name": "prioritize_alerts",
+                "description": "Estimate the growth stage of a crop based on planting date and current date.",
+                "endpoint": "/mcp",
+                "method": "POST",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "alerts_list": {"type": "list"},
+                        "urgency_factors": {"type": "dict"},
+                    },
+                    "required": [
+                        "alerts_list", "urgency_factors"
+                    ],
                 },
             },
         ],

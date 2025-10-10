@@ -1,30 +1,61 @@
 import aiohttp
-from typing import Any, Dict, List
+import logging
 
+logger = logging.getLogger(__name__)
 
 class RESTMCPClientService:
-    """Adapter for non-FastMCP servers exposing REST POST endpoints."""
+    """REST-based MCP Client that uses static configuration."""
 
-    def __init__(self, base_url: str, tools: List[Dict[str, Any]]):
+    def __init__(self, base_url: str, tools: list[dict]):
         self.base_url = base_url.rstrip("/")
         self.tools = tools
 
     async def list_tools(self):
-        # Maybe later can check, if static tools provided use static
-        # then if not, try to fetch from server (if supported)
+        """Return statically defined tools with metadata."""
         return self.tools
 
     async def list_resources(self):
-        # Optional — return static or empty
+        """REST MCP servers may not have resource listings."""
         return []
 
-    async def call_tool(self, tool_name: str, params: Dict[str, Any]):
+    async def call_tool(self, tool_name: str, payload: dict):
+        """
+        Call a REST MCP tool.
+        Expected payload:
+        {
+            "tool": "get_weather_forecast",
+            "parameters": {...}
+        }
+        """
+        # Handle case where the caller already passes 'tool' key
+        if "tool" in payload:
+            tool_name = payload["tool"]
+            params = payload.get("parameters", {})
+        else:
+            params = payload  # fallback for backward compatibility
+
+        # Find matching tool definition
         tool = next((t for t in self.tools if t["name"] == tool_name), None)
         if not tool:
-            raise ValueError(f"Tool `{tool_name}` not found")
+            raise ValueError(f"Tool `{tool_name}` not found in REST MCP configuration")
 
-        url = f"{self.base_url}{tool['endpoint']}"
+        endpoint = tool.get("endpoint")
+        method = tool.get("method", "POST").upper()
+        url = f"{self.base_url}{endpoint}"
+
+        logger.info(f"[RESTMCP] Calling {tool_name} -> {url} ({method})")
+
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=params) as resp:
-                resp.raise_for_status()
-                return await resp.json()
+            if method == "POST":
+                async with session.post(url, json=params) as resp:
+                    result = await resp.json()
+            else:
+                async with session.get(url, params=params) as resp:
+                    result = await resp.json()
+
+        return {
+            "tool": tool_name,
+            "endpoint": url,
+            "method": method,
+            "response": result,
+        }
