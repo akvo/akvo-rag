@@ -270,7 +270,9 @@ export function DocumentUploadSteps({
       setTaskStatuses(initialStatuses);
 
       // Start polling for task status
-      pollTaskStatus(data.tasks.map((t) => t.task_id));
+      setTimeout(() => {
+        pollTaskStatus(data.tasks.map((t) => t.task_id));
+      }, 2000);
     } catch (error) {
       setIsLoading(false);
       toast({

@@ -11,7 +11,7 @@ from app.api.api_v1.auth import get_current_user
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.get("/", response_model=List[schemas.APIKey])
+@router.get("", response_model=List[schemas.APIKey])
 def read_api_keys(
     db: Session = Depends(get_db),
     skip: int = 0,
@@ -26,7 +26,8 @@ def read_api_keys(
     )
     return api_keys
 
-@router.post("/", response_model=schemas.APIKey)
+
+@router.post("", response_model=schemas.APIKey)
 def create_api_key(
     *,
     db: Session = Depends(get_db),
@@ -41,6 +42,7 @@ def create_api_key(
     )
     logger.info(f"API key created: {api_key.key} for user {current_user.id}")
     return api_key
+
 
 @router.put("/{id}", response_model=schemas.APIKey)
 def update_api_key(
@@ -62,6 +64,7 @@ def update_api_key(
     api_key = APIKeyService.update_api_key(db=db, api_key=api_key, update_data=api_key_in)
     logger.info(f"API key updated: {api_key.key} for user {current_user.id}")
     return api_key
+
 
 @router.delete("/{id}", response_model=schemas.APIKey)
 def delete_api_key(

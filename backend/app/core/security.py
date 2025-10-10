@@ -12,7 +12,7 @@ from app.services.api_key import APIKeyService
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login/access-token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -29,7 +29,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-    return encoded_jwt 
+    return encoded_jwt
 
 def get_current_user(
     db: Session = Depends(get_db),
@@ -47,7 +47,7 @@ def get_current_user(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    
+
     user = db.query(User).filter(User.username == username).first()
     if user is None:
         raise credentials_exception
@@ -57,7 +57,7 @@ def get_current_user(
             detail="Inactive user",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return user 
+    return user
 
 def get_api_key_user(
     db: Session = Depends(get_db),
@@ -68,19 +68,19 @@ def get_api_key_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API key header missing",
         )
-    
+
     api_key_obj = APIKeyService.get_api_key_by_key(db=db, key=api_key)
     if not api_key_obj:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
         )
-    
+
     if not api_key_obj.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Inactive API key",
         )
-    
+
     APIKeyService.update_last_used(db=db, api_key=api_key_obj)
-    return api_key_obj.user 
+    return api_key_obj.user

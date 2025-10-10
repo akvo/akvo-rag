@@ -3,7 +3,6 @@ import logging
 from app.api.api_v1.api import api_router
 from app.api.openapi.api import router as openapi_router
 from app.core.config import settings
-from app.core.minio import init_minio
 from app.startup.migarate import DatabaseMigrator
 from fastapi import FastAPI
 
@@ -29,8 +28,6 @@ app.include_router(ws_router)
 
 @app.on_event("startup")
 async def startup_event():
-    # Initialize MinIO
-    init_minio()
     # Run database migrations
     migrator = DatabaseMigrator(settings.get_database_url)
     migrator.run_migrations()
