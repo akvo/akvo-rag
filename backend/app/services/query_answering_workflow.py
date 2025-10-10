@@ -67,7 +67,7 @@ def contextualize_node(state: GraphState) -> GraphState:
 async def scoping_node(state: GraphState) -> GraphState:
     """Determine the scope (server, tool, input) using ScopingAgent."""
     agent = ScopingAgent()
-    scope = agent.scope_query(
+    scope = await agent.scope_query(
         query=state["contextual_query"], scope=state["scope"]
     )
     state["scope"] = scope
