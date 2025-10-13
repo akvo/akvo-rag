@@ -11,6 +11,7 @@ class AppRegisterRequest(BaseModel):
     default_chat_prompt: Optional[str] = ""
     chat_callback: str
     upload_callback: str
+    callback_token: str
 
     @field_validator("chat_callback", "upload_callback")
     @classmethod
@@ -24,7 +25,6 @@ class AppRegisterResponse(BaseModel):
     app_id: str
     client_id: str
     access_token: str
-    callback_token: str
     scopes: List[str]
 
     class Config:
@@ -48,6 +48,7 @@ class AppMeResponse(BaseModel):
 class AppRotateRequest(BaseModel):
     rotate_access_token: bool = False
     rotate_callback_token: bool = False
+    new_callback_token: Optional[str] = None
 
 
 class AppRotateResponse(BaseModel):

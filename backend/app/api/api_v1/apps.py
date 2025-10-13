@@ -44,7 +44,7 @@ def register_app(
     Returns app credentials including access_token and callback_token.
     """
     try:
-        app, access_token, callback_token = AppService.create_app(
+        app, access_token = AppService.create_app(
             db=db, register_data=register_data
         )
 
@@ -52,7 +52,6 @@ def register_app(
             app_id=app.app_id,
             client_id=app.client_id,
             access_token=access_token,
-            callback_token=callback_token,
             scopes=app.scopes,
         )
     except ValueError as e:
@@ -122,17 +121,22 @@ def rotate_tokens(
 
     - **rotate_access_token**: If true, rotate the access token
     - **rotate_callback_token**: If true, rotate the callback token
+    - **new_callback_token**: Required if rotate_callback_token is true
 
     Old tokens remain valid until app is revoked or deactivated.
     """
     new_access_token = None
-    new_callback_token = None
 
     if rotate_request.rotate_access_token:
         new_access_token = AppService.rotate_access_token(db=db, app=current_app)
 
     if rotate_request.rotate_callback_token:
-        new_callback_token = AppService.rotate_callback_token(db=db, app=current_app)
+        if not rotate_request.new_callback_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="new_callback_token is required when rotate_callback_token is true",
+            )
+        AppService.rotate_callback_token(db=db, app=current_app, new_callback_token=rotate_request.new_callback_token)
 
     if not rotate_request.rotate_access_token and not rotate_request.rotate_callback_token:
         message = "No tokens were rotated"
@@ -146,7 +150,7 @@ def rotate_tokens(
     return AppRotateResponse(
         app_id=current_app.app_id,
         access_token=new_access_token,
-        callback_token=new_callback_token,
+        callback_token=None,
         message=message,
     )
 

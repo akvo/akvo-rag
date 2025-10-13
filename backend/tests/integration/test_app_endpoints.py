@@ -50,6 +50,7 @@ def sample_app_data():
         "default_chat_prompt": "",
         "chat_callback": "https://agriconnect.akvo.org/api/ai/callback",
         "upload_callback": "https://agriconnect.akvo.org/api/kb/callback",
+        "callback_token": "test_callback_token_123",
     }
 
 
@@ -67,7 +68,6 @@ class TestAppRegistration:
         assert "app_id" in data
         assert "client_id" in data
         assert "access_token" in data
-        assert "callback_token" in data
         assert "scopes" in data
 
         # Verify ID prefixes
@@ -188,26 +188,38 @@ class TestAppRotate:
     def test_rotate_callback_token_only(self, registered_app):
         """Test rotating only the callback token."""
         headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
-        payload = {"rotate_access_token": False, "rotate_callback_token": True}
+        payload = {
+            "rotate_access_token": False,
+            "rotate_callback_token": True,
+            "new_callback_token": "new_test_callback_token_456"
+        }
 
         response = client.post("/v1/apps/rotate", json=payload, headers=headers)
 
         assert response.status_code == 200
         data = response.json()
 
-        # Verify callback token was rotated
-        assert data["callback_token"] is not None
-        assert len(data["callback_token"]) >= 32
+        # Verify callback token was rotated (returns None in response)
+        assert data["callback_token"] is None
 
         # Verify access token was not rotated
         assert data["access_token"] is None
 
+        # Verify the callback token was updated in the database
+        db = TestingSessionLocal()
+        app = db.query(App).filter(App.app_id == registered_app["app_id"]).first()
+        assert app.callback_token == "new_test_callback_token_456"
+        db.close()
+
     def test_rotate_both_tokens(self, registered_app):
         """Test rotating both access and callback tokens."""
         old_access_token = registered_app["access_token"]
-        old_callback_token = registered_app["callback_token"]
         headers = {"Authorization": f"Bearer {old_access_token}"}
-        payload = {"rotate_access_token": True, "rotate_callback_token": True}
+        payload = {
+            "rotate_access_token": True,
+            "rotate_callback_token": True,
+            "new_callback_token": "new_test_callback_token_789"
+        }
 
         response = client.post("/v1/apps/rotate", json=payload, headers=headers)
 
@@ -216,10 +228,15 @@ class TestAppRotate:
 
         # Verify both tokens were rotated
         assert data["access_token"] is not None
-        assert data["callback_token"] is not None
         assert data["access_token"] != old_access_token
-        assert data["callback_token"] != old_callback_token
+        assert data["callback_token"] is None  # callback_token not returned in response
         assert data["message"] == "Both tokens rotated successfully"
+
+        # Verify the callback token was updated in the database
+        db = TestingSessionLocal()
+        app = db.query(App).filter(App.app_id == registered_app["app_id"]).first()
+        assert app.callback_token == "new_test_callback_token_789"
+        db.close()
 
     def test_rotate_no_tokens(self, registered_app):
         """Test rotate endpoint when no tokens are requested to rotate."""

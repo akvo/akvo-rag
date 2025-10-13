@@ -20,6 +20,7 @@ class TestAppService:
             default_chat_prompt="",
             chat_callback="https://agriconnect.akvo.org/api/ai/callback",
             upload_callback="https://agriconnect.akvo.org/api/kb/callback",
+            callback_token="test_callback_token_123",
         )
 
     def test_generate_app_id_has_correct_prefix(self):
@@ -40,45 +41,9 @@ class TestAppService:
         assert token.startswith("tok_")
         assert len(token) > 4  # prefix + random part
 
-    def test_generate_callback_token_is_long_enough(self):
-        """Test that generated callback token is sufficiently long."""
-        token = AppService.generate_callback_token()
-        assert len(token) >= 32  # Should be a secure token
-
-    def test_hash_callback_token_returns_different_hash(self):
-        """Test that hashing the same token returns argon2 hash."""
-        token = "test_token_123"
-        hash1 = AppService.hash_callback_token(token)
-        hash2 = AppService.hash_callback_token(token)
-        # Argon2 hashes are different each time due to random salt
-        assert hash1 != hash2
-        assert hash1.startswith("$argon2")
-        assert hash2.startswith("$argon2")
-
-    def test_verify_callback_token_success(self):
-        """Test that verify_callback_token returns True for correct token."""
-        token = "test_token_123"
-        hashed = AppService.hash_callback_token(token)
-        assert AppService.verify_callback_token(token, hashed) is True
-
-    def test_verify_callback_token_failure(self):
-        """Test that verify_callback_token returns False for incorrect token."""
-        token = "test_token_123"
-        wrong_token = "wrong_token_456"
-        hashed = AppService.hash_callback_token(token)
-        assert AppService.verify_callback_token(wrong_token, hashed) is False
-
-    def test_constant_time_compare_equal_strings(self):
-        """Test constant-time comparison for equal strings."""
-        assert AppService.constant_time_compare("abc123", "abc123") is True
-
-    def test_constant_time_compare_different_strings(self):
-        """Test constant-time comparison for different strings."""
-        assert AppService.constant_time_compare("abc123", "def456") is False
-
     def test_create_app_generates_all_credentials(self, mock_db, sample_register_data):
         """Test that create_app generates all required credentials."""
-        app, access_token, callback_token = AppService.create_app(
+        app, access_token = AppService.create_app(
             db=mock_db, register_data=sample_register_data
         )
 
@@ -89,12 +54,12 @@ class TestAppService:
         assert app.domain == "agriconnect.akvo.org/api"
         assert app.chat_callback_url == "https://agriconnect.akvo.org/api/ai/callback"
         assert app.upload_callback_url == "https://agriconnect.akvo.org/api/kb/callback"
+        assert app.callback_token == "test_callback_token_123"
         assert app.status == AppStatus.active
         assert app.scopes == DEFAULT_SCOPES
 
-        # Verify returned tokens
+        # Verify returned token
         assert access_token.startswith("tok_")
-        assert len(callback_token) >= 32
 
         # Verify DB operations
         mock_db.add.assert_called_once_with(app)
@@ -104,7 +69,7 @@ class TestAppService:
     def test_create_app_with_custom_scopes(self, mock_db, sample_register_data):
         """Test that create_app accepts custom scopes."""
         custom_scopes = ["custom.read", "custom.write"]
-        app, _, _ = AppService.create_app(
+        app, _ = AppService.create_app(
             db=mock_db, register_data=sample_register_data, scopes=custom_scopes
         )
 
@@ -144,14 +109,14 @@ class TestAppService:
     def test_rotate_callback_token(self, mock_db):
         """Test rotating callback token."""
         mock_app = Mock()
-        old_hash = "old_hash"
-        mock_app.callback_token_hash = old_hash
+        old_token = "old_callback_token"
+        mock_app.callback_token = old_token
+        new_token = "new_callback_token_123"
 
-        new_token = AppService.rotate_callback_token(db=mock_db, app=mock_app)
+        AppService.rotate_callback_token(db=mock_db, app=mock_app, new_callback_token=new_token)
 
-        assert len(new_token) >= 32
-        assert mock_app.callback_token_hash != old_hash
-        assert mock_app.callback_token_hash.startswith("$argon2")
+        assert mock_app.callback_token == new_token
+        assert mock_app.callback_token != old_token
         mock_db.add.assert_called_once_with(mock_app)
         mock_db.commit.assert_called_once()
 

@@ -1,15 +1,9 @@
 from typing import Optional, List
 import secrets
-import hmac
-from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError
 from sqlalchemy.orm import Session
 
 from app.models.app import App, AppStatus
 from app.schemas.app import AppRegisterRequest
-
-# Initialize Argon2 hasher
-ph = PasswordHasher()
 
 # Default scopes for new apps
 DEFAULT_SCOPES = ["jobs.write", "kb.read", "kb.write", "apps.read"]
@@ -32,42 +26,16 @@ class AppService:
         return f"tok_{secrets.token_urlsafe(48)}"
 
     @staticmethod
-    def generate_callback_token() -> str:
-        """Generate a callback token."""
-        return secrets.token_urlsafe(48)
-
-    @staticmethod
-    def hash_callback_token(token: str) -> str:
-        """Hash callback token using Argon2."""
-        return ph.hash(token)
-
-    @staticmethod
-    def verify_callback_token(token: str, hashed: str) -> bool:
-        """Verify callback token using constant-time comparison (via Argon2)."""
-        try:
-            ph.verify(hashed, token)
-            return True
-        except VerifyMismatchError:
-            return False
-
-    @staticmethod
-    def constant_time_compare(a: str, b: str) -> bool:
-        """Constant-time string comparison."""
-        return hmac.compare_digest(a, b)
-
-    @staticmethod
     def create_app(
         db: Session, register_data: AppRegisterRequest, scopes: Optional[List[str]] = None
-    ) -> tuple[App, str, str]:
+    ) -> tuple[App, str]:
         """
         Create a new app registration.
-        Returns: (App model, access_token, callback_token)
+        Returns: (App model, access_token)
         """
         app_id = AppService.generate_app_id()
         client_id = AppService.generate_client_id()
         access_token = AppService.generate_access_token()
-        callback_token = AppService.generate_callback_token()
-        callback_token_hash = AppService.hash_callback_token(callback_token)
 
         if scopes is None:
             scopes = DEFAULT_SCOPES
@@ -81,7 +49,7 @@ class AppService:
             chat_callback_url=register_data.chat_callback,
             upload_callback_url=register_data.upload_callback,
             access_token=access_token,
-            callback_token_hash=callback_token_hash,
+            callback_token=register_data.callback_token,
             scopes=scopes,
             status=AppStatus.active,
         )
@@ -90,7 +58,7 @@ class AppService:
         db.commit()
         db.refresh(app)
 
-        return app, access_token, callback_token
+        return app, access_token
 
     @staticmethod
     def get_app_by_access_token(db: Session, access_token: str) -> Optional[App]:
@@ -113,14 +81,12 @@ class AppService:
         return new_access_token
 
     @staticmethod
-    def rotate_callback_token(db: Session, app: App) -> str:
+    def rotate_callback_token(db: Session, app: App, new_callback_token: str) -> None:
         """Rotate the callback token for an app."""
-        new_callback_token = AppService.generate_callback_token()
-        app.callback_token_hash = AppService.hash_callback_token(new_callback_token)
+        app.callback_token = new_callback_token
         db.add(app)
         db.commit()
         db.refresh(app)
-        return new_callback_token
 
     @staticmethod
     def revoke_app(db: Session, app: App) -> None:
