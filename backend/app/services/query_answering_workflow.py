@@ -1,5 +1,6 @@
 import json
 import base64
+import logging
 
 from typing import TypedDict, Dict, Any, List
 from langgraph.graph import StateGraph
@@ -16,6 +17,9 @@ from mcp_clients.mcp_client_manager import MCPClientManager
 from app.services.scoping_agent import ScopingAgent
 
 
+logger = logging.getLogger(__name__)
+
+
 class GraphState(TypedDict):
     query: str
     chat_history: List[Dict[str, str]]
@@ -28,6 +32,7 @@ class GraphState(TypedDict):
     answer: str
 
 
+# --- Helper functions ---
 def decode_mcp_context(base64_context: str) -> List[Document]:
     """
     Decode Base64-encoded MCP context into a list of LangChain Documents.
@@ -41,6 +46,44 @@ def decode_mcp_context(base64_context: str) -> List[Document]:
         )
         for item in context_dict.get("context", [])
     ]
+
+
+def ensure_documents(context_data):
+    """Convert plain dicts or other data into a list of LangChain Documents."""
+    logger.debug(f"[ensure_documents] Received context_data type={type(context_data)}")
+
+    if not context_data:
+        logger.info("[ensure_documents] Empty context_data, returning [].")
+        return []
+
+    # Already Document objects
+    if isinstance(context_data, list) and all(hasattr(d, "page_content") for d in context_data):
+        logger.debug("[ensure_documents] Already list of Document objects.")
+        return context_data
+
+    # Single dict
+    if isinstance(context_data, dict):
+        logger.debug("[ensure_documents] Single dict detected, wrapping in Document.")
+        text = json.dumps(context_data, indent=2, ensure_ascii=False)
+        return [Document(page_content=text, metadata={"source": "mcp_rest_result"})]
+
+    # List of dicts
+    if isinstance(context_data, list) and all(isinstance(d, dict) for d in context_data):
+        logger.debug(f"[ensure_documents] List of {len(context_data)} dicts detected.")
+        docs = []
+        for idx, item in enumerate(context_data):
+            try:
+                text = json.dumps(item, indent=2, ensure_ascii=False)
+                docs.append(Document(page_content=text, metadata={"source": "mcp_rest_result", "index": idx}))
+            except Exception as e:
+                logger.warning(f"[ensure_documents] Failed to serialize item {idx}: {e}")
+        return docs
+
+    # Fallback
+    logger.debug("[ensure_documents] Fallback: converting to string.")
+    return [Document(page_content=str(context_data), metadata={"source": "mcp_rest_result"})]
+
+# --- EOL Helper functions ---
 
 
 def contextualize_node(state: GraphState) -> GraphState:
@@ -88,15 +131,60 @@ async def run_mcp_tool_node(state: GraphState) -> GraphState:
     return state
 
 
-def post_processing_node(state: GraphState) -> GraphState:
-    """Extract context from MCP tool result."""
+def post_processing_node(state):
+    """Extract and normalize MCP tool result into Document list format."""
+    logger.info("[post_processing_node] Starting post-processing of MCP result...")
+
     try:
-        b64_text = state["mcp_result"].content[0].text
-        b64 = json.loads(b64_text)
-        contexts = decode_mcp_context(base64_context=b64.get("context", ""))
-        state["context"] = contexts
-    except Exception:
+        mcp_result = state.get("mcp_result")
+        if not mcp_result:
+            logger.warning("[post_processing_node] No mcp_result found in state.")
+            state["context"] = []
+            return state
+
+        # --- Try decode Knowledge Base (base64 encoded) context ---
+        try:
+            b64_text = mcp_result.content[0].text
+            b64 = json.loads(b64_text)
+            logger.debug("[post_processing_node] Detected KB/Chroma-style base64 context.")
+            contexts = decode_mcp_context(base64_context=b64.get("context", ""))
+            state["context"] = ensure_documents(contexts)
+            logger.info("[post_processing_node] Successfully decoded base64 context.")
+            return state
+
+        except Exception as e:
+            logger.debug(f"[post_processing_node] Not a base64 KB context: {e}")
+
+        # --- Otherwise, assume it's a REST MCP JSON result ---
+        json_result = None
+
+        if isinstance(mcp_result, dict):
+            logger.debug("[post_processing_node] Detected dict-based MCP result.")
+            json_result = mcp_result
+
+        elif hasattr(mcp_result, "content"):
+            try:
+                text = getattr(mcp_result.content[0], "text", "")
+                logger.debug(f"[post_processing_node] Parsing .content text: {text[:200]}...")
+                json_result = json.loads(text)
+                logger.info("[post_processing_node] Parsed REST MCP JSON result successfully.")
+            except Exception as e:
+                logger.warning(f"[post_processing_node] Failed to parse REST MCP result as JSON: {e}")
+                json_result = {"raw_text": str(mcp_result)}
+
+        else:
+            logger.warning("[post_processing_node] Unknown MCP result type, wrapping as string.")
+            json_result = {"raw_text": str(mcp_result)}
+
+        # Normalize result to Document list
+        docs = ensure_documents(json_result)
+        state["context"] = docs
+        logger.info(f"[post_processing_node] Generated {len(docs)} Document(s) from MCP result.")
+
+    except Exception as e:
+        logger.exception(f"[post_processing_node] Unexpected error during processing: {e}")
         state["context"] = []
+
     return state
 
 

@@ -38,11 +38,11 @@ async def stream_mcp_response(
 ):
     """
     Best-practice streaming:
-      - Run MCP for scoping/retrieval (context)
-      - Stream context prefix first (base64 + __LLM_RESPONSE__)
-      - Stream tokens directly from qa_chain.astream
-      - Persist user + assistant at the end
-      - Use Vercel protocol lines: 0:"...", d:{...}, 3:{...}
+        - Run MCP for scoping/retrieval (context)
+        - Stream context prefix first (base64 + __LLM_RESPONSE__)
+        - Stream tokens directly from qa_chain.astream
+        - Persist user + assistant at the end
+        - Use Vercel protocol lines: 0:"...", d:{...}, 3:{...}
     """
     if not knowledge_base_ids:
         raise ValueError("No knowledge_base_ids provided for this chat.")

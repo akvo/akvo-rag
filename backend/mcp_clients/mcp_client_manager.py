@@ -20,7 +20,9 @@ class MCPClientManager:
             if mcp_type == "fastmcp":
                 self.services[name] = FastMCPClientService(url, api_key=api_key)
             elif mcp_type == "rest":
-                self.services[name] = RESTMCPClientService(url, cfg.get("tools", []))
+                self.services[name] = RESTMCPClientService(
+                    url, cfg.get("tools", [])
+                )
             else:
                 raise ValueError(
                     f"Unsupported MCP type `{mcp_type}` for {name}")

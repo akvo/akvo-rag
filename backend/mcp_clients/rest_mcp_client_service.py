@@ -1,3 +1,4 @@
+import json
 import aiohttp
 import logging
 
@@ -9,6 +10,7 @@ class RESTMCPClientService:
     def __init__(self, base_url: str, tools: list[dict]):
         self.base_url = base_url.rstrip("/")
         self.tools = tools
+        self.is_rest = True  # Used by MCPClientManager
 
     async def list_tools(self):
         """Return statically defined tools with metadata."""
@@ -18,23 +20,15 @@ class RESTMCPClientService:
         """REST MCP servers may not have resource listings."""
         return []
 
-    async def call_tool(self, tool_name: str, payload: dict):
+    async def call_tool(self, tool_name: str, params: dict):
         """
-        Call a REST MCP tool.
-        Expected payload:
-        {
-            "tool": "get_weather_forecast",
-            "parameters": {...}
-        }
+        Support both:
+        {"input": {...}}  ← ScopingAgent format
         """
-        # Handle case where the caller already passes 'tool' key
-        if "tool" in payload:
-            tool_name = payload["tool"]
-            params = payload.get("parameters", {})
-        else:
-            params = payload  # fallback for backward compatibility
+        logger.info(
+            f"[RESTMCPClientService] call_tool: {tool_name} with params: {params}")
 
-        # Find matching tool definition
+        # find tool definition
         tool = next((t for t in self.tools if t["name"] == tool_name), None)
         if not tool:
             raise ValueError(f"Tool `{tool_name}` not found in REST MCP configuration")
@@ -43,19 +37,31 @@ class RESTMCPClientService:
         method = tool.get("method", "POST").upper()
         url = f"{self.base_url}{endpoint}"
 
-        logger.info(f"[RESTMCP] Calling {tool_name} -> {url} ({method})")
+        # agMCP payload format
+        payload = {
+            "tool": tool_name,
+            "parameters": params or {}
+        }
+        json_payload = json.dumps(payload)
 
+        logger.info(
+            f"[RESTMCPClientService] Calling {method} {url} with payload: {payload}"
+        )
+
+        headers = {"Content-Type": "application/json"}
         async with aiohttp.ClientSession() as session:
             if method == "POST":
-                async with session.post(url, json=params) as resp:
+                async with session.post(
+                    url, data=json_payload, headers=headers
+                ) as resp:
                     result = await resp.json()
+                    logger.info(f"[RESTMCPClientService] Response: {result}")
             else:
-                async with session.get(url, params=params) as resp:
+                async with session.get(
+                    url, params=payload["parameters"], headers=headers
+                ) as resp:
+                    resp.raise_for_status()
                     result = await resp.json()
 
-        return {
-            "tool": tool_name,
-            "endpoint": url,
-            "method": method,
-            "response": result,
-        }
+        logger.info(f"[RESTMCPClientService] Response: {result}")
+        return result
