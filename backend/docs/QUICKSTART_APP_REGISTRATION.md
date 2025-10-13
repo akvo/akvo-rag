@@ -45,7 +45,8 @@ curl -X POST http://localhost:8000/v1/apps/register \
     "domain": "agriconnect.akvo.org/api",
     "default_chat_prompt": "",
     "chat_callback": "https://agriconnect.akvo.org/api/ai/callback",
-    "upload_callback": "https://agriconnect.akvo.org/api/kb/callback"
+    "upload_callback": "https://agriconnect.akvo.org/api/kb/callback",
+    "callback_token": "your_secure_callback_token_here"
   }'
 ```
 
@@ -66,7 +67,11 @@ curl http://localhost:8000/v1/apps/me \
 curl -X POST http://localhost:8000/v1/apps/rotate \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"rotate_access_token": true, "rotate_callback_token": true}'
+  -d '{
+    "rotate_access_token": true,
+    "rotate_callback_token": true,
+    "new_callback_token": "your_new_secure_callback_token"
+  }'
 ```
 
 #### Revoke App
@@ -93,7 +98,7 @@ Full API reference: `backend/APP_REGISTRATION.md`
 
 ```
 backend/
-├── requirements.txt                           # Added argon2-cffi
+├── requirements.txt                           # No new dependencies
 ├── app/
 │   ├── main.py                               # Added v1_router
 │   ├── models/
@@ -133,13 +138,6 @@ docker exec akvo-rag-backend-1 alembic upgrade head
 **Solution**: Install dependencies inside container
 ```bash
 docker exec akvo-rag-backend-1 pip install -r requirements.txt
-```
-
-### Issue: Argon2 not found
-
-**Solution**: Install argon2-cffi
-```bash
-pip install argon2-cffi>=23.1.0
 ```
 
 ## Success Criteria

@@ -121,10 +121,11 @@ curl -sX POST http://localhost:8000/v1/apps/register \
     "domain": "agriconnect.akvo.org/api",
     "default_chat_prompt": "",
     "chat_callback": "https://agriconnect.akvo.org/api/ai/callback",
-    "upload_callback": "https://agriconnect.akvo.org/api/kb/callback"
+    "upload_callback": "https://agriconnect.akvo.org/api/kb/callback",
+    "callback_token": "your_secure_callback_token_here"
   }'
 
-# Response includes: app_id, client_id, access_token, callback_token, scopes
+# Response includes: app_id, client_id, access_token, scopes
 
 # 2. Validate token and get app info
 curl -s http://localhost:8000/v1/apps/me \
@@ -134,7 +135,7 @@ curl -s http://localhost:8000/v1/apps/me \
 curl -sX POST http://localhost:8000/v1/apps/rotate \
   -H "Authorization: Bearer tok_xxx" \
   -H 'Content-Type: application/json' \
-  -d '{"rotate_access_token": true, "rotate_callback_token": true}'
+  -d '{"rotate_access_token": true, "rotate_callback_token": true, "new_callback_token": "your_new_secure_callback_token"}'
 
 # 4. Revoke app
 curl -sX POST http://localhost:8000/v1/apps/revoke \
@@ -169,7 +170,7 @@ curl -sX POST http://localhost:8000/v1/apps/revoke \
    # Register an app
    curl -X POST http://localhost:8000/v1/apps/register \
      -H 'Content-Type: application/json' \
-     -d '{"app_name":"test","domain":"test.com","chat_callback":"https://test.com/chat","upload_callback":"https://test.com/upload"}'
+     -d '{"app_name":"test","domain":"test.com","chat_callback":"https://test.com/chat","upload_callback":"https://test.com/upload","callback_token":"your_callback_token"}'
    ```
 
 ---
