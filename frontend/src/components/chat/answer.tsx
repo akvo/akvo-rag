@@ -34,7 +34,7 @@ interface CitationInfo {
   document: DocumentInfo;
 }
 
-// Simple custom tooltip component to replace Popover
+// Smart tooltip component that respects viewport boundaries
 const CitationTooltip: FC<{
   citation: Citation;
   citationInfo?: CitationInfo;
@@ -42,21 +42,107 @@ const CitationTooltip: FC<{
 }> = ({ citation, citationInfo, children }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [adjustedPosition, setAdjustedPosition] = useState({ top: 0, left: 0, transformX: '-50%' });
   const tooltipRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
+  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isMouseOverRef = useRef(false);
 
   const handleMouseEnter = (e: React.MouseEvent) => {
+    // Clear any pending close timeout
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+
+    isMouseOverRef.current = true;
+
     const rect = e.currentTarget.getBoundingClientRect();
     setPosition({
-      top: rect.top - 10,
+      top: rect.top,
       left: rect.left + rect.width / 2,
     });
     setIsVisible(true);
   };
 
   const handleMouseLeave = () => {
-    setIsVisible(false);
+    isMouseOverRef.current = false;
+    // Delay closing to allow mouse to move to tooltip
+    closeTimeoutRef.current = setTimeout(() => {
+      if (!isMouseOverRef.current) {
+        setIsVisible(false);
+      }
+    }, 150);
   };
+
+  const handleTooltipMouseEnter = () => {
+    // Cancel close if mouse enters tooltip
+    isMouseOverRef.current = true;
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+  };
+
+  const handleTooltipMouseLeave = () => {
+    isMouseOverRef.current = false;
+    // Close when mouse leaves tooltip
+    closeTimeoutRef.current = setTimeout(() => {
+      setIsVisible(false);
+    }, 100);
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isVisible && tooltipRef.current) {
+      const tooltip = tooltipRef.current;
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const padding = 10; // Padding from viewport edges
+
+      let finalTop = position.top - tooltipRect.height - padding;
+      let finalLeft = position.left;
+      let transformX = '-50%'; // Default centered transform
+
+      // Check if tooltip goes above viewport - show below instead
+      if (finalTop < padding) {
+        const triggerElement = triggerRef.current;
+        if (triggerElement) {
+          const triggerRect = triggerElement.getBoundingClientRect();
+          finalTop = triggerRect.bottom + padding;
+        }
+      }
+
+      // Check if tooltip goes below viewport - move up
+      if (finalTop + tooltipRect.height > window.innerHeight - padding) {
+        finalTop = window.innerHeight - tooltipRect.height - padding;
+      }
+
+      // Calculate with centered transform
+      const leftEdge = finalLeft - (tooltipRect.width / 2);
+      const rightEdge = finalLeft + (tooltipRect.width / 2);
+
+      // Adjust horizontal position if overflowing
+      if (leftEdge < padding) {
+        // Align to left edge
+        finalLeft = padding;
+        transformX = '0%';
+      } else if (rightEdge > window.innerWidth - padding) {
+        // Align to right edge
+        finalLeft = window.innerWidth - padding;
+        transformX = '-100%';
+      }
+
+      setAdjustedPosition({ top: finalTop, left: finalLeft, transformX });
+    }
+  }, [isVisible, position]);
 
   return (
     <>
@@ -68,11 +154,16 @@ const CitationTooltip: FC<{
       {isVisible && (
         <div
           ref={tooltipRef}
-          className="fixed z-50 max-w-2xl w-[calc(100vw-100px)] p-4 rounded-lg shadow-lg bg-white border transform -translate-x-1/2 -translate-y-full mb-2"
+          className="fixed z-50 max-w-2xl w-[calc(100vw-100px)] p-4 rounded-lg shadow-lg bg-white border"
           style={{
-            top: `${position.top}px`,
-            left: `${position.left}px`,
+            top: `${adjustedPosition.top}px`,
+            left: `${adjustedPosition.left}px`,
+            transform: `translateX(${adjustedPosition.transformX})`,
+            maxHeight: 'calc(100vh - 40px)',
+            overflowY: 'auto',
           }}
+          onMouseEnter={handleTooltipMouseEnter}
+          onMouseLeave={handleTooltipMouseLeave}
         >
           <div className="text-sm space-y-3">
             {citationInfo ? (
