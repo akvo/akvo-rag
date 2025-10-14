@@ -9,9 +9,6 @@ from app.services.llm.llm_factory import LLMFactory
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# TODO :: How we handle if kb_ids already provided
-# Scoping agent can't talk with other KBs if kb_ids already provided
-
 
 def _extract_json(raw_output: str) -> str:
     """
