@@ -17,40 +17,40 @@ graph TB
     %% Role Definitions
     client["Caller/User"]
     open_api["Open API"]
-    
+
     subgraph import_process["Document Ingestion Process"]
         direction TB
         %% File Storage and Document Processing Flow
         docs["Document Input<br/>(PDF/MD/TXT/DOCX)"]
         job_id["Return Job ID"]
-        
+
         nfs["NFS"]
 
         subgraph async_process["Asynchronous Document Processing"]
             direction TB
             preprocess["Document Preprocessing<br/>(Text Extraction/Cleaning)"]
             split["Text Splitting<br/>(Segmentation/Overlap)"]
-            
+
             subgraph embedding_process["Embedding Service"]
                 direction LR
                 embedding_api["Embedding API"] --> embedding_server["Embedding Server"]
             end
-            
+
             store[(Vector Database)]
-            
+
             %% Internal Flow of Asynchronous Processing
             preprocess --> split
             split --> embedding_api
             embedding_server --> store
         end
-        
+
         subgraph job_query["Job Status Query"]
             direction TB
             job_status["Job Status<br/>(Processing/Completed/Failed)"]
         end
     end
-    
-    %% Query Service Flow  
+
+    %% Query Service Flow
     subgraph query_process["Query Service"]
         direction LR
         user_history["User History"] --> query["User Query<br/>(Based on User History)"]
@@ -62,7 +62,7 @@ graph TB
         llm --> response["Final Response"]
         query -.-> rerank
     end
-    
+
     %% Main Flow Connections
     client --> |"1.Upload Document"| docs
     docs --> |"2.Generate"| job_id
@@ -79,7 +79,7 @@ graph TB
     %% Status Query Flow
     client --> |"4.Poll"| job_status
     job_status --> |"5.Return Progress"| client
-    
+
     %% Database connects to Query Service
     store --> retrieve
 
@@ -501,7 +501,7 @@ qa_system_prompt = (
 这个项目中，用的都是目前最为流行的技术栈， 例如：
 
 - 前端：React（Nextjs） + TailwindCSS + AI SDK
-- 后端：FastAPI + LangChain + ChromaDB/Qdrant + MySQL + MinIO
+- 后端：FastAPI + LangChain + MySQL + MCP Integration
 - 部署：Docker + Docker Compose
 
 让我们通过一个完整的工程实现示例，来理解 RAG 在知识库问答中的具体应用流程。我们将按照数据流的顺序，逐步解析关键代码的实现。
@@ -592,19 +592,19 @@ sequenceDiagram
 
     User->>Frontend: 发送问题
     Frontend->>Backend: 发送请求
-    
+
     rect rgb(200, 220, 250)
         Note over Backend: 消息存储阶段
         Backend->>DB: 存储用户问题(user类型)
         Backend->>DB: 创建空assistant记录
     end
-    
+
     rect rgb(200, 250, 220)
         Note over Backend: 知识库准备阶段
         Backend->>VectorStore: 初始化向量存储
         Backend->>VectorStore: 获取相关知识库
     end
-    
+
     rect rgb(250, 220, 200)
         Note over Backend: RAG处理阶段
         Backend->>VectorStore: 执行相似度检索
@@ -614,16 +614,16 @@ sequenceDiagram
         Backend->>LLM: 发送最终生成请求
         LLM-->>Backend: 流式返回答案
     end
-    
+
     Backend-->>Frontend: 流式返回(context + answer)
-    
+
     rect rgb(220, 220, 250)
         Note over Frontend: 响应处理阶段
         Frontend->>Frontend: 解析context(base64)
         Frontend->>Frontend: 解析引用标记
         Frontend->>Frontend: 渲染回答和引用
     end
-    
+
     Frontend-->>User: 展示答案和引用
 ```
 
@@ -668,16 +668,16 @@ flowchart TD
     A[接收Stream响应] --> B{解析响应}
     B -->|分割| C[Context部分]
     B -->|分割| D[Answer部分]
-    
+
     C --> E[Base64解码]
     E --> F[解析引用信息]
-    
+
     D --> G[解析引用标记]
     G --> H[[citation:1]]
-    
+
     F --> I[准备引用数据]
     H --> I
-    
+
     I --> J[渲染回答内容]
     J --> K[显示引用弹窗]
 ```
@@ -806,9 +806,9 @@ flowchart TD
 - RAG + 交叉编码 re-ranking 提高回答精度
 - 长文本多轮对话（上下文记忆 / Conversation Memory）
 
-- [LangChain 官网](https://python.langchain.com/)  
-- [ChromaDB](https://docs.trychroma.com/)  
-- [OpenAI Embeddings 介绍](https://platform.openai.com/docs/guides/embeddings)  
+- [LangChain 官网](https://python.langchain.com/)
+- [ChromaDB](https://docs.trychroma.com/)
+- [OpenAI Embeddings 介绍](https://platform.openai.com/docs/guides/embeddings)
 
 ## 8. 处理网络错误和无法访问的服务器
 
@@ -842,7 +842,7 @@ def register(*, db: Session = Depends(get_db), user_in: UserCreate) -> Any:
                 status_code=400,
                 detail="A user with this email already exists.",
             )
-        
+
         # Check if user with this username exists
         user = db.query(User).filter(User.username == user_in.username).first()
         if user:
@@ -850,7 +850,7 @@ def register(*, db: Session = Depends(get_db), user_in: UserCreate) -> Any:
                 status_code=400,
                 detail="A user with this username already exists.",
             )
-        
+
         # Create new user
         user = User(
             email=user_in.email,

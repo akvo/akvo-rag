@@ -3,14 +3,9 @@ import React, {
   useMemo,
   useEffect,
   useState,
-  ClassAttributes,
+  useRef
 } from "react";
-import { AnchorHTMLAttributes } from "react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { AnchorHTMLAttributes, ClassAttributes } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Divider } from "@/components/ui/divider";
 import Markdown from "react-markdown";
@@ -39,13 +34,190 @@ interface CitationInfo {
   document: DocumentInfo;
 }
 
+// Smart tooltip component that respects viewport boundaries
+const CitationTooltip: FC<{
+  citation: Citation;
+  citationInfo?: CitationInfo;
+  children: React.ReactElement;
+}> = ({ citation, citationInfo, children }) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [adjustedPosition, setAdjustedPosition] = useState({ top: 0, left: 0, transformX: '-50%' });
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLElement>(null);
+  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isMouseOverRef = useRef(false);
+
+  const handleMouseEnter = (e: React.MouseEvent) => {
+    // Clear any pending close timeout
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+
+    isMouseOverRef.current = true;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    setPosition({
+      top: rect.top,
+      left: rect.left + rect.width / 2,
+    });
+    setIsVisible(true);
+  };
+
+  const handleMouseLeave = () => {
+    isMouseOverRef.current = false;
+    // Delay closing to allow mouse to move to tooltip
+    closeTimeoutRef.current = setTimeout(() => {
+      if (!isMouseOverRef.current) {
+        setIsVisible(false);
+      }
+    }, 150);
+  };
+
+  const handleTooltipMouseEnter = () => {
+    // Cancel close if mouse enters tooltip
+    isMouseOverRef.current = true;
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+  };
+
+  const handleTooltipMouseLeave = () => {
+    isMouseOverRef.current = false;
+    // Close when mouse leaves tooltip
+    closeTimeoutRef.current = setTimeout(() => {
+      setIsVisible(false);
+    }, 100);
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isVisible && tooltipRef.current) {
+      const tooltip = tooltipRef.current;
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const padding = 10; // Padding from viewport edges
+
+      let finalTop = position.top - tooltipRect.height - padding;
+      let finalLeft = position.left;
+      let transformX = '-50%'; // Default centered transform
+
+      // Check if tooltip goes above viewport - show below instead
+      if (finalTop < padding) {
+        const triggerElement = triggerRef.current;
+        if (triggerElement) {
+          const triggerRect = triggerElement.getBoundingClientRect();
+          finalTop = triggerRect.bottom + padding;
+        }
+      }
+
+      // Check if tooltip goes below viewport - move up
+      if (finalTop + tooltipRect.height > window.innerHeight - padding) {
+        finalTop = window.innerHeight - tooltipRect.height - padding;
+      }
+
+      // Calculate with centered transform
+      const leftEdge = finalLeft - (tooltipRect.width / 2);
+      const rightEdge = finalLeft + (tooltipRect.width / 2);
+
+      // Adjust horizontal position if overflowing
+      if (leftEdge < padding) {
+        // Align to left edge
+        finalLeft = padding;
+        transformX = '0%';
+      } else if (rightEdge > window.innerWidth - padding) {
+        // Align to right edge
+        finalLeft = window.innerWidth - padding;
+        transformX = '-100%';
+      }
+
+      setAdjustedPosition({ top: finalTop, left: finalLeft, transformX });
+    }
+  }, [isVisible, position]);
+
+  return (
+    <>
+      {React.cloneElement(children, {
+        onMouseEnter: handleMouseEnter,
+        onMouseLeave: handleMouseLeave,
+        ref: triggerRef,
+      })}
+      {isVisible && (
+        <div
+          ref={tooltipRef}
+          className="fixed z-50 max-w-2xl w-[calc(100vw-100px)] p-4 rounded-lg shadow-lg bg-white border"
+          style={{
+            top: `${adjustedPosition.top}px`,
+            left: `${adjustedPosition.left}px`,
+            transform: `translateX(${adjustedPosition.transformX})`,
+            maxHeight: 'calc(100vh - 40px)',
+            overflowY: 'auto',
+          }}
+          onMouseEnter={handleTooltipMouseEnter}
+          onMouseLeave={handleTooltipMouseLeave}
+        >
+          <div className="text-sm space-y-3">
+            {citationInfo ? (
+              <div className="flex items-center gap-2 text-xs font-medium text-gray-700 bg-gray-50 p-2 rounded">
+                <div className="w-5 h-5 flex items-center justify-center">
+                  <FileIcon
+                    extension={
+                      citationInfo.document.file_name.split(".").pop() || ""
+                    }
+                    color="#E2E8F0"
+                    labelColor="#94A3B8"
+                  />
+                </div>
+                <span className="truncate">
+                  {citationInfo.knowledge_base.name} /{" "}
+                  {citationInfo.document.file_name}
+                </span>
+              </div>
+            ) : (
+              <div className="text-xs text-gray-500 italic">Loading...</div>
+            )}
+            <Divider />
+            <p className="text-gray-700 leading-relaxed">{citation.text}</p>
+            <Divider />
+            {Object.keys(citation.metadata).length > 0 && (
+              <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                <div className="font-medium mb-2">Debug Info:</div>
+                <div className="space-y-1">
+                  {Object.entries(citation.metadata).map(([key, value]) => (
+                    <div key={key} className="flex">
+                      <span className="font-medium min-w-[100px]">
+                        {key}:
+                      </span>
+                      <span className="text-gray-600">{String(value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
 export const Answer: FC<{
   markdown: string;
   citations?: Citation[];
 }> = ({ markdown, citations = [] }) => {
-  const [citationInfoMap, setCitationInfoMap] = useState<
-    Record<string, CitationInfo>
-  >({});
+  const [citationInfoMap, setCitationInfoMap] = useState<Record<string, CitationInfo>>({});
+
+  const fetchedKeys = useRef<Set<string>>(new Set());
+  const isFetchingRef = useRef(false);
 
   const processedMarkdown = useMemo(() => {
     return markdown
@@ -54,130 +226,95 @@ export const Answer: FC<{
   }, [markdown]);
 
   useEffect(() => {
+    if (isFetchingRef.current || citations.length === 0) return;
+
     const fetchCitationInfo = async () => {
-      const newInfoMap: Record<string, CitationInfo> = { ...citationInfoMap };
+      isFetchingRef.current = true;
+      const newInfoMap: Record<string, CitationInfo> = {};
 
-      const promises = citations.map(async (citation) => {
-        const { kb_id, document_id } = citation.metadata;
-        if (!kb_id || !document_id) return;
+      const promises = citations
+        .filter((citation) => {
+          const { kb_id, document_id } = citation.metadata;
+          if (!kb_id || !document_id) return false;
 
-        const key = `${kb_id}-${document_id}`;
-        if (newInfoMap[key]) return; // Sudah ada, skip
+          const key = `${kb_id}-${document_id}`;
+          if (fetchedKeys.current.has(key)) return false;
 
-        try {
-          const [kb, doc] = await Promise.all([
-            api.get(`/api/knowledge-base/${kb_id}`),
-            api.get(`/api/knowledge-base/${kb_id}/documents/${document_id}`),
-          ]);
+          fetchedKeys.current.add(key);
+          return true;
+        })
+        .map(async (citation) => {
+          const { kb_id, document_id } = citation.metadata;
+          const key = `${kb_id}-${document_id}`;
 
-          newInfoMap[key] = {
-            knowledge_base: {
-              name: kb.name,
-            },
-            document: {
-              file_name: doc.file_name,
+          try {
+            const [kb, doc] = await Promise.all([
+              api.get(`/api/knowledge-base/${kb_id}`),
+              api.get(`/api/knowledge-base/${kb_id}/documents/${document_id}`),
+            ]);
+
+            newInfoMap[key] = {
               knowledge_base: {
                 name: kb.name,
               },
-            },
-          };
-        } catch (error) {
-          console.error("Failed to fetch citation info:", error);
-        }
-      });
+              document: {
+                file_name: doc.file_name,
+                knowledge_base: {
+                  name: kb.name,
+                },
+              },
+            };
+          } catch (error) {
+            console.error("Failed to fetch citation info:", error);
+            fetchedKeys.current.delete(key);
+          }
+        });
 
       await Promise.all(promises);
-      setCitationInfoMap((prev) => ({
-        ...prev,
-        ...newInfoMap,
-      }));
+
+      if (Object.keys(newInfoMap).length > 0) {
+        setCitationInfoMap((prev) => ({
+          ...prev,
+          ...newInfoMap,
+        }));
+      }
+
+      isFetchingRef.current = false;
     };
 
-    if (citations.length > 0) {
-      fetchCitationInfo();
+    fetchCitationInfo();
+  }, [citations.length]);
+
+  const CitationLink = (
+    props: ClassAttributes<HTMLAnchorElement> &
+      AnchorHTMLAttributes<HTMLAnchorElement>
+  ) => {
+    const citationId = props.href?.match(/^(\d+)$/)?.[1];
+    const citation = citationId
+      ? citations[parseInt(citationId) - 1]
+      : null;
+
+    if (!citation) {
+      return <a>[{props.href}]</a>;
     }
-  }, [citations]);
 
-  const CitationLink = useMemo(
-    () =>
-      (
-        props: ClassAttributes<HTMLAnchorElement> &
-          AnchorHTMLAttributes<HTMLAnchorElement>
-      ) => {
-        const citationId = props.href?.match(/^(\d+)$/)?.[1];
-        const citation = citationId
-          ? citations[parseInt(citationId) - 1]
-          : null;
+    const citationKey = `${citation.metadata.kb_id}-${citation.metadata.document_id}`;
+    const citationInfo = citationInfoMap[citationKey];
 
-        if (!citation) {
-          return <a>[{props.href}]</a>;
-        }
-
-        const citationInfo =
-          citationInfoMap[
-            `${citation.metadata.kb_id}-${citation.metadata.document_id}`
-          ];
-
-        return (
-          <Popover>
-            <PopoverTrigger asChild>
-              <a
-                {...props}
-                href="#"
-                role="button"
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition-colors relative"
-              >
-                <span className="absolute -top-3 -right-1">[{props.href}]</span>
-              </a>
-            </PopoverTrigger>
-            <PopoverContent
-              side="top"
-              align="start"
-              className="max-w-2xl w-[calc(100vw-100px)] p-4 rounded-lg shadow-lg"
-            >
-              <div className="text-sm space-y-3">
-                {citationInfo && (
-                  <div className="flex items-center gap-2 text-xs font-medium text-gray-700 bg-gray-50 p-2 rounded">
-                    <div className="w-5 h-5 flex items-center justify-center">
-                      <FileIcon
-                        extension={
-                          citationInfo.document.file_name.split(".").pop() || ""
-                        }
-                        color="#E2E8F0"
-                        labelColor="#94A3B8"
-                      />
-                    </div>
-                    <span className="truncate">
-                      {citationInfo.knowledge_base.name} /{" "}
-                      {citationInfo.document.file_name}
-                    </span>
-                  </div>
-                )}
-                <Divider />
-                <p className="text-gray-700 leading-relaxed">{citation.text}</p>
-                <Divider />
-                {Object.keys(citation.metadata).length > 0 && (
-                  <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
-                    <div className="font-medium mb-2">Debug Info:</div>
-                    <div className="space-y-1">
-                      {Object.entries(citation.metadata).map(([key, value]) => (
-                        <div key={key} className="flex">
-                          <span className="font-medium min-w-[100px]">
-                            {key}:
-                          </span>
-                          <span className="text-gray-600">{String(value)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
-        );
-      },
-    [citations, citationInfoMap]
-  );
+    return (
+      <CitationTooltip citation={citation} citationInfo={citationInfo}>
+        <a
+          {...props}
+          href="#"
+          role="button"
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition-colors relative cursor-pointer"
+          onClick={(e) => e.preventDefault()}
+        >
+          <span className="absolute -top-3 -right-1">[{props.href}]</span>
+        </a>
+      </CitationTooltip>
+    );
+  };
 
   if (!markdown) {
     return (

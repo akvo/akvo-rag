@@ -3,18 +3,14 @@ uvicorn>=0.24.0
 python-jose>=3.3.0
 passlib==1.7.4
 python-multipart>=0.0.6
-langchain>=0.3.0
+langchain==0.3.27
 langchain-community>=0.0.10
 langchain-openai>=0.3.3
-langchain-chroma>=0.0.5
-chromadb>=0.6.3
-langchain-qdrant>=0.2.0
-chroma-hnswlib>=0.7.3
 BCrypt==4.3.0
+argon2-cffi>=23.1.0
 SQLAlchemy>=2.0.23
 alembic>=1.12.1
 mysql-connector-python>=8.0.33
-minio>=7.2.0
 python-docx>=0.8.11
 pypdf>=3.0.0
 unstructured>=0.10.30
@@ -27,3 +23,10 @@ langchain-deepseek==0.1.1
 langchain-ollama==0.2.3
 docx2txt==0.8
 websockets==15.0.1
+
+langgraph==0.6.3
+fastmcp==2.11.1
+
+# Fix dependencies
+pydantic==2.11.7
+

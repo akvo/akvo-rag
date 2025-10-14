@@ -49,6 +49,7 @@ yarn-error.log*
 # IDE
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 *~
@@ -62,3 +63,5 @@ backend/RAG_evaluation/.env.test
 
 streamlit-override.yml
 backend/RAG_evaluation/output
+backend/mcp_discovery.json
+backend/.pip

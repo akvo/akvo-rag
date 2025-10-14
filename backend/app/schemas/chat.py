@@ -2,12 +2,15 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 
+
 class MessageBase(BaseModel):
     content: str
     role: str
 
+
 class MessageCreate(MessageBase):
     chat_id: int
+
 
 class MessageResponse(MessageBase):
     id: int
@@ -18,14 +21,18 @@ class MessageResponse(MessageBase):
     class Config:
         from_attributes = True
 
+
 class ChatBase(BaseModel):
     title: str
+
 
 class ChatCreate(ChatBase):
     knowledge_base_ids: List[int]
 
+
 class ChatUpdate(ChatBase):
     knowledge_base_ids: Optional[List[int]] = None
+
 
 class ChatResponse(ChatBase):
     id: int
@@ -36,4 +43,13 @@ class ChatResponse(ChatBase):
     knowledge_base_ids: List[int] = []
 
     class Config:
-        from_attributes = True 
+        from_attributes = True
+
+
+class MessagesPayload(MessageBase):
+    parts: Optional[List[dict]] = None
+
+
+class CreateMessagePayload(BaseModel):
+    id: str
+    messages: List[MessagesPayload]

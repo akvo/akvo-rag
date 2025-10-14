@@ -31,11 +31,14 @@ interface Document {
   processing_tasks: any[];
 }
 
+
 export default function KnowledgeBasePage() {
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const { user } = useUser();
+
+  const allow_delete = true;
 
   useEffect(() => {
     fetchKnowledgeBases();
@@ -129,7 +132,8 @@ export default function KnowledgeBasePage() {
 
                 <div className="flex space-x-2">
                   <Link
-                    href={`/dashboard/knowledge/${kb.id}?kb_owner=${kb.user_id === user?.id ? 1 : 0}`}
+                    // ignore kb owner
+                    href={`/dashboard/knowledge/${kb.id}?kb_owner=${kb.user_id === user?.id ? 1 : 1}`}
                     className="inline-flex items-center justify-center rounded-md bg-secondary w-8 h-8"
                   >
                     <Settings className="h-4 w-4" />
@@ -142,7 +146,8 @@ export default function KnowledgeBasePage() {
                   </Link>
                   {
                     // allow delete only for same user / kb owner
-                    kb.user_id === user?.id ? (
+                    // currently allow delete for all user
+                    kb.user_id === user?.id || allow_delete ? (
                       <button
                         onClick={() => handleDelete(kb.id)}
                         className="inline-flex items-center justify-center rounded-md bg-destructive/10 hover:bg-destructive/20 w-8 h-8"
