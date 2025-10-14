@@ -1,6 +1,5 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, Boolean, DateTime
+from sqlalchemy import Column, String, Integer, ForeignKey, Boolean, Text
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.sql import func
 
 from app.models.base import Base, TimestampMixin
@@ -53,7 +52,7 @@ class PromptVersion(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    content = Column(LONGTEXT, nullable=False)
+    content = Column(Text, nullable=False)
     version_number = Column(Integer, nullable=False, default=1)
     is_active = Column(Boolean, default=False, nullable=False)
     activated_by_user_id = Column(
