@@ -2,6 +2,7 @@ import json
 import base64
 import logging
 from sqlalchemy.orm import Session
+from typing import List, Optional
 
 from app.models import Message
 from app.services.prompt_service import PromptService
@@ -29,11 +30,11 @@ logger = logging.getLogger(__name__)
 async def stream_mcp_response(
     query: str,
     messages: dict,
-    knowledge_base_ids: list,
     chat_id: int,
     db: Session,
     max_history_length: int = 10,
     generate_last_n_messages: bool = False,
+    knowledge_base_ids: Optional[List[int]] = [],
 ):
     """
     Best-practice streaming:
