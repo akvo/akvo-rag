@@ -6,3 +6,11 @@ from .knowledge import (  # noqa
     KnowledgeBaseCreate,
     KnowledgeBaseUpdate,
 )
+from .app import (  # noqa
+    AppRegisterRequest,
+    AppRegisterResponse,
+    AppMeResponse,
+    AppRotateRequest,
+    AppRotateResponse,
+    ErrorResponse,
+)
