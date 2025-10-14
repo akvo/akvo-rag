@@ -135,7 +135,7 @@ class TestAppMe:
         """Test /me endpoint returns 401 without Authorization header."""
         response = client.get("/v1/apps/me")
 
-        assert response.status_code == 403  # HTTPBearer returns 403 when no credentials
+        assert response.status_code == 401
 
     def test_app_me_returns_403_for_inactive_app(self, registered_app):
         """Test /me endpoint returns 403 for inactive app."""
@@ -180,10 +180,15 @@ class TestAppRotate:
         # Verify callback token was not rotated
         assert data["callback_token"] is None
 
-        # Verify old token still works (per requirements)
-        old_headers = {"Authorization": f"Bearer {old_token}"}
-        me_response = client.get("/v1/apps/me", headers=old_headers)
+        # Verify new token works
+        new_headers = {"Authorization": f"Bearer {data['access_token']}"}
+        me_response = client.get("/v1/apps/me", headers=new_headers)
         assert me_response.status_code == 200
+
+        # Verify old token is invalidated
+        old_headers = {"Authorization": f"Bearer {old_token}"}
+        old_me_response = client.get("/v1/apps/me", headers=old_headers)
+        assert old_me_response.status_code == 401
 
     def test_rotate_callback_token_only(self, registered_app):
         """Test rotating only the callback token."""

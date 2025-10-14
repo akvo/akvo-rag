@@ -108,7 +108,7 @@ curl -X POST http://localhost:8000/v1/apps/rotate \
 - If both are `false`, no tokens are rotated
 - `new_callback_token` is **required** when `rotate_callback_token` is `true`
 - The response does not include the callback token (you already provided it)
-- Old access tokens remain valid until explicitly revoked
+- Old access tokens are immediately invalidated upon rotation
 
 ---
 
@@ -149,10 +149,10 @@ curl -X POST http://localhost:8000/v1/apps/revoke \
 
 ### Token Lifecycle
 - Tokens **never expire** automatically
-- Tokens are invalidated only when:
+- Tokens are invalidated when:
   - App is explicitly revoked
   - App status is set to suspended
-  - Access tokens are rotated (old tokens remain valid until revoked)
+  - Access tokens are rotated (old token is immediately invalidated)
   - Callback tokens are rotated (you provide the new token)
 
 ### Authorization

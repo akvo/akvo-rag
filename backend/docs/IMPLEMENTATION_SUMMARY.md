@@ -35,7 +35,7 @@ All requirements have been successfully implemented and tested.
   - Argon2 hashing for callback tokens
   - Constant-time comparison
   - CRUD operations
-  - Token rotation (old tokens remain valid)
+  - Token rotation (old tokens are immediately invalidated)
   - Idempotent revocation
 
 ### 4. Security & Auth ✅
@@ -190,4 +190,4 @@ curl -sX POST http://localhost:8000/v1/apps/revoke \
 ✅ OpenAPI documentation
 ✅ Comprehensive tests (42 tests total)
 ✅ Idempotent revocation
-✅ Token rotation (old tokens remain valid)
+✅ Token rotation (old tokens are immediately invalidated)
