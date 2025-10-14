@@ -7,6 +7,7 @@ langchain==0.3.27
 langchain-community>=0.0.10
 langchain-openai>=0.3.3
 BCrypt==4.3.0
+argon2-cffi>=23.1.0
 SQLAlchemy>=2.0.23
 alembic>=1.12.1
 mysql-connector-python>=8.0.33
