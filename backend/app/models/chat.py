@@ -1,5 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
-from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy import Column, Integer, String, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.models.base import Base, TimestampMixin
 
@@ -39,7 +38,7 @@ class Message(Base, TimestampMixin):
     __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, index=True)
-    content = Column(LONGTEXT, nullable=False)
+    content = Column(Text, nullable=False)
     role = Column(String(50), nullable=False)
     chat_id = Column(Integer, ForeignKey("chats.id"), nullable=False)
 
