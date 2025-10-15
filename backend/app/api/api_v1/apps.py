@@ -54,7 +54,8 @@ async def register_app(
     """
     try:
         # register KB for the app
-        kb_result = await KnowledgeBaseMCPEndpointService.create_kb(
+        kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+        kb_result = await kb_mcp_endpoint_service.create_kb(
             data={
                 "name": register_data.app_name,
                 "description": f"Knowledge base for {register_data.app_name}"
@@ -214,7 +215,8 @@ async def upload_and_process_documents(
     Upload and process documents for the app in one go
     Send multiple files in a single request.
     """
-    await KnowledgeBaseMCPEndpointService.upload_and_process_documents(
+    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+    await kb_mcp_endpoint_service.upload_and_process_documents(
         kb_id=current_app.knowledge_base_id,
         files=files
     )
@@ -232,7 +234,8 @@ async def get_documents(
     """
     Get documents for the app's knowledge base.
     """
-    res = await KnowledgeBaseMCPEndpointService.get_documents_upload(
+    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+    res = await kb_mcp_endpoint_service.get_documents_upload(
         kb_id=current_app.knowledge_base_id,
     )
     return res
