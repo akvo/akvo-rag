@@ -26,6 +26,7 @@ class AppRegisterResponse(BaseModel):
     client_id: str
     access_token: str
     scopes: List[str]
+    knowledge_base_ids: Optional[List[int]] = None
 
     class Config:
         from_attributes = True
@@ -40,6 +41,7 @@ class AppMeResponse(BaseModel):
     upload_callback_url: str
     scopes: List[str]
     status: AppStatus
+    knowledge_base_ids: Optional[List[int]] = None
 
     class Config:
         from_attributes = True

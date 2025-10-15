@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from unittest.mock import AsyncMock, patch
 
 from app.main import app
 from app.db.session import get_db
@@ -54,6 +55,25 @@ def sample_app_data():
     }
 
 
+@pytest.fixture(autouse=True)
+def mock_mcp_create_kb():
+    """
+    Automatically mock KnowledgeBaseMCPEndpointService.create_kb
+    for any test that calls the /register endpoint.
+    """
+    with patch(
+        "mcp_clients.kb_mcp_endpoint_service.KnowledgeBaseMCPEndpointService.create_kb",
+        new_callable=AsyncMock,
+    ) as mock_create_kb:
+        # Default fake KB response
+        mock_create_kb.return_value = {
+            "id": 42,
+            "name": "Fake KB",
+            "description": "KB for testing"
+        }
+        yield mock_create_kb
+
+
 class TestAppRegistration:
     """Test suite for POST /v1/apps/register endpoint."""
 
@@ -69,6 +89,8 @@ class TestAppRegistration:
         assert "client_id" in data
         assert "access_token" in data
         assert "scopes" in data
+        assert "knowledge_base_ids" in data
+        assert data["knowledge_base_ids"] == [42]
 
         # Verify ID prefixes
         assert data["app_id"].startswith("app_")
@@ -123,6 +145,7 @@ class TestAppMe:
         assert data["upload_callback_url"] == "https://agriconnect.akvo.org/api/kb/callback"
         assert data["status"] == "active"
         assert data["scopes"] == registered_app["scopes"]
+        assert data["knowledge_base_ids"] == [42]
 
     def test_app_me_returns_401_with_invalid_token(self):
         """Test /me endpoint returns 401 with invalid token."""

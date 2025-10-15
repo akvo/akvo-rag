@@ -14,6 +14,7 @@ from app.schemas.app import (
     AppRotateResponse,
     ErrorResponse,
 )
+from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
 router = APIRouter()
 
@@ -27,7 +28,7 @@ router = APIRouter()
         409: {"model": ErrorResponse, "description": "Conflict"},
     },
 )
-def register_app(
+async def register_app(
     *,
     db: Session = Depends(get_db),
     register_data: AppRegisterRequest,
@@ -44,8 +45,21 @@ def register_app(
     Returns app credentials including access_token and callback_token.
     """
     try:
+        # register KB for the app
+        kb_result = await KnowledgeBaseMCPEndpointService.create_kb(
+            data={
+                "name": register_data.app_name,
+                "description": f"Knowledge base for {register_data.app_name}"
+            }
+        )
+        kb_id = kb_result.get('id')
+        knowledge_base_ids = [kb_id] if kb_id else None
+
+        # create app
         app, access_token = AppService.create_app(
-            db=db, register_data=register_data
+            db=db,
+            register_data=register_data,
+            knowledge_base_ids=knowledge_base_ids
         )
 
         return AppRegisterResponse(
@@ -53,6 +67,7 @@ def register_app(
             client_id=app.client_id,
             access_token=access_token,
             scopes=app.scopes,
+            knowledge_base_ids=app.knowledge_base_ids,
         )
     except ValueError as e:
         raise HTTPException(
@@ -96,6 +111,7 @@ def get_app_info(
         upload_callback_url=current_app.upload_callback_url,
         scopes=current_app.scopes,
         status=current_app.status,
+        knowledge_base_ids=current_app.knowledge_base_ids,
     )
 
 
