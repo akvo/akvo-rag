@@ -66,3 +66,15 @@ class AppRotateResponse(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
     message: str
+
+
+class DocumentUploadItem(BaseModel):
+    id: int
+    file_name: str
+    status: str
+    knowledge_base_id: int
+    content_type: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        orm_mode = True

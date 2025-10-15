@@ -178,6 +178,9 @@ class KnowledgeBaseMCPEndpointService:
             "POST", f"/{kb_id}/documents/full-process", files=file_payload
         )
 
+    async def get_documents_upload(self, kb_id: int) -> List[dict]:
+        return await self._request("GET", f"/{kb_id}/documents/upload")
+
     # ---- Processing tasks ----
     async def get_processing_tasks(
         self, kb_id: int, task_ids: List[int]

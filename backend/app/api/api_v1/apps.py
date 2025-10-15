@@ -20,6 +20,7 @@ from app.schemas.app import (
     AppRotateRequest,
     AppRotateResponse,
     ErrorResponse,
+    DocumentUploadItem,
 )
 from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
@@ -221,3 +222,17 @@ async def upload_and_process_documents(
         "message": "Document received and is being processed.",
         "file_count": len(files),
     }
+
+
+@router.get("/documents", response_model=List[DocumentUploadItem])
+async def get_documents(
+    *,
+    current_app: App = Depends(get_current_app)
+) -> Any:
+    """
+    Get documents for the app's knowledge base.
+    """
+    res = await KnowledgeBaseMCPEndpointService.get_documents_upload(
+        kb_id=current_app.knowledge_base_id,
+    )
+    return res
