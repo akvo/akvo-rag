@@ -38,7 +38,7 @@ class TestChatMCPServiceStubbed:
         )
 
         # MCP workflow nodes
-        def fake_contextualize_node(state):
+        async def fake_contextualize_node(state):
             state["contextual_query"] = "fake_query"
             return state
 
@@ -55,7 +55,7 @@ class TestChatMCPServiceStubbed:
                 state["context"] = []
             return state
 
-        def fake_post_processing_node(state):
+        async def fake_post_processing_node(state):
             return state
 
         monkeypatch.setattr(

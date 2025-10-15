@@ -96,10 +96,10 @@ async def stream_mcp_response(
         # get `state["context"]` and `state["contextual_query"]`
         # note: contextualize_node and post_processing_node are sync,
         # scoping and run_mcp_tool_node are async
-        state = contextualize_node(state)
+        state = await contextualize_node(state)
         state = await scoping_node(state)
         state = await run_mcp_tool_node(state)
-        state = post_processing_node(state)
+        state = await post_processing_node(state)
 
         # 5) If context exists, stream it first (base64 + separator)
         context_prefix = ""
