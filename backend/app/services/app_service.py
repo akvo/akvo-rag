@@ -30,7 +30,7 @@ class AppService:
         db: Session,
         register_data: AppRegisterRequest,
         scopes: Optional[List[str]] = None,
-        knowledge_base_ids: Optional[List[int]] = None,
+        knowledge_base_id: Optional[int] = None,
     ) -> tuple[App, str]:
         """
         Create a new app registration.
@@ -55,7 +55,7 @@ class AppService:
             callback_token=register_data.callback_token,
             scopes=scopes,
             status=AppStatus.active,
-            knowledge_base_ids=knowledge_base_ids,
+            knowledge_base_id=knowledge_base_id,
         )
 
         db.add(app)

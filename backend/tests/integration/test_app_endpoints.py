@@ -1,4 +1,6 @@
+import io
 import pytest
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -74,6 +76,25 @@ def mock_mcp_create_kb():
         yield mock_create_kb
 
 
+@pytest.fixture(autouse=True)
+def upload_and_process_documents():
+    """
+    Automatically mock KnowledgeBaseMCPEndpointService.upload_and_process_documents
+    for any test that calls the /upload endpoint.
+    """
+    with patch(
+        "mcp_clients.kb_mcp_endpoint_service.KnowledgeBaseMCPEndpointService.upload_and_process_documents",
+        new_callable=AsyncMock,
+    ) as mock_upload_and_process_documents:
+        # Default fake KB response
+        mock_upload_and_process_documents.return_value = {
+            "status": "processing",
+            "kb_id": 42,
+            "file_count": 2,
+        }
+        yield mock_upload_and_process_documents
+
+
 class TestAppRegistration:
     """Test suite for POST /v1/apps/register endpoint."""
 
@@ -89,8 +110,8 @@ class TestAppRegistration:
         assert "client_id" in data
         assert "access_token" in data
         assert "scopes" in data
-        assert "knowledge_base_ids" in data
-        assert data["knowledge_base_ids"] == [42]
+        assert "knowledge_base_id" in data
+        assert data["knowledge_base_id"] == 42
 
         # Verify ID prefixes
         assert data["app_id"].startswith("app_")
@@ -145,7 +166,7 @@ class TestAppMe:
         assert data["upload_callback_url"] == "https://agriconnect.akvo.org/api/kb/callback"
         assert data["status"] == "active"
         assert data["scopes"] == registered_app["scopes"]
-        assert data["knowledge_base_ids"] == [42]
+        assert data["knowledge_base_id"] == 42
 
     def test_app_me_returns_401_with_invalid_token(self):
         """Test /me endpoint returns 401 with invalid token."""
@@ -319,3 +340,67 @@ class TestAppRevoke:
         response = client.post("/v1/apps/revoke", headers=headers)
 
         assert response.status_code == 401
+
+
+class TestAppUpload:
+    """Test suite for POST /v1/apps/upload endpoint."""
+
+    @pytest.fixture
+    def registered_app(self, sample_app_data):
+        """Register an app and return credentials."""
+        response = client.post("/v1/apps/register", json=sample_app_data)
+        return response.json()
+
+    def test_upload_success(self, registered_app):
+        """Test successful document upload and processing."""
+        headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
+
+        # Create dummy files to upload
+        files = [
+            ("files", ("doc1.txt", io.BytesIO(b"Test content 1"), "text/plain")),
+            ("files", ("doc2.txt", io.BytesIO(b"Test content 2"), "text/plain")),
+        ]
+
+        response = client.post("/v1/apps/upload", headers=headers, files=files)
+
+        # Assert response
+        assert response.status_code == 200
+        data = response.json()
+        assert data["message"] == "Document received and is being processed."
+        assert data["file_count"] == 2
+
+    def test_upload_unauthorized_no_token(self):
+        """Test upload without Authorization header returns 401."""
+        files = [
+            ("files", ("doc.txt", io.BytesIO(b"Test content"), "text/plain")),
+        ]
+
+        response = client.post("/v1/apps/upload", files=files)
+        assert response.status_code == 401
+
+    def test_upload_unauthorized_invalid_token(self):
+        """Test upload with invalid token returns 401."""
+        headers = {"Authorization": "Bearer invalid_token"}
+        files = [
+            ("files", ("doc.txt", io.BytesIO(b"Test content"), "text/plain")),
+        ]
+
+        response = client.post("/v1/apps/upload", headers=headers, files=files)
+        assert response.status_code == 401
+
+    def test_upload_forbidden_revoked_app(self, registered_app):
+        """Test upload returns 403 for revoked app."""
+        # Set app status to revoked manually
+        db = TestingSessionLocal()
+        app = db.query(App).filter(App.app_id == registered_app["app_id"]).first()
+        app.status = "revoked"
+        db.commit()
+        db.close()
+
+        headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
+        files = [
+            ("files", ("doc.txt", io.BytesIO(b"Test content"), "text/plain")),
+        ]
+
+        response = client.post("/v1/apps/upload", headers=headers, files=files)
+        assert response.status_code == 403

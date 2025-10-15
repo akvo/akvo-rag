@@ -32,4 +32,4 @@ class App(Base, TimestampMixin):
     status = Column(SQLEnum(AppStatus), default=AppStatus.active, nullable=False)
 
     # list of KB IDs
-    knowledge_base_ids = Column(JSON, default=list, nullable=True)
+    knowledge_base_id = Column(Integer, nullable=True)

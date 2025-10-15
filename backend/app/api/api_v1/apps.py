@@ -1,5 +1,12 @@
-from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from typing import Any, List
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+    Response,
+    UploadFile
+)
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -52,14 +59,13 @@ async def register_app(
                 "description": f"Knowledge base for {register_data.app_name}"
             }
         )
-        kb_id = kb_result.get('id')
-        knowledge_base_ids = [kb_id] if kb_id else None
+        knowledge_base_id = kb_result.get('id', None)
 
         # create app
         app, access_token = AppService.create_app(
             db=db,
             register_data=register_data,
-            knowledge_base_ids=knowledge_base_ids
+            knowledge_base_id=knowledge_base_id
         )
 
         return AppRegisterResponse(
@@ -67,7 +73,7 @@ async def register_app(
             client_id=app.client_id,
             access_token=access_token,
             scopes=app.scopes,
-            knowledge_base_ids=app.knowledge_base_ids,
+            knowledge_base_id=app.knowledge_base_id,
         )
     except ValueError as e:
         raise HTTPException(
@@ -111,7 +117,7 @@ def get_app_info(
         upload_callback_url=current_app.upload_callback_url,
         scopes=current_app.scopes,
         status=current_app.status,
-        knowledge_base_ids=current_app.knowledge_base_ids,
+        knowledge_base_id=current_app.knowledge_base_id,
     )
 
 
@@ -195,3 +201,23 @@ def revoke_app(
     """
     AppService.revoke_app(db=db, app=current_app)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/upload")
+async def upload_and_process_documents(
+    *,
+    files: List[UploadFile],
+    current_app: App = Depends(get_current_app)
+) -> Any:
+    """
+    Upload and process documents for the app in one go
+    Send multiple files in a single request.
+    """
+    await KnowledgeBaseMCPEndpointService.upload_and_process_documents(
+        kb_id=current_app.knowledge_base_id,
+        files=files
+    )
+    return {
+        "message": "Document received and is being processed.",
+        "file_count": len(files),
+    }
