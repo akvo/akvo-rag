@@ -30,3 +30,6 @@ class App(Base, TimestampMixin):
     # Authorization
     scopes = Column(JSON, nullable=False)  # Store as JSON array
     status = Column(SQLEnum(AppStatus), default=AppStatus.active, nullable=False)
+
+    # list of KB IDs
+    knowledge_base_ids = Column(JSON, default=list, nullable=True)
