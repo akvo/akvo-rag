@@ -12,6 +12,8 @@ from app.models.base import Base
 from app.models.user import User
 from app.models.chat import Chat, Message
 from app.models.prompt import PromptDefinition, PromptVersion
+from app.models.system_setting import SystemSetting
+from app.models.job import Job
 from app.core.config import settings
 
 # this is the Alembic Config object, which provides
