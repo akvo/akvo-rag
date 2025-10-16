@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -42,6 +42,26 @@ async def create_job(
     return JobResponse(
         job_id=job.id,
         status=job.status,
+        trace_id=job.trace_id
+    )
+
+
+@router.get("/jobs/{job_id}", response_model=JobResponse)
+def get_job_status(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_app: App = Depends(get_current_app),
+):
+    """
+    Retrieve a job status (only chat jobs visible, not upload jobs).
+    """
+    job = JobService.get_job(db, job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return JobResponse(
+        job_id=job.id,
+        status=job.status,
         trace_id=job.trace_id,
-        message="Chat job queued successfully.",
     )

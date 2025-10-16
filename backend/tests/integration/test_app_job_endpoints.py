@@ -1,4 +1,5 @@
 import pytest
+import json
 
 from unittest.mock import AsyncMock, patch
 from app.models.app import App, AppStatus
@@ -44,7 +45,7 @@ def sample_job_payload():
 
 
 class TestJobsEndpointIntegration:
-    """Integration tests for /jobs endpoint."""
+    """Integration tests for /v1/apps/jobs endpoint."""
 
     @pytest.mark.asyncio
     @patch("app.api.api_v1.jobs.execute_chat_job", new_callable=AsyncMock)
@@ -65,7 +66,6 @@ class TestJobsEndpointIntegration:
         assert data["job_id"] == data["job_id"]
         assert data["status"] == "pending"
         assert data["trace_id"] == "trace_abc_123"
-        assert "Chat job queued successfully." in data["message"]
 
         # Check the job exists in the DB
         job = db.query(Job).filter(Job.id == data["job_id"]).first()
@@ -101,3 +101,46 @@ class TestJobsEndpointIntegration:
         response = client.post(
             "/v1/apps/jobs", json=sample_job_payload, headers=headers)
         assert response.status_code == 403
+
+
+class TestGetJobStatus:
+    """Tests for GET /v1/apps/jobs/{job_id} endpoint."""
+
+    def test_get_job_status_success(
+        self, client, db, sample_app, sample_job_payload
+    ):
+        """Should return the job status for a valid chat job."""
+        # Insert a job in the DB
+        job = Job(
+            id="job_abc",
+            app_id=sample_app.app_id,
+            job_type="chat",
+            status="running",
+            trace_id="trace_001",
+            input_data=json.dumps(sample_job_payload)
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        db.close()
+
+        headers = {"Authorization": f"Bearer {sample_app.access_token}"}
+        response = client.get(f"/v1/apps/jobs/{job.id}", headers=headers)
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["job_id"] == "job_abc"
+        assert data["status"] == "running"
+        assert data["trace_id"] == "trace_001"
+
+    def test_get_job_status_requires_auth(self, client):
+        """Should return 401 if no token is provided."""
+        response = client.get("/v1/apps/jobs/job_abc")
+        assert response.status_code == 401
+
+    def test_get_job_status_not_found(self, client, sample_app):
+        """Should return 404 for unknown job_id."""
+        headers = {"Authorization": f"Bearer {sample_app.access_token}"}
+        response = client.get("/v1/apps/jobs/job_not_exist", headers=headers)
+        assert response.status_code == 404

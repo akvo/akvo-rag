@@ -21,7 +21,9 @@ class JobResponse(BaseModel):
     job_id: str
     status: str
     trace_id: Optional[str]
-    message: str
+
+    class Config:
+        orm_mode = True
 
 
 class JobStatus(BaseModel):
