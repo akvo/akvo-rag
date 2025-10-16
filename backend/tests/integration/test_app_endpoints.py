@@ -1,47 +1,8 @@
 import io
 import pytest
 
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 from unittest.mock import AsyncMock, patch
-
-from app.main import app
-from app.db.session import get_db
-from app.models.base import Base
 from app.models.app import App, AppStatus
-
-# Create in-memory SQLite database for testing
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def override_get_db():
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
-
-client = TestClient(app)
-
-
-@pytest.fixture(autouse=True)
-def setup_database():
-    """Create tables before each test and drop after."""
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
@@ -130,7 +91,7 @@ def mock_get_documents_upload():
 class TestAppRegistration:
     """Test suite for POST /v1/apps/register endpoint."""
 
-    def test_register_app_success(self, sample_app_data):
+    def test_register_app_success(self, client, sample_app_data):
         """Test successful app registration returns credentials."""
         response = client.post("/v1/apps/register", json=sample_app_data)
 
@@ -156,7 +117,7 @@ class TestAppRegistration:
         assert "kb.write" in data["scopes"]
         assert "apps.read" in data["scopes"]
 
-    def test_register_app_validates_https_chat_callback(self, sample_app_data):
+    def test_register_app_validates_https_chat_callback(self, client,sample_app_data):
         """Test that non-HTTPS chat_callback URL is rejected."""
         sample_app_data["chat_callback"] = "http://agriconnect.akvo.org/api/ai/callback"
         response = client.post("/v1/apps/register", json=sample_app_data)
@@ -164,7 +125,7 @@ class TestAppRegistration:
         assert response.status_code == 422  # Validation error
         assert "https" in response.text.lower()
 
-    def test_register_app_validates_https_upload_callback(self, sample_app_data):
+    def test_register_app_validates_https_upload_callback(self, client, sample_app_data):
         """Test that non-HTTPS upload_callback URL is rejected."""
         sample_app_data["upload_callback"] = "http://agriconnect.akvo.org/api/kb/callback"
         response = client.post("/v1/apps/register", json=sample_app_data)
@@ -177,12 +138,12 @@ class TestAppMe:
     """Test suite for GET /v1/apps/me endpoint."""
 
     @pytest.fixture
-    def registered_app(self, sample_app_data):
+    def registered_app(self, client, sample_app_data):
         """Register an app and return credentials."""
         response = client.post("/v1/apps/register", json=sample_app_data)
         return response.json()
 
-    def test_app_me_success_with_valid_token(self, registered_app):
+    def test_app_me_success_with_valid_token(self, client, registered_app):
         """Test /me endpoint returns app info with valid token."""
         headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
         response = client.get("/v1/apps/me", headers=headers)
@@ -200,23 +161,22 @@ class TestAppMe:
         assert data["scopes"] == registered_app["scopes"]
         assert data["knowledge_base_id"] == 42
 
-    def test_app_me_returns_401_with_invalid_token(self):
+    def test_app_me_returns_401_with_invalid_token(self, client):
         """Test /me endpoint returns 401 with invalid token."""
         headers = {"Authorization": "Bearer tok_invalid_token"}
         response = client.get("/v1/apps/me", headers=headers)
 
         assert response.status_code == 401
 
-    def test_app_me_returns_401_without_token(self):
+    def test_app_me_returns_401_without_token(self, client):
         """Test /me endpoint returns 401 without Authorization header."""
         response = client.get("/v1/apps/me")
 
         assert response.status_code == 401
 
-    def test_app_me_returns_403_for_inactive_app(self, registered_app):
+    def test_app_me_returns_403_for_inactive_app(self, client, db, registered_app):
         """Test /me endpoint returns 403 for inactive app."""
         # Manually set app to revoked status
-        db = TestingSessionLocal()
         app = db.query(App).filter(App.app_id == registered_app["app_id"]).first()
         app.status = AppStatus.revoked
         db.commit()
@@ -232,12 +192,12 @@ class TestAppRotate:
     """Test suite for POST /v1/apps/rotate endpoint."""
 
     @pytest.fixture
-    def registered_app(self, sample_app_data):
+    def registered_app(self, client, sample_app_data):
         """Register an app and return credentials."""
         response = client.post("/v1/apps/register", json=sample_app_data)
         return response.json()
 
-    def test_rotate_access_token_only(self, registered_app):
+    def test_rotate_access_token_only(self, client, registered_app):
         """Test rotating only the access token."""
         old_token = registered_app["access_token"]
         headers = {"Authorization": f"Bearer {old_token}"}
@@ -266,7 +226,7 @@ class TestAppRotate:
         old_me_response = client.get("/v1/apps/me", headers=old_headers)
         assert old_me_response.status_code == 401
 
-    def test_rotate_callback_token_only(self, registered_app):
+    def test_rotate_callback_token_only(self, client, db, registered_app):
         """Test rotating only the callback token."""
         headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
         payload = {
@@ -287,12 +247,11 @@ class TestAppRotate:
         assert data["access_token"] is None
 
         # Verify the callback token was updated in the database
-        db = TestingSessionLocal()
         app = db.query(App).filter(App.app_id == registered_app["app_id"]).first()
         assert app.callback_token == "new_test_callback_token_456"
         db.close()
 
-    def test_rotate_both_tokens(self, registered_app):
+    def test_rotate_both_tokens(self, client, db, registered_app):
         """Test rotating both access and callback tokens."""
         old_access_token = registered_app["access_token"]
         headers = {"Authorization": f"Bearer {old_access_token}"}
@@ -314,12 +273,11 @@ class TestAppRotate:
         assert data["message"] == "Both tokens rotated successfully"
 
         # Verify the callback token was updated in the database
-        db = TestingSessionLocal()
         app = db.query(App).filter(App.app_id == registered_app["app_id"]).first()
         assert app.callback_token == "new_test_callback_token_789"
         db.close()
 
-    def test_rotate_no_tokens(self, registered_app):
+    def test_rotate_no_tokens(self, client, registered_app):
         """Test rotate endpoint when no tokens are requested to rotate."""
         headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
         payload = {"rotate_access_token": False, "rotate_callback_token": False}
@@ -338,12 +296,12 @@ class TestAppRevoke:
     """Test suite for POST /v1/apps/revoke endpoint."""
 
     @pytest.fixture
-    def registered_app(self, sample_app_data):
+    def registered_app(self, client, sample_app_data):
         """Register an app and return credentials."""
         response = client.post("/v1/apps/register", json=sample_app_data)
         return response.json()
 
-    def test_revoke_app_success(self, registered_app):
+    def test_revoke_app_success(self, client, registered_app):
         """Test successful app revocation."""
         headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
         response = client.post("/v1/apps/revoke", headers=headers)
@@ -354,7 +312,7 @@ class TestAppRevoke:
         me_response = client.get("/v1/apps/me", headers=headers)
         assert me_response.status_code == 403  # Inactive app
 
-    def test_revoke_app_idempotent(self, registered_app):
+    def test_revoke_app_idempotent(self, client, registered_app):
         """Test that revoking an app is idempotent."""
         headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
 
@@ -366,7 +324,7 @@ class TestAppRevoke:
         me_response = client.get("/v1/apps/me", headers=headers)
         assert me_response.status_code == 403
 
-    def test_revoke_requires_valid_token(self):
+    def test_revoke_requires_valid_token(self, client):
         """Test that revoke endpoint requires valid token."""
         headers = {"Authorization": "Bearer tok_invalid"}
         response = client.post("/v1/apps/revoke", headers=headers)
@@ -381,12 +339,12 @@ class TestAppUpload:
     """
 
     @pytest.fixture
-    def registered_app(self, sample_app_data):
+    def registered_app(self, client, sample_app_data):
         """Register an app and return credentials."""
         response = client.post("/v1/apps/register", json=sample_app_data)
         return response.json()
 
-    def test_upload_success(self, registered_app):
+    def test_upload_success(self, client, registered_app):
         """Test successful document upload and processing."""
         headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
 
@@ -404,7 +362,7 @@ class TestAppUpload:
         assert data["message"] == "Document received and is being processed."
         assert data["file_count"] == 2
 
-    def test_upload_unauthorized_no_token(self):
+    def test_upload_unauthorized_no_token(self, client):
         """Test upload without Authorization header returns 401."""
         files = [
             ("files", ("doc.txt", io.BytesIO(b"Test content"), "text/plain")),
@@ -413,7 +371,7 @@ class TestAppUpload:
         response = client.post("/v1/apps/upload", files=files)
         assert response.status_code == 401
 
-    def test_upload_unauthorized_invalid_token(self):
+    def test_upload_unauthorized_invalid_token(self, client):
         """Test upload with invalid token returns 401."""
         headers = {"Authorization": "Bearer invalid_token"}
         files = [
@@ -423,10 +381,9 @@ class TestAppUpload:
         response = client.post("/v1/apps/upload", headers=headers, files=files)
         assert response.status_code == 401
 
-    def test_upload_forbidden_revoked_app(self, registered_app):
+    def test_upload_forbidden_revoked_app(self, client, db, registered_app):
         """Test upload returns 403 for revoked app."""
         # Set app status to revoked manually
-        db = TestingSessionLocal()
         app = db.query(App).filter(App.app_id == registered_app["app_id"]).first()
         app.status = "revoked"
         db.commit()
@@ -440,7 +397,7 @@ class TestAppUpload:
         response = client.post("/v1/apps/upload", headers=headers, files=files)
         assert response.status_code == 403
 
-    def test_get_upload_docs(self, registered_app):
+    def test_get_upload_docs(self, client, registered_app):
         """Test successful get uploaded documents."""
         headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
 
@@ -454,7 +411,7 @@ class TestAppUpload:
         assert data[0]["knowledge_base_id"] == 42
         assert data[1]["knowledge_base_id"] == 42
 
-    def test_get_upload_failed(self, registered_app):
+    def test_get_upload_failed(self, client, registered_app):
         """Test no auth get uploaded documents."""
 
         response = client.get("/v1/apps/documents")
