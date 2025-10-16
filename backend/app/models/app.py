@@ -25,7 +25,7 @@ class App(Base, TimestampMixin):
 
     # Token management
     access_token = Column(String(128), unique=True, index=True, nullable=False)
-    callback_token = Column(String(255), nullable=False)
+    callback_token = Column(String(255), nullable=True)
 
     # Authorization
     scopes = Column(JSON, nullable=False)  # Store as JSON array
