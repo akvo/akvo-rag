@@ -133,6 +133,36 @@ class TestAppRegistration:
         assert response.status_code == 422  # Validation error
         assert "https" in response.text.lower()
 
+    def test_register_app_success_without_callback_token(self, sample_app_data):
+        """Test successful app registration returns credentials."""
+
+        # reset callback token
+        sample_app_data["callback_token"] = None
+        response = client.post("/v1/apps/register", json=sample_app_data)
+
+        print(response.json(), 'GALIH')
+        assert response.status_code == 201
+        data = response.json()
+
+        # Verify response structure
+        assert "app_id" in data
+        assert "client_id" in data
+        assert "access_token" in data
+        assert "scopes" in data
+        assert "knowledge_base_id" in data
+        assert data["knowledge_base_id"] == 42
+
+        # Verify ID prefixes
+        assert data["app_id"].startswith("app_")
+        assert data["client_id"].startswith("ac_")
+        assert data["access_token"].startswith("tok_")
+
+        # Verify default scopes
+        assert "jobs.write" in data["scopes"]
+        assert "kb.read" in data["scopes"]
+        assert "kb.write" in data["scopes"]
+        assert "apps.read" in data["scopes"]
+
 
 class TestAppMe:
     """Test suite for GET /v1/apps/me endpoint."""

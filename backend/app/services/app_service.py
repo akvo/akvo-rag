@@ -52,7 +52,7 @@ class AppService:
             chat_callback_url=register_data.chat_callback,
             upload_callback_url=register_data.upload_callback,
             access_token=access_token,
-            callback_token=register_data.callback_token,
+            callback_token=register_data.callback_token or None,
             scopes=scopes,
             status=AppStatus.active,
             knowledge_base_id=knowledge_base_id,

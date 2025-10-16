@@ -11,7 +11,7 @@ class AppRegisterRequest(BaseModel):
     default_chat_prompt: Optional[str] = ""
     chat_callback: str
     upload_callback: str
-    callback_token: str
+    callback_token: Optional[str] = None
 
     @field_validator("chat_callback", "upload_callback")
     @classmethod
