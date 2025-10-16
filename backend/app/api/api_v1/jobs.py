@@ -1,0 +1,47 @@
+from fastapi import APIRouter, Depends, BackgroundTasks
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
+from app.schemas import JobCreate, JobResponse
+from app.services.job_service import JobService
+from app.services.chat_job_service import execute_chat_job
+from app.models.app import App
+from app.core.security import get_current_app
+
+router = APIRouter()
+
+
+# only accessed by apps
+@router.post("/jobs", response_model=JobResponse)
+async def create_job(
+    data: JobCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_app: App = Depends(get_current_app),
+):
+    """Create a job and run it in background."""
+    job = JobService.create_job(
+        db=db, job_type="chat", data=data.dict(), app_id=current_app.app_id
+    )
+
+    knowledge_base_ids = (
+        [current_app.knowledge_base_id]
+        if current_app.knowledge_base_id
+        else []
+    )
+    if data.job == "chat":
+        # Launch chat workflow
+        background_tasks.add_task(
+            execute_chat_job, db, job.id, data.dict(),
+            knowledge_base_ids=knowledge_base_ids
+        )
+    else:
+        # In the future: other job types (summarize, embed, etc.)
+        pass
+
+    return JobResponse(
+        job_id=job.id,
+        status=job.status,
+        trace_id=job.trace_id,
+        message="Chat job queued successfully.",
+    )

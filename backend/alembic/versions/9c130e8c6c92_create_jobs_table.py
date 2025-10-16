@@ -23,6 +23,7 @@ def upgrade() -> None:
     op.create_table(
         "jobs",
         sa.Column("id", sa.String(length=100), nullable=False),
+        sa.Column("app_id", sa.String(length=100), nullable=True),
         sa.Column("job_type", sa.String(length=75), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
         sa.Column("input_data", sa.Text(), nullable=True),

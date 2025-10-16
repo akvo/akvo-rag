@@ -14,3 +14,9 @@ from .app import (  # noqa
     AppRotateResponse,
     ErrorResponse,
 )
+from .job import (  # noqa
+    ChatMessage,
+    JobCreate,
+    JobResponse,
+    JobStatus,
+)
