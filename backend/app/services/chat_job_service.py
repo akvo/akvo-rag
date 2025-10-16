@@ -45,7 +45,7 @@ async def execute_chat_job(
             "query": prompt, # where is the query?
             "chat_history": chat_history,
             "contextualize_prompt_str": contextualize_prompt,
-            "qa_prompt_str": prompt or qa_prompt,
+            "qa_prompt_str": qa_prompt,
             "scope": {
                 "knowledge_base_ids": knowledge_base_ids,
                 "top_k": top_k,
@@ -53,14 +53,29 @@ async def execute_chat_job(
         }
 
         result_state = await query_answering_workflow.ainvoke(state)
+        logger.info(f"Chat job {job_id} completed.")
 
         answer = result_state.get("answer", "")
         error = result_state.get("error")
 
+        citations = []
+        for context in result_state.get("context", []):
+            doc_metadata = context.metadata or {}
+            doc_content = context.page_content
+            doc_context = {
+                "document": doc_metadata.get("source") or doc_metadata.get("title"),
+                "chunk": doc_content,
+                "page": doc_metadata.get("page_label") or doc_metadata.get("page"),
+            }
+            citations.append(doc_context)
+
+        output = {"answer": answer, "citations": citations}
+        logger.info(f"Chat job {job_id} output: {output}")
+
         if error:
             JobService.update_status_to_failed(db, job_id, output=str(error))
         else:
-            JobService.update_status_to_completed(db, job_id, output=answer)
+            JobService.update_status_to_completed(db, job_id, output=output)
 
         # Trigger callback
         if callback_url:
@@ -68,7 +83,7 @@ async def execute_chat_job(
                 "job_id": job_id,
                 "trace_id": trace_id,
                 "status": "failed" if error else "completed",
-                "output": answer,
+                "output": output,
                 "error": error,
                 "callback_params": callback_params,
             }

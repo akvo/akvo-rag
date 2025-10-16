@@ -36,7 +36,9 @@ class JobService:
         if job:
             job.status = status
             if output is not None:
-                job.output = output
+                job.output = (
+                    json.dumps(output) if isinstance(output, dict) else output
+                )
             db.commit()
             db.refresh(job)
         return job

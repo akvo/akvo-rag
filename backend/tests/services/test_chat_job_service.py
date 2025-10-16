@@ -85,7 +85,9 @@ class TestChatJobService:
             assert payload["job_id"] == sample_job_id
             assert payload["trace_id"] == "trace_12345"
             assert payload["status"] == "completed"
-            assert payload["output"] == "AI means Artificial Intelligence"
+            assert payload["output"] == {
+                'answer': 'AI means Artificial Intelligence', 'citations': []
+            }
             assert payload["error"] is None
             assert payload["callback_params"] == {"reply_to": "wa:+679123456", "mode": "reply"}
 
