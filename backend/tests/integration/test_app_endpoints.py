@@ -133,7 +133,7 @@ class TestAppRegistration:
         assert response.status_code == 422  # Validation error
         assert "https" in response.text.lower()
 
-    def test_register_app_success_without_callback_token(self, sample_app_data):
+    def test_register_app_success_without_callback_token(self, client, sample_app_data):
         """Test successful app registration returns credentials."""
 
         # reset callback token
