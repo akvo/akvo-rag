@@ -84,21 +84,32 @@ services:
 
   flower:
     image: mher/flower
-    container_name: flower
+    env_file:
+      - .env
     command: >
-      celery --broker=amqp://rabbitmq:rabbitmq@rabbitmq:5672//
-              --result-backend=rpc://
-              flower --port=5555 --basic_auth=admin:admin
+      celery
+        --broker=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@${RABBITMQ_HOST}:${RABBITMQ_PORT}//
+        --result-backend=rpc://
+        flower
+        --port=${FLOWER_PORT:-5555}
+        --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
     ports:
-      - "5555:5555"
+      - "${FLOWER_PORT:-5555}:5555"
     depends_on:
+      - celery_worker
       - rabbitmq
     networks:
       - app_network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 
   rabbitmq:
     image: rabbitmq:3-management
-    container_name: rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: rabbitmq
       RABBITMQ_DEFAULT_PASS: rabbitmq
