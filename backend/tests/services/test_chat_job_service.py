@@ -26,7 +26,6 @@ class TestChatJobService:
                 {"role": "user", "content": "What is AI?"},
                 {"role": "assistant", "content": "AI stands for Artificial Intelligence."},
             ],
-            "callback_url": "https://example.com/callback",
             "callback_params": {"reply_to": "wa:+679123456", "mode": "reply"},
             "trace_id": "trace_12345",
         }
@@ -35,9 +34,13 @@ class TestChatJobService:
     def knowledge_base_ids(self):
         return [1, 2, 3]
 
+    @pytest.fixture
+    def chat_callback_url(self):
+        return "https://example.com/callback"
+
     @pytest.mark.asyncio
     async def test_execute_chat_job_success(
-        self, mock_db, sample_job_id, sample_data, knowledge_base_ids
+        self, mock_db, sample_job_id, sample_data, knowledge_base_ids, chat_callback_url
     ):
         """✅ Test successful chat job execution with correct callback payload."""
         with (
@@ -65,6 +68,7 @@ class TestChatJobService:
                 db=mock_db,
                 job_id=sample_job_id,
                 data=sample_data,
+                callback_url=chat_callback_url,
                 knowledge_base_ids=knowledge_base_ids,
             )
 
@@ -96,7 +100,7 @@ class TestChatJobService:
 
     @pytest.mark.asyncio
     async def test_execute_chat_job_failure(
-        self, mock_db, sample_job_id, sample_data, knowledge_base_ids
+        self, mock_db, sample_job_id, sample_data, knowledge_base_ids, chat_callback_url
     ):
         with (
             patch.object(chat_job_service.JobService, "get_job", return_value=True),
@@ -112,6 +116,7 @@ class TestChatJobService:
                 db=mock_db,
                 job_id=sample_job_id,
                 data=sample_data,
+                callback_url=chat_callback_url,
                 knowledge_base_ids=knowledge_base_ids,
             )
 
@@ -121,9 +126,6 @@ class TestChatJobService:
     async def test_execute_chat_job_no_callback(
         self, mock_db, sample_job_id, sample_data
     ):
-        data = dict(sample_data)
-        data.pop("callback_url")
-
         with (
             patch.object(chat_job_service.JobService, "get_job", return_value=True),
             patch.object(chat_job_service, "query_answering_workflow") as mock_workflow,
@@ -132,6 +134,12 @@ class TestChatJobService:
             mock_workflow.ainvoke = AsyncMock(return_value={"answer": "ok"})
             mock_httpx_client.return_value.__aenter__.return_value = AsyncMock()
 
-            await execute_chat_job(mock_db, sample_job_id, data, [])
+            await execute_chat_job(
+                db=mock_db,
+                job_id=sample_job_id,
+                data=sample_data,
+                callback_url=None,
+                knowledge_base_ids=[]
+            )
 
             mock_httpx_client.return_value.__aenter__.return_value.post.assert_not_awaited()

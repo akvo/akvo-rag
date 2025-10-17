@@ -29,17 +29,16 @@ def sample_app(db):
 
 
 @pytest.fixture
-def sample_job_payload():
+def sample_chat_job_payload():
     """Payload for creating a chat job."""
     return {
         "job": "chat",
         "prompt": "Explain AI simply.",
-        "chats": [
+        "chats": json.dumps([
             {"role": "user", "content": "What is AI?"},
             {"role": "assistant", "content": "AI means Artificial Intelligence."},
-        ],
-        "callback_url": "https://example.com/callback",
-        "callback_params": {"reply_to": "wa:+1234"},
+        ]),
+        "callback_params": json.dumps({"reply_to": "wa:+1234"}),
         "trace_id": "trace_abc_123",
     }
 
@@ -50,14 +49,14 @@ class TestJobsEndpointIntegration:
     @pytest.mark.asyncio
     @patch("app.api.api_v1.jobs.execute_chat_job_task")
     def test_create_chat_job_success(
-        self, mock_task, client, db, sample_app, sample_job_payload
+        self, mock_task, client, db, sample_app, sample_chat_job_payload
     ):
         """Should create a chat job and queue it for background execution."""
         mock_task.delay = Mock(return_value=Mock(id="fake-task-id-123"))
 
         headers = {"Authorization": f"Bearer {sample_app.access_token}"}
         response = client.post(
-            "/v1/apps/jobs", json=sample_job_payload, headers=headers)
+            "/v1/apps/jobs", data=sample_chat_job_payload, headers=headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -76,20 +75,20 @@ class TestJobsEndpointIntegration:
         assert job.celery_task_id == "fake-task-id-123"
         db.close()
 
-    def test_create_chat_job_requires_auth(self, client, sample_job_payload):
+    def test_create_chat_job_requires_auth(self, client, sample_chat_job_payload):
         """Should reject unauthenticated requests."""
-        response = client.post("/v1/apps/jobs", json=sample_job_payload)
+        response = client.post("/v1/apps/jobs", json=sample_chat_job_payload)
         assert response.status_code == 401
 
-    def test_create_chat_job_invalid_token(self, client, sample_job_payload):
+    def test_create_chat_job_invalid_token(self, client, sample_chat_job_payload):
         """Should reject invalid tokens."""
         headers = {"Authorization": "Bearer tok_invalid"}
         response = client.post(
-            "/v1/apps/jobs", json=sample_job_payload, headers=headers)
+            "/v1/apps/jobs", json=sample_chat_job_payload, headers=headers)
         assert response.status_code == 401
 
     def test_create_chat_job_for_revoked_app(
-        self, client, db, sample_app, sample_job_payload
+        self, client, db, sample_app, sample_chat_job_payload
     ):
         """Should reject requests for revoked app."""
         # Revoke the app manually
@@ -100,7 +99,7 @@ class TestJobsEndpointIntegration:
 
         headers = {"Authorization": f"Bearer {sample_app.access_token}"}
         response = client.post(
-            "/v1/apps/jobs", json=sample_job_payload, headers=headers)
+            "/v1/apps/jobs", json=sample_chat_job_payload, headers=headers)
         assert response.status_code == 403
 
 
@@ -108,7 +107,7 @@ class TestGetJobStatus:
     """Tests for GET /v1/apps/jobs/{job_id} endpoint."""
 
     def test_get_job_status_success(
-        self, client, db, sample_app, sample_job_payload
+        self, client, db, sample_app, sample_chat_job_payload
     ):
         """Should return the job status for a valid chat job."""
         # Insert a job in the DB
@@ -118,7 +117,7 @@ class TestGetJobStatus:
             job_type="chat",
             status="running",
             trace_id="trace_001",
-            input_data=json.dumps(sample_job_payload)
+            input_data=json.dumps(sample_chat_job_payload)
         )
         db.add(job)
         db.commit()

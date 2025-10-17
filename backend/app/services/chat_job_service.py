@@ -12,7 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 async def execute_chat_job(
-    db: Session, job_id: str, data: dict, knowledge_base_ids: List[int] = []
+    db: Session,
+    job_id: str,
+    data: dict,
+    callback_url: str,
+    knowledge_base_ids: List[int] = []
 ):
     """Background job executor for chat jobs (non-streaming)."""
     job = JobService.get_job(db, job_id)
@@ -28,7 +32,7 @@ async def execute_chat_job(
 
         chats = data.get("chats", [])
         prompt = data.get("prompt") or None # will replace qa prompt if provided
-        callback_url = data.get("callback_url")
+        callback_url = data.get("callback_url") or callback_url
         callback_params = data.get("callback_params", {})
         trace_id = data.get("trace_id")
 

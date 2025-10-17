@@ -15,7 +15,7 @@ class JobService:
             app_id=app_id,
             status="pending",
             input_data=json.dumps(data),
-            callback_url=data.get("callback_url"),
+            callback_url=data.get("callback_url") or None,
             callback_params=json.dumps(data.get("callback_params", {})),
             trace_id=data.get("trace_id"),
         )

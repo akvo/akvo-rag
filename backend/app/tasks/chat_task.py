@@ -6,7 +6,10 @@ from app.services.chat_job_service import execute_chat_job
 
 @celery_app.task(name="tasks.execute_chat_job_task")
 def execute_chat_job_task(
-    job_id: str, data: dict, knowledge_base_ids: list[int] = []
+    job_id: str,
+    data: dict,
+    callback_url: str,
+    knowledge_base_ids: list[int] = [],
 ):
     """
     Celery task that runs the async chat workflow in a separate process.

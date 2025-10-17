@@ -16,7 +16,6 @@ from .app import (  # noqa
 )
 from .job import (  # noqa
     ChatMessage,
-    JobCreate,
     JobResponse,
     JobStatus,
 )

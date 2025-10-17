@@ -7,16 +7,6 @@ class ChatMessage(BaseModel):
     content: str
 
 
-class JobCreate(BaseModel):
-    """Universal job creation schema."""
-    job: str
-    prompt: Optional[str] = None
-    chats: Optional[List[ChatMessage]] = None  # used for chat-type jobs
-    callback_url: Optional[str] = None
-    callback_params: Optional[Dict[str, Any]] = None
-    trace_id: Optional[str] = None
-
-
 class JobResponse(BaseModel):
     job_id: str
     status: str
