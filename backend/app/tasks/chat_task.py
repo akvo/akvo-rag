@@ -1,0 +1,16 @@
+import asyncio
+
+from app.celery_app import celery_app
+from app.db.session import SessionLocal
+from app.services.chat_job_service import execute_chat_job
+
+@celery_app.task(name="chat.execute_chat_job")
+def execute_chat_job_task(
+    job_id: str, data: dict, knowledge_base_ids: list[int] = []
+):
+    """
+    Celery task that runs the async chat workflow in a separate process.
+    """
+    db = SessionLocal()
+    asyncio.run(execute_chat_job(db, job_id, data, knowledge_base_ids))
+    db.close()

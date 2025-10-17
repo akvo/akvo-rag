@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas import JobCreate, JobResponse
 from app.services.job_service import JobService
-from app.services.chat_job_service import execute_chat_job
 from app.models.app import App
 from app.core.security import get_current_app
+from app.tasks.chat_task import execute_chat_job_task
 
 router = APIRouter()
 
@@ -15,7 +15,6 @@ router = APIRouter()
 @router.post("/jobs", response_model=JobResponse)
 async def create_job(
     data: JobCreate,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_app: App = Depends(get_current_app),
 ):
@@ -31,10 +30,10 @@ async def create_job(
     )
     if data.job == "chat":
         # Launch chat workflow
-        background_tasks.add_task(
-            execute_chat_job, db, job.id, data.dict(),
-            knowledge_base_ids=knowledge_base_ids
+        celery_task = execute_chat_job_task.delay(
+            job.id, data.dict(), knowledge_base_ids
         )
+        JobService.update_celery_task_id(db, job.id, celery_task.id)
     else:
         # In the future: other job types (summarize, embed, etc.)
         pass

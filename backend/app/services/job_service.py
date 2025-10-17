@@ -59,3 +59,12 @@ class JobService:
         db: Session, job_id: str, output: str = None
     ):
         return JobService._update_job_status(db, job_id, "failed", output)
+
+    @staticmethod
+    def update_celery_task_id(db: Session, job_id: str, celery_task_id: str):
+        job = db.query(Job).filter(Job.id == job_id).first()
+        if job:
+            job.celery_task_id = celery_task_id
+            db.commit()
+            db.refresh(job)
+        return job

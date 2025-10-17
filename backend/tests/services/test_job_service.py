@@ -104,3 +104,15 @@ class TestJobService:
         # Verify job status was updated
         assert job.status == "completed"
         assert job.output == "Done."
+
+    def test_update_celery_task_id(self, mock_db):
+        """Test to update celery task id"""
+        # Setup mock return value
+        mock_job = Mock()
+        mock_db.query().filter().first.return_value = mock_job
+
+        job = JobService.update_celery_task_id(
+            mock_db, "job_12345", "celery_12345")
+
+        # Verify job status was updated
+        assert job.celery_task_id == "celery_12345"

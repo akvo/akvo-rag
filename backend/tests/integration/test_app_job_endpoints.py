@@ -1,7 +1,7 @@
 import pytest
 import json
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import Mock, patch
 from app.models.app import App, AppStatus
 from app.models.job import Job
 
@@ -48,11 +48,12 @@ class TestJobsEndpointIntegration:
     """Integration tests for /v1/apps/jobs endpoint."""
 
     @pytest.mark.asyncio
-    @patch("app.api.api_v1.jobs.execute_chat_job", new_callable=AsyncMock)
+    @patch("app.api.api_v1.jobs.execute_chat_job_task")
     def test_create_chat_job_success(
-        self, mock_execute_chat_job, client, db, sample_app, sample_job_payload
+        self, mock_task, client, db, sample_app, sample_job_payload
     ):
         """Should create a chat job and queue it for background execution."""
+        mock_task.delay = Mock(return_value=Mock(id="fake-task-id-123"))
 
         headers = {"Authorization": f"Bearer {sample_app.access_token}"}
         response = client.post(
@@ -60,7 +61,6 @@ class TestJobsEndpointIntegration:
 
         assert response.status_code == 200
         data = response.json()
-        print(data)
 
         # Validate response content
         assert data["job_id"] == data["job_id"]
@@ -73,6 +73,7 @@ class TestJobsEndpointIntegration:
         assert job.status == "pending"
         assert job.app_id == sample_app.app_id
         assert job.input_data is not None
+        assert job.celery_task_id == "fake-task-id-123"
         db.close()
 
     def test_create_chat_job_requires_auth(self, client, sample_job_payload):
