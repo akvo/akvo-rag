@@ -12,5 +12,10 @@ def execute_chat_job_task(
     Celery task that runs the async chat workflow in a separate process.
     """
     db = SessionLocal()
-    asyncio.run(execute_chat_job(db, job_id, data, knowledge_base_ids))
-    db.close()
+    try:
+        result = asyncio.run(
+            execute_chat_job(db, job_id, data, knowledge_base_ids)
+        )
+        return result
+    finally:
+        db.close()
