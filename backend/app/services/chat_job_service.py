@@ -93,7 +93,9 @@ async def execute_chat_job(
                 logger.info(f"Callback sent to {callback_url}")
             except Exception as cb_err:
                 logger.warning(f"Callback failed: {cb_err}")
+        return output
 
     except Exception as e:
         logger.exception(f"Chat job execution failed: {e}")
         JobService.update_status_to_failed(db, job_id, output=str(e))
+        return str(e)

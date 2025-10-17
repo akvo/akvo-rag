@@ -4,7 +4,7 @@ from app.celery_app import celery_app
 from app.db.session import SessionLocal
 from app.services.chat_job_service import execute_chat_job
 
-@celery_app.task(name="chat.execute_chat_job")
+@celery_app.task(name="tasks.execute_chat_job_task")
 def execute_chat_job_task(
     job_id: str, data: dict, knowledge_base_ids: list[int] = []
 ):

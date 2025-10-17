@@ -140,7 +140,6 @@ class TestAppRegistration:
         sample_app_data["callback_token"] = None
         response = client.post("/v1/apps/register", json=sample_app_data)
 
-        print(response.json(), 'GALIH')
         assert response.status_code == 201
         data = response.json()
 

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -9,6 +11,7 @@ from app.core.security import get_current_app
 from app.tasks.chat_task import execute_chat_job_task
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # only accessed by apps
@@ -28,12 +31,18 @@ async def create_job(
         if current_app.knowledge_base_id
         else []
     )
+
+    data.job = data.job.strip() if data.job else data.job
     if data.job == "chat":
         # Launch chat workflow
+        logger.info("🚀 Dispatching chat job to Celery")
         celery_task = execute_chat_job_task.delay(
-            job.id, data.dict(), knowledge_base_ids
+            job_id=job.id,
+            data=data.dict(),
+            knowledge_base_ids=knowledge_base_ids
         )
         JobService.update_celery_task_id(db, job.id, celery_task.id)
+        logger.info(f"✅ Queued Celery task: {celery_task.id}")
     else:
         # In the future: other job types (summarize, embed, etc.)
         pass
