@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     OLLAMA_API_BASE: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "deepseek-r1:7b"
 
+    # RABBITMQ
+    RABBITMQ_USER: str = os.getenv("RABBITMQ_USER", "rabbitmq")
+    RABBITMQ_PASS: str = os.getenv("RABBITMQ_PASS", "rabbitmq")
+    RABBITMQ_HOST: str = os.getenv("RABBITMQ_HOST", "rabbitmq")
+    RABBITMQ_PORT: str = os.getenv("RABBITMQ_PORT", "5672")
+
     # KB MCP Server
     KNOWLEDGE_BASES_MCP: str = os.getenv(
         "KNOWLEDGE_BASES_MCP", "http://localhost:8100/mcp/"

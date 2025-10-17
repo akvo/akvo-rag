@@ -14,6 +14,7 @@ class Job(Base, TimestampMixin):
         default=lambda: str(uuid.uuid4())
     )
     app_id = Column(String(100), nullable=True)  # optional, for future use
+    celery_task_id = Column(String(255), nullable=False)
     job_type = Column(String(75), nullable=False, default="chat")
     status = Column(
         String(50),
