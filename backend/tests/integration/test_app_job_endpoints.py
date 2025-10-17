@@ -31,15 +31,18 @@ def sample_app(db):
 @pytest.fixture
 def sample_chat_job_payload():
     """Payload for creating a chat job."""
-    return {
+    payload = {
         "job": "chat",
         "prompt": "Explain AI simply.",
-        "chats": json.dumps([
+        "chats": [
             {"role": "user", "content": "What is AI?"},
             {"role": "assistant", "content": "AI means Artificial Intelligence."},
-        ]),
-        "callback_params": json.dumps({"reply_to": "wa:+1234"}),
+        ],
+        "callback_params": {"reply_to": "wa:+1234"},
         "trace_id": "trace_abc_123",
+    }
+    return {
+        "payload": json.dumps(payload)
     }
 
 
@@ -56,7 +59,9 @@ class TestJobsEndpointIntegration:
 
         headers = {"Authorization": f"Bearer {sample_app.access_token}"}
         response = client.post(
-            "/v1/apps/jobs", data=sample_chat_job_payload, headers=headers)
+            "/v1/apps/jobs",
+            data=sample_chat_job_payload,
+            headers=headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -77,14 +82,14 @@ class TestJobsEndpointIntegration:
 
     def test_create_chat_job_requires_auth(self, client, sample_chat_job_payload):
         """Should reject unauthenticated requests."""
-        response = client.post("/v1/apps/jobs", json=sample_chat_job_payload)
+        response = client.post("/v1/apps/jobs", data=sample_chat_job_payload)
         assert response.status_code == 401
 
     def test_create_chat_job_invalid_token(self, client, sample_chat_job_payload):
         """Should reject invalid tokens."""
         headers = {"Authorization": "Bearer tok_invalid"}
         response = client.post(
-            "/v1/apps/jobs", json=sample_chat_job_payload, headers=headers)
+            "/v1/apps/jobs", data=sample_chat_job_payload, headers=headers)
         assert response.status_code == 401
 
     def test_create_chat_job_for_revoked_app(
@@ -99,7 +104,7 @@ class TestJobsEndpointIntegration:
 
         headers = {"Authorization": f"Bearer {sample_app.access_token}"}
         response = client.post(
-            "/v1/apps/jobs", json=sample_chat_job_payload, headers=headers)
+            "/v1/apps/jobs", data=sample_chat_job_payload, headers=headers)
         assert response.status_code == 403
 
 
