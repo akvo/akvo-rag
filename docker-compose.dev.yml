@@ -41,6 +41,7 @@ services:
       - app_network
     depends_on:
       - db
+      - rabbitmq
     command: ["./entrypoint.sh"]
     restart: on-failure
     deploy:
@@ -48,6 +49,63 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  celery_worker:
+    image: python:3.11-slim
+    env_file:
+      - .env
+    environment:
+      - DEBUG=1
+      - PYTHONUNBUFFERED=1
+      - ENVIRONMENT=development
+    working_dir: /app
+    volumes:
+      - ./backend:/app:delegated
+      - pip_cache:/app/.pip
+    depends_on:
+      - rabbitmq
+      - backend
+    command: ["./entrypoint-celery.sh"]
+    networks:
+      - app_network
+    restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  flower:
+    image: mher/flower
+    container_name: flower
+    command: >
+      celery --broker=amqp://rabbitmq:rabbitmq@rabbitmq:5672//
+              --result-backend=rpc://
+              flower --port=5555 --basic_auth=admin:admin
+    ports:
+      - "5555:5555"
+    depends_on:
+      - rabbitmq
+    networks:
+      - app_network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: rabbitmq
+      RABBITMQ_DEFAULT_PASS: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"  # management console
+    networks:
+      - app_network
+    restart: unless-stopped
     logging:
       driver: "json-file"
       options:
