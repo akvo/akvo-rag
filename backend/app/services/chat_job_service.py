@@ -95,7 +95,6 @@ async def execute_chat_job(
         if callback_url:
             payload = {
                 "job_id": job_id,
-                "trace_id": trace_id,
                 "status": "failed" if error else "completed",
                 "output": output,
                 "error": error,

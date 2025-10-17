@@ -87,7 +87,6 @@ class TestChatJobService:
             payload = callback_kwargs["json"]
 
             assert payload["job_id"] == sample_job_id
-            assert payload["trace_id"] == "trace_12345"
             assert payload["status"] == "completed"
             assert payload["output"] == {
                 'answer': 'AI means Artificial Intelligence', 'citations': []

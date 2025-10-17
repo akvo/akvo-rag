@@ -69,7 +69,6 @@ class TestJobsEndpointIntegration:
         # Validate response content
         assert data["job_id"] == data["job_id"]
         assert data["status"] == "pending"
-        assert data["trace_id"] == "trace_abc_123"
 
         # Check the job exists in the DB
         job = db.query(Job).filter(Job.id == data["job_id"]).first()

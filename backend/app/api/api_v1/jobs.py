@@ -17,6 +17,7 @@ from app.services.job_service import JobService
 from app.models.app import App
 from app.core.security import get_current_app
 from app.tasks.chat_task import execute_chat_job_task
+from app.tasks.upload_task import upload_full_process_task
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -94,7 +95,7 @@ async def create_job(
 
     # Dispatch Celery background job for chat
     if job_type == "chat":
-        logger.info("🚀 Dispatching chat job to Celery")
+        logger.info("🚀 Dispatching CHAT job to Celery")
         celery_task = execute_chat_job_task.delay(
             job_id=job_record.id,
             data=data,
@@ -106,7 +107,15 @@ async def create_job(
 
     # Dispatch Celery background job for upload
     elif job_type == "upload":
-        logger.info("📦 Upload job received, queued for processing...")
+        logger.info("🚀 Dispatching UPLOAD job to Celery")
+        celery_task = upload_full_process_task.delay(
+            job_id=job_record.id,
+            data=data,
+            callback_url=current_app.upload_callback_url,
+            knowledge_base_id=current_app.knowledge_base_id,
+        )
+        JobService.update_celery_task_id(db, job_record.id, celery_task.id)
+        logger.info(f"✅ Queued Celery task: {celery_task.id}")
         # You could add a Celery task for upload processing here later.
 
     return JobResponse(

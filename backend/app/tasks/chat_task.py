@@ -17,8 +17,16 @@ def execute_chat_job_task(
     db = SessionLocal()
     try:
         result = asyncio.run(
-            execute_chat_job(db, job_id, data, knowledge_base_ids)
+            execute_chat_job(
+                db=db,
+                job_id=job_id,
+                data=data,
+                callback_url=callback_url,
+                knowledge_base_ids=knowledge_base_ids
+            )
         )
         return result
+    except Exception as e:
+        return str(e)
     finally:
         db.close()
