@@ -32,25 +32,35 @@ async def execute_chat_job(
         callback_params = data.get("callback_params", {})
         trace_id = data.get("trace_id")
 
-        chat_history = [
-            {"role": msg["role"], "content": msg["content"]}
-            for msg in chats
-        ]
+        chat_history = []
+        for msg in chats:
+            role = msg["role"]
+            if role in ["farmer", "extension_officer"]:
+                role = "user"
+            chat_history.append({
+                "role": role,
+                "content": msg["content"]
+            })
+
+        query = chat_history[-1].get("content") if chat_history else ""
+        chat_history = (
+            chat_history[0:len(chat_history)-1] if chat_history else [])
 
         # Build initial graph state
         contextualize_prompt = prompt_service.get_full_contextualize_prompt()
         qa_prompt = prompt_service.get_full_qa_strict_prompt()
 
         state = {
-            "query": prompt, # where is the query?
+            "query": query,
             "chat_history": chat_history,
             "contextualize_prompt_str": contextualize_prompt,
-            "qa_prompt_str": qa_prompt,
+            "qa_prompt_str": prompt or qa_prompt,
             "scope": {
                 "knowledge_base_ids": knowledge_base_ids,
                 "top_k": top_k,
             },
         }
+        logger.info(f"State: {state}")
 
         result_state = await query_answering_workflow.ainvoke(state)
         logger.info(f"Chat job {job_id} completed.")
