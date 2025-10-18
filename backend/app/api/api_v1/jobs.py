@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas import JobResponse
 from app.services.job_service import JobService
+from app.services.file_storage_service import FileStorageService
 from app.models.app import App
 from app.core.security import get_current_app
 from app.tasks.chat_task import execute_chat_job_task
@@ -53,19 +54,9 @@ async def create_job(
                 '  "trace_id": "trace_abc_123"\n'
                 "}"
             ),
-            example={
-                "job": "chat",
-                "prompt": "Explain AI simply.",
-                "chats": [
-                    {"role": "user", "content": "What is AI?"},
-                    {"role": "assistant", "content": "AI means Artificial Intelligence."},
-                ],
-                "callback_params": {"reply_to": "wa:+1234"},
-                "trace_id": "trace_abc_123",
-            },
         ),
     ],
-    files: Optional[List[UploadFile]] = None,
+    files: Optional[List[UploadFile]] = [],
     db: Session = Depends(get_db),
     current_app: App = Depends(get_current_app),
 ):
@@ -79,21 +70,23 @@ async def create_job(
     if not job_type:
         raise HTTPException(status_code=400, detail="Missing 'job' field in payload")
 
-    # Attach uploaded file names (if any)
+    # ✅ Save uploaded files locally before sending to Celery
+    saved_file_paths = []
     if files:
+        saved_file_paths = await FileStorageService.save_files(files)
         data["files"] = [f.filename for f in files]
 
-    # Create DB job entry
+    # ✅ Create DB record
     job_record = JobService.create_job(
         db=db, job_type=job_type, data=data, app_id=current_app.app_id
     )
 
-    # Determine knowledge base IDs
+    # ✅ Determine KB IDs
     knowledge_base_ids = (
         [current_app.knowledge_base_id] if current_app.knowledge_base_id else []
     )
 
-    # Dispatch Celery background job for chat
+    # 🚀 Dispatch tasks
     if job_type == "chat":
         logger.info("🚀 Dispatching CHAT job to Celery")
         celery_task = execute_chat_job_task.delay(
@@ -102,21 +95,20 @@ async def create_job(
             callback_url=current_app.chat_callback_url,
             knowledge_base_ids=knowledge_base_ids,
         )
-        JobService.update_celery_task_id(db, job_record.id, celery_task.id)
-        logger.info(f"✅ Queued Celery task: {celery_task.id}")
-
-    # Dispatch Celery background job for upload
     elif job_type == "upload":
         logger.info("🚀 Dispatching UPLOAD job to Celery")
         celery_task = upload_full_process_task.delay(
             job_id=job_record.id,
-            data=data,
+            file_paths=saved_file_paths,  # ✅ pass local file paths to Celery
             callback_url=current_app.upload_callback_url,
             knowledge_base_id=current_app.knowledge_base_id,
         )
-        JobService.update_celery_task_id(db, job_record.id, celery_task.id)
-        logger.info(f"✅ Queued Celery task: {celery_task.id}")
-        # You could add a Celery task for upload processing here later.
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported job type: {job_type}")
+
+    # ✅ Store Celery task ID
+    JobService.update_celery_task_id(db, job_record.id, celery_task.id)
+    logger.info(f"✅ Queued Celery task: {celery_task.id}")
 
     return JobResponse(
         job_id=job_record.id,

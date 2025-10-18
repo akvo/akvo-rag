@@ -1,71 +1,90 @@
+import os
 import json
-import httpx
 import asyncio
-
+import logging
 from typing import List
+
 from app.db.session import SessionLocal
 from app.celery_app import celery_app
 from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 from app.services.job_service import JobService
+from app.services.file_storage_service import FileStorageService
 from app.models.job import Job
+from app.utils import send_callback
+
+logger = logging.getLogger(__name__)
+
 
 @celery_app.task(name="tasks.upload_full_process_task")
 def upload_full_process_task(
     job_id: str,
-    files: List[dict],
+    file_paths: List[str],
     callback_url: str,
-    knowledge_base_id: int
+    knowledge_base_id: int,
 ):
     """
-    Celery task that runs the upload and process documents for the app in one go
-    Send multiple files in a single request.
+    Celery task that uploads and processes documents via the MCP service.
+    - file_paths: list of local file paths (already saved by FastAPI).
     """
     db = SessionLocal()
     try:
-        # current job
+        # 🔍 Get job record
         job = JobService.get_job(db=db, job_id=job_id)
         if not job:
+            logger.warning(f"Job {job_id} not found")
             return
 
-        # running
+        # 🚀 Update to running
         JobService.update_status_to_running(db=db, job_id=job_id)
+
         kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+
+        # 🧠 Run async upload+process in MCP
         result = asyncio.run(
             kb_mcp_endpoint_service.upload_and_process_documents(
                 kb_id=knowledge_base_id,
-                files=files
+                file_paths=file_paths,  # ✅ use local paths now
             )
         )
 
         output = json.dumps(result)
-        # completed
+
+        # ✅ Mark completed
         JobService.update_status_to_completed(
-            db=db, job_id=job_id, output=output
+            db=db,
+            job_id=job_id,
+            output=output,
         )
 
-        # Trigger callback
-        if callback_url:
-            async def callback(job: Job, output: str):
-                payload = {
-                    "job_id": job.id,
-                    "status": "completed",
-                    "output": output,
-                    "error": None,
-                    "callback_params": job.callback_params,
-                }
-                try:
-                    async with httpx.AsyncClient(timeout=10) as client:
-                        await client.post(callback_url, json=payload)
-                    logger.info(f"Callback sent to {callback_url}")
-                except Exception as cb_err:
-                    logger.warning(f"Callback failed: {cb_err}")
-            asyncio.run(callback(job=job, output=output))
+        # 🧹 Cleanup only if all succeeded
+        try:
+            FileStorageService.cleanup_files(file_paths)
+            logger.info(f"Cleaned up uploaded files: {file_paths}")
+        except Exception as clean_err:
+            logger.warning(f"Cleanup failed: {clean_err}")
+
+        # 🔔 Callback if URL provided
+        send_callback(callback_url, job, output=output)
+
         return result
 
     except Exception as e:
+        # ❌ Failure: mark job failed
         JobService.update_status_to_failed(
             db=db, job_id=job_id, output=str(e)
         )
+
+        logger.exception(f"Upload job {job_id} failed: {e}")
+
+        # ⚠️ Keep files for inspection/debugging
+        failed_dir = "/mnt/uploads/failed"
+        os.makedirs(failed_dir, exist_ok=True)
+        for path in file_paths:
+            if os.path.exists(path):
+                new_path = os.path.join(failed_dir, os.path.basename(path))
+                os.rename(path, new_path)
+                logger.warning(f"Moved failed file {path} → {new_path}")
+
         return str(e)
 
     finally:

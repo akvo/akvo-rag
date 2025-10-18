@@ -1,6 +1,11 @@
 #!/bin/sh
 set -e
 
+# Ensure upload directory exists and permissions are set
+UPLOAD_DIR="/mnt/uploads"
+mkdir -p $UPLOAD_DIR
+chmod 777 $UPLOAD_DIR
+
 # -------------------------------------------
 # FOR DEV ONLY: Install dependencies once
 # -------------------------------------------
