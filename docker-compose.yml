@@ -6,17 +6,81 @@ services:
     volumes:
       - ./backend:/app
       - ./uploads:/app/uploads
+      - upload_data:/mnt/uploads
     networks:
       - app_network
     depends_on:
-      db:
-        condition: service_healthy
+      - db
+      - rabbitmq
     restart: on-failure
     deploy:
       restart_policy:
         condition: on-failure
         delay: 5s
         max_attempts: 3
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.celery
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - upload_data:/mnt/uploads
+    depends_on:
+      - rabbitmq
+      - backend
+    networks:
+      - app_network
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  flower:
+    image: mher/flower
+    env_file:
+      - .env
+    command: >
+      celery
+        --broker=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@${RABBITMQ_HOST}:${RABBITMQ_PORT}//
+        --result-backend=rpc://
+        flower
+        --port=${FLOWER_PORT:-5555}
+        --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
+    depends_on:
+      - celery_worker
+      - rabbitmq
+    networks:
+      - app_network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-rabbitmq}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-rabbitmq}
+    ports:
+      - "5672:5672"
+      - "15672:15672"  # management console
+    networks:
+      - app_network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   frontend:
     build: ./frontend
@@ -72,6 +136,7 @@ services:
 
 volumes:
   mysql_data:
+  upload_data:
 
 networks:
   app_network:
