@@ -37,15 +37,21 @@ def upload_full_process_task(
         # 🚀 Update to running
         JobService.update_status_to_running(db=db, job_id=job_id)
 
-        kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+        try:
+            kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
 
-        # 🧠 Run async upload+process in MCP
-        result = asyncio.run(
-            kb_mcp_endpoint_service.upload_and_process_documents(
-                kb_id=knowledge_base_id,
-                file_paths=file_paths,  # ✅ use local paths now
+            # 🧠 Run async upload+process in MCP
+            result = asyncio.run(
+                kb_mcp_endpoint_service.upload_and_process_documents(
+                    kb_id=knowledge_base_id,
+                    files=file_paths,  # use local paths now
+                )
             )
-        )
+        except Exception as e:
+            logger.warning(f"Error processing upload: {e}")
+            FileStorageService.mark_failed(file_paths)
+            raise  # Re-raise so Celery marks it as failed
+
 
         output = json.dumps(result)
 

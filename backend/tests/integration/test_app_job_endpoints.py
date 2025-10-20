@@ -1,3 +1,4 @@
+import io
 import pytest
 import json
 
@@ -45,8 +46,25 @@ def sample_chat_job_payload():
         "payload": json.dumps(payload)
     }
 
+@pytest.fixture
+def sample_upload_job_payload():
+    """Payload for creating a upload job"""
+    payload = {
+        "job": "upload",
+        "metadata": {
+            "kb_id": 1,
+            "title": "Chlorination SOP",
+            "tags": ["chlorine","ops"]
+        },
+        "callback_params": {
+            "ui_upload_id": "up_456"
+        }
+    }
+    return {
+        "payload": json.dumps(payload)
+    }
 
-class TestJobsEndpointIntegration:
+class TestAppJobsEndpoints:
     """Integration tests for /v1/apps/jobs endpoint."""
 
     @pytest.mark.asyncio
@@ -105,6 +123,58 @@ class TestJobsEndpointIntegration:
         response = client.post(
             "/v1/apps/jobs", data=sample_chat_job_payload, headers=headers)
         assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    @patch("app.api.api_v1.jobs.upload_full_process_task")
+    async def test_create_upload_job_success(
+        self, mock_task, client, db, sample_app, sample_upload_job_payload
+    ):
+        """✅ Should create an upload job and queue Celery task."""
+
+        # Mock Celery task async delay
+        mock_task.delay = Mock(return_value=Mock(id="upload-task-id-789"))
+
+        # Prepare mock file upload
+        file_content = io.BytesIO(b"dummy pdf data")
+        files = {"files": ("sample.pdf", file_content, "application/pdf")}
+
+        headers = {"Authorization": f"Bearer {sample_app.access_token}"}
+        response = client.post(
+            "/v1/apps/jobs",
+            data=sample_upload_job_payload,
+            files=files,
+            headers=headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify DB job created
+        job = db.query(Job).filter(Job.id == data["job_id"]).first()
+        assert job is not None
+        assert job.status == "pending"
+        assert job.job_type == "upload"
+        assert job.app_id == sample_app.app_id
+
+        # Verify Celery called correctly
+        mock_task.delay.assert_called_once()
+        call_args = mock_task.delay.call_args.kwargs
+        assert call_args["job_id"] == job.id
+        assert call_args["callback_url"] == sample_app.upload_callback_url
+        assert call_args["knowledge_base_id"] == sample_app.knowledge_base_id
+        assert "file_paths" in call_args
+        assert isinstance(call_args["file_paths"], list)
+        assert all("sample.pdf" in f for f in call_args["file_paths"])
+
+        # Verify response structure
+        assert data["job_id"] == job.id
+        assert data["status"] == "pending"
+        db.close()
+
+    def test_create_upload_job_requires_auth(self, client, sample_upload_job_payload):
+        """❌ Should reject unauthenticated upload job creation."""
+        response = client.post("/v1/apps/jobs", data=sample_upload_job_payload)
+        assert response.status_code == 401
 
 
 class TestGetJobStatus:

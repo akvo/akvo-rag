@@ -35,7 +35,7 @@ services:
       - ENVIRONMENT=development
     volumes:
       - ./backend:/app:delegated
-      - ./backend/uploads:/app/uploads
+      - upload_data:/mnt/uploads
       - pip_cache:/app/.pip
     working_dir: /app
     networks:
@@ -68,6 +68,7 @@ services:
     working_dir: /app
     volumes:
       - ./backend:/app:delegated
+      - upload_data:/mnt/uploads
       - pip_cache:/app/.pip
     depends_on:
       - rabbitmq
@@ -106,7 +107,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -168,6 +168,7 @@ services:
 volumes:
   mysql_data:
   pip_cache:
+  upload_data:
 
 networks:
   app_network:
