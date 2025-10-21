@@ -177,7 +177,7 @@ jobs:
       - name: Rollout Nginx
         uses: ./composite-actions/.github/actions/k8s-rollout
         with:
-          app-name: "agriconnect-rag"
+          app-name: "akvo-rag"
           deployment-name: "nginx-deployment"
           container-name: "nginx"
           cluster-name: "test"
@@ -188,7 +188,7 @@ jobs:
       - name: Rollout Frontend
         uses: ./composite-actions/.github/actions/k8s-rollout
         with:
-          app-name: "agriconnect-rag"
+          app-name: "akvo-rag"
           deployment-name: "frontend-deployment"
           container-name: "frontend"
           cluster-name: "test"
@@ -198,7 +198,7 @@ jobs:
       - name: Rollout Backend
         uses: ./composite-actions/.github/actions/k8s-rollout
         with:
-          app-name: "agriconnect-rag"
+          app-name: "akvo-rag"
           deployment-name: "backend-deployment"
           container-name: "backend"
           cluster-name: "test"
@@ -208,7 +208,7 @@ jobs:
       - name: Rollout Script
         uses: ./composite-actions/.github/actions/k8s-rollout
         with:
-          app-name: "agriconnect-rag"
+          app-name: "akvo-rag"
           deployment-name: "script-deployment"
           container-name: "script"
           cluster-name: "test"
