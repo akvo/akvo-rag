@@ -228,7 +228,7 @@ docker compose up -d --build
 Access the following URLs after service startup:
 
 - 🌐 Frontend UI: http://127.0.0.1.nip.io
-- 📚 API Documentation: http://127.0.0.1.nip.io/redoc
+- 📚 API Documentation: http://127.0.0.1.nip.io/docs
 
 ## 🔌 MCP Server Setup (Required)
 
