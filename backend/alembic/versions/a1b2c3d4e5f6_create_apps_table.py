@@ -31,7 +31,7 @@ def upgrade() -> None:
         sa.Column("chat_callback_url", sa.String(length=512), nullable=False),
         sa.Column("upload_callback_url", sa.String(length=512), nullable=False),
         sa.Column("access_token", sa.String(length=128), nullable=False),
-        sa.Column("callback_token", sa.String(length=255), nullable=False),
+        sa.Column("callback_token", sa.String(length=255), nullable=True),
         sa.Column("scopes", mysql.JSON(), nullable=False),
         sa.Column(
             "status",

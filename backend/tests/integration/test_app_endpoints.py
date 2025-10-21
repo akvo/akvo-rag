@@ -1,8 +1,11 @@
+import io
 import pytest
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from unittest.mock import AsyncMock, patch
 
 from app.main import app
 from app.db.session import get_db
@@ -54,6 +57,76 @@ def sample_app_data():
     }
 
 
+@pytest.fixture(autouse=True)
+def mock_mcp_create_kb():
+    """
+    Automatically mock KnowledgeBaseMCPEndpointService.create_kb
+    for any test that calls the /register endpoint.
+    """
+    with patch(
+        "mcp_clients.kb_mcp_endpoint_service.KnowledgeBaseMCPEndpointService.create_kb",
+        new_callable=AsyncMock,
+    ) as mock_create_kb:
+        # Default fake KB response
+        mock_create_kb.return_value = {
+            "id": 42,
+            "name": "Fake KB",
+            "description": "KB for testing"
+        }
+        yield mock_create_kb
+
+
+@pytest.fixture(autouse=True)
+def mock_upload_and_process_documents():
+    """
+    Automatically mock KnowledgeBaseMCPEndpointService.upload_and_process_documents
+    for any test that calls the /upload endpoint.
+    """
+    with patch(
+        "mcp_clients.kb_mcp_endpoint_service.KnowledgeBaseMCPEndpointService.upload_and_process_documents",
+        new_callable=AsyncMock,
+    ) as mock_upload_and_process_documents:
+        # Default fake KB response
+        mock_upload_and_process_documents.return_value = {
+            "status": "processing",
+            "kb_id": 42,
+            "file_count": 2,
+        }
+        yield mock_upload_and_process_documents
+
+
+@pytest.fixture(autouse=True)
+def mock_get_documents_upload():
+    """
+    Automatically mock KnowledgeBaseMCPEndpointService.get_documents_upload
+    for any test that calls the /documents endpoint.
+    """
+    with patch(
+        "mcp_clients.kb_mcp_endpoint_service.KnowledgeBaseMCPEndpointService.get_documents_upload",
+        new_callable=AsyncMock,
+    ) as mock_get_documents_upload:
+        # ✅ Dummy fake KB response
+        mock_get_documents_upload.return_value = [
+            {
+                "id": 1,
+                "file_name": "File1.pdf",
+                "status": "completed",
+                "knowledge_base_id": 42,
+                "content_type": "application/pdf",
+                "created_at": "2025-10-15T01:34:42.728153",
+            },
+            {
+                "id": 2,
+                "file_name": "File2.pdf",
+                "status": "processing",
+                "knowledge_base_id": 42,
+                "content_type": "application/pdf",
+                "created_at": "2025-10-15T01:34:42.689894",
+            },
+        ]
+        yield mock_get_documents_upload
+
+
 class TestAppRegistration:
     """Test suite for POST /v1/apps/register endpoint."""
 
@@ -69,6 +142,8 @@ class TestAppRegistration:
         assert "client_id" in data
         assert "access_token" in data
         assert "scopes" in data
+        assert "knowledge_base_id" in data
+        assert data["knowledge_base_id"] == 42
 
         # Verify ID prefixes
         assert data["app_id"].startswith("app_")
@@ -97,6 +172,36 @@ class TestAppRegistration:
         assert response.status_code == 422  # Validation error
         assert "https" in response.text.lower()
 
+    def test_register_app_success_without_callback_token(self, sample_app_data):
+        """Test successful app registration returns credentials."""
+
+        # reset callback token
+        sample_app_data["callback_token"] = None
+        response = client.post("/v1/apps/register", json=sample_app_data)
+
+        print(response.json(), 'GALIH')
+        assert response.status_code == 201
+        data = response.json()
+
+        # Verify response structure
+        assert "app_id" in data
+        assert "client_id" in data
+        assert "access_token" in data
+        assert "scopes" in data
+        assert "knowledge_base_id" in data
+        assert data["knowledge_base_id"] == 42
+
+        # Verify ID prefixes
+        assert data["app_id"].startswith("app_")
+        assert data["client_id"].startswith("ac_")
+        assert data["access_token"].startswith("tok_")
+
+        # Verify default scopes
+        assert "jobs.write" in data["scopes"]
+        assert "kb.read" in data["scopes"]
+        assert "kb.write" in data["scopes"]
+        assert "apps.read" in data["scopes"]
+
 
 class TestAppMe:
     """Test suite for GET /v1/apps/me endpoint."""
@@ -123,6 +228,7 @@ class TestAppMe:
         assert data["upload_callback_url"] == "https://agriconnect.akvo.org/api/kb/callback"
         assert data["status"] == "active"
         assert data["scopes"] == registered_app["scopes"]
+        assert data["knowledge_base_id"] == 42
 
     def test_app_me_returns_401_with_invalid_token(self):
         """Test /me endpoint returns 401 with invalid token."""
@@ -295,4 +401,91 @@ class TestAppRevoke:
         headers = {"Authorization": "Bearer tok_invalid"}
         response = client.post("/v1/apps/revoke", headers=headers)
 
+        assert response.status_code == 401
+
+
+class TestAppUpload:
+    """
+    Test suite for POST /v1/apps/upload endpoint.
+    and GET /v1/apps/documents endpoint.
+    """
+
+    @pytest.fixture
+    def registered_app(self, sample_app_data):
+        """Register an app and return credentials."""
+        response = client.post("/v1/apps/register", json=sample_app_data)
+        return response.json()
+
+    def test_upload_success(self, registered_app):
+        """Test successful document upload and processing."""
+        headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
+
+        # Create dummy files to upload
+        files = [
+            ("files", ("doc1.txt", io.BytesIO(b"Test content 1"), "text/plain")),
+            ("files", ("doc2.txt", io.BytesIO(b"Test content 2"), "text/plain")),
+        ]
+
+        response = client.post("/v1/apps/upload", headers=headers, files=files)
+
+        # Assert response
+        assert response.status_code == 200
+        data = response.json()
+        assert data["message"] == "Document received and is being processed."
+        assert data["file_count"] == 2
+
+    def test_upload_unauthorized_no_token(self):
+        """Test upload without Authorization header returns 401."""
+        files = [
+            ("files", ("doc.txt", io.BytesIO(b"Test content"), "text/plain")),
+        ]
+
+        response = client.post("/v1/apps/upload", files=files)
+        assert response.status_code == 401
+
+    def test_upload_unauthorized_invalid_token(self):
+        """Test upload with invalid token returns 401."""
+        headers = {"Authorization": "Bearer invalid_token"}
+        files = [
+            ("files", ("doc.txt", io.BytesIO(b"Test content"), "text/plain")),
+        ]
+
+        response = client.post("/v1/apps/upload", headers=headers, files=files)
+        assert response.status_code == 401
+
+    def test_upload_forbidden_revoked_app(self, registered_app):
+        """Test upload returns 403 for revoked app."""
+        # Set app status to revoked manually
+        db = TestingSessionLocal()
+        app = db.query(App).filter(App.app_id == registered_app["app_id"]).first()
+        app.status = "revoked"
+        db.commit()
+        db.close()
+
+        headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
+        files = [
+            ("files", ("doc.txt", io.BytesIO(b"Test content"), "text/plain")),
+        ]
+
+        response = client.post("/v1/apps/upload", headers=headers, files=files)
+        assert response.status_code == 403
+
+    def test_get_upload_docs(self, registered_app):
+        """Test successful get uploaded documents."""
+        headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
+
+        response = client.get("/v1/apps/documents", headers=headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert data[0]["file_name"] == "File1.pdf"
+        assert data[1]["file_name"] == "File2.pdf"
+        assert data[0]["knowledge_base_id"] == 42
+        assert data[1]["knowledge_base_id"] == 42
+
+    def test_get_upload_failed(self, registered_app):
+        """Test no auth get uploaded documents."""
+
+        response = client.get("/v1/apps/documents")
         assert response.status_code == 401
