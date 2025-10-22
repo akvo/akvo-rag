@@ -85,6 +85,14 @@ jobs:
           gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
           cluster-name: "test"
 
+      - name: Docker Push Celery Worker
+        uses: ./composite-actions/.github/actions/docker-push
+        with:
+          app-name: "akvo-rag"
+          service-name: "celery-worker"
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
+          cluster-name: "test"
+
       - name: Docker Push Backend
         uses: ./composite-actions/.github/actions/docker-push
         with:
