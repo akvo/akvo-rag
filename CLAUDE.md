@@ -179,7 +179,7 @@ Always run tests inside the Docker container via the provided shell scripts.
 
 After starting services:
 - **Frontend**: http://127.0.0.1.nip.io
-- **API Docs**: http://127.0.0.1.nip.io/redoc
+- **API Docs**: http://127.0.0.1.nip.io/docs
 - **Health Check**: http://127.0.0.1.nip.io/api/health
 - **RAG Evaluation Dashboard**: http://localhost:8501 (when `./rag-evaluate` is running)
 - **App Registration API**: http://localhost:8000/v1/apps/* (see `backend/docs/APP_REGISTRATION.md`)
