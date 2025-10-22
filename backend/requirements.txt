@@ -30,3 +30,5 @@ fastmcp==2.11.1
 # Fix dependencies
 pydantic==2.11.7
 
+# Celery
+celery==5.5.3

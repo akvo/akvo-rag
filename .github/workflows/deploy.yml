@@ -53,6 +53,14 @@ jobs:
           dockerfile-location: "backend"
           cluster-name: "test"
 
+      - name: Docker Build Celery Worker
+        uses: ./composite-actions/.github/actions/docker-build
+        with:
+          app-name: "akvo-rag"
+          service-name: "celery-worker"
+          dockerfile-location: "backend/Dockerfile.celery"
+          cluster-name: "test"
+
       - name: Docker Build Script
         uses: ./composite-actions/.github/actions/docker-build
         with:
@@ -66,7 +74,7 @@ jobs:
         with:
           app-name: "akvo-rag"
           service-name: "nginx"
-          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
           cluster-name: "test"
 
       - name: Docker Push Frontend
@@ -74,7 +82,7 @@ jobs:
         with:
           app-name: "akvo-rag"
           service-name: "frontend"
-          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
           cluster-name: "test"
 
       - name: Docker Push Backend
@@ -82,7 +90,7 @@ jobs:
         with:
           app-name: "akvo-rag"
           service-name: "backend"
-          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
           cluster-name: "test"
 
       - name: Docker Push Script
@@ -90,9 +98,8 @@ jobs:
         with:
           app-name: "akvo-rag"
           service-name: "script"
-          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
           cluster-name: "test"
-
 
   rollout-main-akvo-rag:
     name: Rollout to main Akvo RAG server
@@ -121,8 +128,7 @@ jobs:
           container-name: "nginx"
           cluster-name: "test"
           namespace-name: "akvo-rag-namespace"
-          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
-
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
 
       - name: Rollout Frontend
         uses: ./composite-actions/.github/actions/k8s-rollout
@@ -132,7 +138,7 @@ jobs:
           container-name: "frontend"
           cluster-name: "test"
           namespace-name: "akvo-rag-namespace"
-          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
 
       - name: Rollout Backend
         uses: ./composite-actions/.github/actions/k8s-rollout
@@ -142,7 +148,17 @@ jobs:
           container-name: "backend"
           cluster-name: "test"
           namespace-name: "akvo-rag-namespace"
-          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+
+      - name: Rollout Celery Worker
+        uses: ./composite-actions/.github/actions/k8s-rollout
+        with:
+          app-name: "akvo-rag"
+          deployment-name: "celery-worker-deployment"
+          container-name: "celery-worker"
+          cluster-name: "test"
+          namespace-name: "akvo-rag-namespace"
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
 
       - name: Rollout Script
         uses: ./composite-actions/.github/actions/k8s-rollout
@@ -152,8 +168,7 @@ jobs:
           container-name: "script"
           cluster-name: "test"
           namespace-name: "akvo-rag-namespace"
-          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
-
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
 
   rollout-agriconnect-rag:
     name: Rollout to Agriconnect RAG server
@@ -182,8 +197,7 @@ jobs:
           container-name: "nginx"
           cluster-name: "test"
           namespace-name: "agriconnect-rag-namespace"
-          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
-
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
 
       - name: Rollout Frontend
         uses: ./composite-actions/.github/actions/k8s-rollout
@@ -193,7 +207,7 @@ jobs:
           container-name: "frontend"
           cluster-name: "test"
           namespace-name: "agriconnect-rag-namespace"
-          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
 
       - name: Rollout Backend
         uses: ./composite-actions/.github/actions/k8s-rollout
@@ -203,7 +217,17 @@ jobs:
           container-name: "backend"
           cluster-name: "test"
           namespace-name: "agriconnect-rag-namespace"
-          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+
+      - name: Rollout Celery Worker
+        uses: ./composite-actions/.github/actions/k8s-rollout
+        with:
+          app-name: "akvo-rag"
+          deployment-name: "celery-worker-deployment"
+          container-name: "celery-worker"
+          cluster-name: "test"
+          namespace-name: "agriconnect-rag-namespace"
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
 
       - name: Rollout Script
         uses: ./composite-actions/.github/actions/k8s-rollout
@@ -213,4 +237,4 @@ jobs:
           container-name: "script"
           cluster-name: "test"
           namespace-name: "agriconnect-rag-namespace"
-          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}

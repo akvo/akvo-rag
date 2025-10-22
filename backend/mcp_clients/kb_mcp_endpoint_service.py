@@ -1,5 +1,8 @@
+import os
 import asyncio
 import logging
+import aiofiles
+import mimetypes
 
 from typing import Any, Dict, List, Optional
 from fastapi import HTTPException, UploadFile, status
@@ -165,15 +168,35 @@ class KnowledgeBaseMCPEndpointService:
         )
 
     async def upload_and_process_documents(
-        self, kb_id: int, files: List[UploadFile]
-    ) -> List[Dict[str, Any]]:
+        self, kb_id: int, files: list
+    ) -> list[dict]:
+        """
+        Supports either:
+            - List[UploadFile] (FastAPI form uploads), or
+            - List[str] (local file paths from Celery)
+        """
         file_payload = []
+
         for f in files:
-            content = await f.read()
-            file_payload.append(
-                ("files", (f.filename, content, f.content_type))
-            )
-            await f.seek(0)
+            if isinstance(f, UploadFile):
+                # 🧩 Handle FastAPI upload object
+                content = await f.read()
+                file_payload.append(
+                    ("files", (f.filename, content, f.content_type))
+                )
+                await f.seek(0)
+            elif isinstance(f, str) and os.path.exists(f):
+                # 🧠 Handle local file path
+                async with aiofiles.open(f, "rb") as af:
+                    content = await af.read()
+                filename = os.path.basename(f)
+                content_type, _ = mimetypes.guess_type(filename)
+                file_payload.append(
+                    ("files", (filename, content, content_type or "application/octet-stream"))
+                )
+            else:
+                raise ValueError(f"Invalid file input: {f!r}")
+
         return await self._request(
             "POST", f"/{kb_id}/documents/full-process", files=file_payload
         )

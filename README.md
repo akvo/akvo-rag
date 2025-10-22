@@ -264,6 +264,107 @@ curl http://127.0.0.1:8100/api/health
 Expected output includes a successful MCP server connection.
 You can also test by uploading a document and sending a query in the Web UI.
 
+## ⚙️ Job Processing (Celery + RabbitMQ + Flower)
+
+RAG Web UI supports asynchronous background task processing using Celery, RabbitMQ, and Flower.
+This setup enables scalable execution of background jobs such as chat workflows, document embedding, and large knowledge base processing — without blocking FastAPI’s main thread.
+
+**NOTE**: You can find Celery tasks code  under `app.tasks` folder.
+
+### 🧩 Components Overview
+
+| Component       | Description                                                                                            |
+| --------------- | ------------------------------------------------------------------------------------------------------ |
+| 🐍 **Celery**   | Distributed task queue used for executing long-running jobs (e.g. chat generation, document chunking). |
+| 🐇 **RabbitMQ** | Message broker that routes task messages between FastAPI and Celery workers.                           |
+| 🌸 **Flower**   | Web-based monitoring UI for tracking Celery workers, tasks, and queues in real-time.                   |
+
+
+### 🧠 How It Works
+
+1. When an API endpoint (e.g. `/v1/apps/jobs`) is called, a Celery task is queued into RabbitMQ.
+2. The Celery worker process (running in its own container) listens for new jobs.
+3. The worker executes the job asynchronously — for example, running a chat generation workflow or document embedding pipeline.
+4. Job progress and results can be monitored in Flower or stored in your internal jobs database table.
+
+This allows you to handle high-volume workloads, parallel processing, and non-blocking user responses.
+
+### 🧰 Environment Configuration
+
+In your `.env` file, add:
+
+```bash
+# RABBITMQ CONFIGURATION
+RABBITMQ_USER=rabbitmq
+RABBITMQ_PASS=rabbitmq
+RABBITMQ_HOST=rabbitmq
+RABBITMQ_PORT=5672
+
+# FLOWER CONFIGURATION
+FLOWER_USER=admin
+FLOWER_PASSWORD=admin123
+FLOWER_PORT=5555
+```
+
+**NOTE**: You don’t need to manually define `CELERY_BROKER_URL` or `CELERY_RESULT_BACKEND`.
+They are automatically constructed inside `app/celery_app.py` using the RabbitMQ configuration above.
+
+### 🌼 Monitoring Celery with Flower
+
+Flower provides a **web-based monitoring dashboard** to observe workers and job progress.
+
+**Access Flower Dashboard**
+Open: http://127.0.0.1:5555
+
+**Authentication**
+Flower is password-protected to prevent unauthorized access.
+Use the credentials defined in your `.env` file:
+
+| Variable          | Default    | Description               |
+| ----------------- | ---------- | ------------------------- |
+| `FLOWER_USER`     | `admin`    | Username for Flower login |
+| `FLOWER_PASSWORD` | `admin`    | Password for Flower login |
+
+Login via:
+
+```bash
+Username: admin
+Password: admin
+```
+
+#### 🌸 Flower Interface Overview
+
+After logging in, you can:
+1. View Registered Tasks
+2. Track Task States
+3. Monitor Workers
+4. View Task History & Results
+
+#### 🧾 Check Registered Tasks
+
+To verify task registration inside a running container:
+
+```bash
+docker compose exec celery-worker celery -A app.celery_app inspect registered
+```
+
+Expected output:
+
+```bash
+-> celery@worker-name: OK
+    * tasks.execute_chat_job_task
+```
+
+### 🧹 Debugging Tips
+
+| Problem                            | Possible Cause                           | Solution                                                                                 |
+| ---------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Task not showing in Flower         | Task not registered or wrong module path | Ensure task module is inside `app/tasks/` and use correct `@celery_app.task(name="...")` |
+| `NotRegistered('tasks.add')` error | Worker didn’t load the task              | Restart worker: `docker compose restart celery-worker`                                   |
+| Flower not accessible              | Port conflict or container issue         | Check with `docker logs flower` and ensure port `5555` is exposed                        |
+| Password not working               | `.env` not loaded correctly              | Rebuild containers after editing `.env`: `docker compose up -d --build`                  |
+
+
 
 ## 🏗️ Architecture
 
@@ -310,6 +411,23 @@ docker compose -f docker-compose.dev.yml up -d --build
 | SECRET_KEY                  | JWT Secret Key             | -         | ✅        |
 | ACCESS_TOKEN_EXPIRE_MINUTES | JWT Token Expiry (minutes) | 30        | ✅        |
 
+
+### Celery & RabbitMQ Configuration
+
+| Parameter       | Description                         | Default    | Required |
+| --------------- | ----------------------------------- | ---------- | -------- |
+| `RABBITMQ_USER` | RabbitMQ username                   | `rabbitmq` | ✅        |
+| `RABBITMQ_PASS` | RabbitMQ password                   | `rabbitmq` | ✅        |
+| `RABBITMQ_HOST` | RabbitMQ hostname or container name | `rabbitmq` | ✅        |
+| `RABBITMQ_PORT` | RabbitMQ port                       | `5672`     | ✅        |
+
+### Flower Monitoring Configuration
+
+| Parameter         | Description               | Default    | Required |
+| ----------------- | ------------------------- | ---------- | -------- |
+| `FLOWER_USER`     | Flower dashboard username | `admin`    | ✅        |
+| `FLOWER_PASSWORD` | Flower dashboard password | `admin`    | ✅        |
+| `FLOWER_PORT`     | Port number for Flower UI | `5555`     | ✅        |
 
 ### MCP Configuration
 
