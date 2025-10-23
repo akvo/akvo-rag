@@ -282,7 +282,7 @@ This setup enables scalable execution of background jobs such as chat workflows,
 
 ### 🧠 How It Works
 
-1. When an API endpoint (e.g. `/v1/apps/jobs`) is called, a Celery task is queued into RabbitMQ.
+1. When an API endpoint (e.g. `/api/apps/jobs`) is called, a Celery task is queued into RabbitMQ.
 2. The Celery worker process (running in its own container) listens for new jobs.
 3. The worker executes the job asynchronously — for example, running a chat generation workflow or document embedding pipeline.
 4. Job progress and results can be monitored in Flower or stored in your internal jobs database table.

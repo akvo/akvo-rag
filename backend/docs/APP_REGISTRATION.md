@@ -8,13 +8,13 @@ This feature enables external applications to register and obtain credentials fo
 
 ## Endpoints
 
-### 1. POST `/v1/apps/register` - Register New App
+### 1. POST `/api/apps/register` - Register New App
 
 Register a new application and receive credentials. The app provides its own `callback_token` which Akvo RAG will use when making callbacks.
 
 **Request:**
 ```bash
-curl -X POST http://localhost:8000/v1/apps/register \
+curl -X POST http://localhost:8000/api/apps/register \
   -H 'Content-Type: application/json' \
   -d '{
     "app_name": "agriconnect",
@@ -47,13 +47,13 @@ curl -X POST http://localhost:8000/v1/apps/register \
 
 ---
 
-### 2. GET `/v1/apps/me` - Validate Token & Get App Info
+### 2. GET `/api/apps/me` - Validate Token & Get App Info
 
 Validate your access token and retrieve app metadata.
 
 **Request:**
 ```bash
-curl http://localhost:8000/v1/apps/me \
+curl http://localhost:8000/api/apps/me \
   -H "Authorization: Bearer tok_..."
 ```
 
@@ -77,13 +77,13 @@ curl http://localhost:8000/v1/apps/me \
 
 ---
 
-### 3. POST `/v1/apps/rotate` - Rotate Tokens
+### 3. POST `/api/apps/rotate` - Rotate Tokens
 
 Rotate access token and/or callback token. When rotating the callback token, you must provide the new token.
 
 **Request:**
 ```bash
-curl -X POST http://localhost:8000/v1/apps/rotate \
+curl -X POST http://localhost:8000/api/apps/rotate \
   -H "Authorization: Bearer tok_..." \
   -H 'Content-Type: application/json' \
   -d '{
@@ -112,13 +112,13 @@ curl -X POST http://localhost:8000/v1/apps/rotate \
 
 ---
 
-### 4. POST `/v1/apps/revoke` - Revoke App
+### 4. POST `/api/apps/revoke` - Revoke App
 
 Revoke the app immediately. After revocation, all API calls will return 401/403.
 
 **Request:**
 ```bash
-curl -X POST http://localhost:8000/v1/apps/revoke \
+curl -X POST http://localhost:8000/api/apps/revoke \
   -H "Authorization: Bearer tok_..."
 ```
 
