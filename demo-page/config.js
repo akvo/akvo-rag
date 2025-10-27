@@ -3,15 +3,15 @@ window.config_default = {
   title: "Akvo RAG",
   kb_options: [
     {
-      kb_id: 34,
+      kb_id: 6,
       label: "UNEP Knowledge Base",
     },
     {
-      kb_id: 38,
-      label: "Living Income Benchmark Knowledge Base",
+      kb_id: 5,
+      label: "Kenya Drylands Knowledge Base",
     },
     {
-      kb_id: 48,
+      kb_id: 7,
       label: "Kefaas Knowledge Base",
     },
   ],
@@ -19,40 +19,29 @@ window.config_default = {
 };
 
 // TEST USING ~ 500 docs
-window.config_500 = {
-  title: "UNEP Assistant",
-  kb_id: 34,
-  wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
-};
-
-// TEST USING ~ 250 docs
-window.config_250 = {
-  title: "UNEP Assistant",
-  kb_id: 26,
+window.config_unep = {
+  title: "UNEP Knowledge Base",
+  kb_id: 6,
   wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
 };
 
 // TEST USING ~ Living Income Bechmark docs
-window.config_living_income = {
-  title: "Living Income Assistant",
-  kb_id: 38,
+// window.config_living_income = {
+//   title: "Living Income Assistant",
+//   kb_id: 38,
+//   wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
+// };
+
+// TEST USING Kefaas docs
+window.config_kefaas = {
+  title: "Kefaas Knowledge Base",
+  kb_id: 7,
   wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
 };
 
+// LOCAL
 window.config_local = {
   title: "Test Integration with MCP server",
   kb_id: 8,
   wsURL: "ws://localhost:81/ws/chat",
-};
-
-window.config_living_income_1 = {
-  title: "LIB #1",
-  kb_id: 28,
-  wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
-};
-
-window.config_kefaas = {
-  title: "Kefaas Knowledge Base",
-  kb_id: 48,
-  wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
 };

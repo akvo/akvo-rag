@@ -49,10 +49,10 @@ All requirements have been successfully implemented and tested.
 ### 5. API Endpoints ✅
 - **File**: `app/api/api_v1/apps.py`
 - **Endpoints**:
-  - `POST /v1/apps/register` → Issue credentials
-  - `GET /v1/apps/me` → Validate token & return metadata
-  - `POST /v1/apps/rotate` → Rotate tokens
-  - `POST /v1/apps/revoke` → Revoke app (204 No Content)
+  - `POST /api/apps/register` → Issue credentials
+  - `GET /api/apps/me` → Validate token & return metadata
+  - `POST /api/apps/rotate` → Rotate tokens
+  - `POST /api/apps/revoke` → Revoke app (204 No Content)
 
 - **Router**: `app/api/v1_api.py`
 - **Mounted in**: `app/main.py` at `/v1` prefix
@@ -114,7 +114,7 @@ All requirements have been successfully implemented and tested.
 
 ```bash
 # 1. Register app
-curl -sX POST http://localhost:8000/v1/apps/register \
+curl -sX POST http://localhost:8000/api/apps/register \
   -H 'Content-Type: application/json' \
   -d '{
     "app_name": "agriconnect",
@@ -128,17 +128,17 @@ curl -sX POST http://localhost:8000/v1/apps/register \
 # Response includes: app_id, client_id, access_token, scopes
 
 # 2. Validate token and get app info
-curl -s http://localhost:8000/v1/apps/me \
+curl -s http://localhost:8000/api/apps/me \
   -H "Authorization: Bearer tok_xxx"
 
 # 3. Rotate both tokens
-curl -sX POST http://localhost:8000/v1/apps/rotate \
+curl -sX POST http://localhost:8000/api/apps/rotate \
   -H "Authorization: Bearer tok_xxx" \
   -H 'Content-Type: application/json' \
   -d '{"rotate_access_token": true, "rotate_callback_token": true, "new_callback_token": "your_new_secure_callback_token"}'
 
 # 4. Revoke app
-curl -sX POST http://localhost:8000/v1/apps/revoke \
+curl -sX POST http://localhost:8000/api/apps/revoke \
   -H "Authorization: Bearer tok_xxx"
 ```
 
@@ -168,7 +168,7 @@ curl -sX POST http://localhost:8000/v1/apps/revoke \
 4. **Test endpoints**:
    ```bash
    # Register an app
-   curl -X POST http://localhost:8000/v1/apps/register \
+   curl -X POST http://localhost:8000/api/apps/register \
      -H 'Content-Type: application/json' \
      -d '{"app_name":"test","domain":"test.com","chat_callback":"https://test.com/chat","upload_callback":"https://test.com/upload","callback_token":"your_callback_token"}'
    ```

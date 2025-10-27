@@ -16,10 +16,10 @@ Documentation for the server-to-server app registration and validation system:
 👉 Start here: [Quick Start Guide](QUICKSTART_APP_REGISTRATION.md)
 
 ### API Endpoints
-- `POST /v1/apps/register` - Register new app
-- `GET /v1/apps/me` - Validate token
-- `POST /v1/apps/rotate` - Rotate tokens
-- `POST /v1/apps/revoke` - Revoke app
+- `POST /api/apps/register` - Register new app
+- `GET /api/apps/me` - Validate token
+- `POST /api/apps/rotate` - Rotate tokens
+- `POST /api/apps/revoke` - Revoke app
 
 ### Testing
 ```bash

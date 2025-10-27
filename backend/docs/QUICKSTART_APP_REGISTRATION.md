@@ -38,7 +38,7 @@ docker compose up -d
 #### Register a New App
 
 ```bash
-curl -X POST http://localhost:8000/v1/apps/register \
+curl -X POST http://localhost:8000/api/apps/register \
   -H 'Content-Type: application/json' \
   -d '{
     "app_name": "agriconnect",
@@ -57,14 +57,14 @@ curl -X POST http://localhost:8000/v1/apps/register \
 ```bash
 export ACCESS_TOKEN="<your_token_here>"
 
-curl http://localhost:8000/v1/apps/me \
+curl http://localhost:8000/api/apps/me \
   -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
 #### Rotate Tokens
 
 ```bash
-curl -X POST http://localhost:8000/v1/apps/rotate \
+curl -X POST http://localhost:8000/api/apps/rotate \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
@@ -77,7 +77,7 @@ curl -X POST http://localhost:8000/v1/apps/rotate \
 #### Revoke App
 
 ```bash
-curl -X POST http://localhost:8000/v1/apps/revoke \
+curl -X POST http://localhost:8000/api/apps/revoke \
   -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
@@ -86,7 +86,7 @@ curl -X POST http://localhost:8000/v1/apps/revoke \
 After revoking, this should return 403:
 
 ```bash
-curl http://localhost:8000/v1/apps/me \
+curl http://localhost:8000/api/apps/me \
   -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 

@@ -96,7 +96,7 @@ docker compose up -d --build
 服务启动后，可以通过以下地址访问：
 
 - 前端界面：<http://localhost:3000>
-- API 文档：<http://localhost:8000/redoc>
+- API 文档：<http://localhost:8000/docs>
 
 ## 📚 使用指南
 

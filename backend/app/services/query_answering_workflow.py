@@ -1,8 +1,8 @@
 import json
 import base64
 import logging
+from typing import TypedDict, Dict, Any, List, Optional
 
-from typing import TypedDict, Dict, Any, List
 from langgraph.graph import StateGraph
 from langchain_core.documents import Document
 from langchain_core.prompts import (
@@ -16,11 +16,17 @@ from app.services.llm.llm_factory import LLMFactory
 from mcp_clients.mcp_client_manager import MCPClientManager
 from app.services.scoping_agent import ScopingAgent
 
-
+# ---------------------------------------------------------------------
+# Logging setup
+# ---------------------------------------------------------------------
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
-class GraphState(TypedDict):
+# ---------------------------------------------------------------------
+# Graph State Definition
+# ---------------------------------------------------------------------
+class GraphState(TypedDict, total=False):
     query: str
     chat_history: List[Dict[str, str]]
     contextualize_prompt_str: str
@@ -30,23 +36,31 @@ class GraphState(TypedDict):
     mcp_result: Any
     context: list
     answer: str
+    error: Optional[str]
 
-
-# --- Helper functions ---
+# ---------------------------------------------------------------------
+# Helper: Decode Base64 MCP Context
+# ---------------------------------------------------------------------
 def decode_mcp_context(base64_context: str) -> List[Document]:
-    """
-    Decode Base64-encoded MCP context into a list of LangChain Documents.
-    """
-    decoded = base64.b64decode(base64_context).decode()
-    context_dict = json.loads(decoded)
-    return [
-        Document(
-            page_content=item["page_content"],
-            metadata=item.get("metadata", {}),
-        )
-        for item in context_dict.get("context", [])
-    ]
-
+    """Decode Base64-encoded MCP context safely."""
+    if not base64_context:
+        return []
+    try:
+        decoded = base64.b64decode(base64_context).decode()
+        context_dict = json.loads(decoded)
+        items = context_dict.get("context", [])
+        if not isinstance(items, list):
+            return []
+        return [
+            Document(
+                page_content=item.get("page_content", ""),
+                metadata=item.get("metadata", {}),
+            )
+            for item in items
+        ]
+    except Exception as e:
+        logger.warning(f"Failed to decode MCP context: {e}")
+        return []
 
 def ensure_documents(context_data):
     """Convert plain dicts or other data into a list of LangChain Documents."""
@@ -83,55 +97,75 @@ def ensure_documents(context_data):
     logger.debug("[ensure_documents] Fallback: converting to string.")
     return [Document(page_content=str(context_data), metadata={"source": "mcp_rest_result"})]
 
-# --- EOL Helper functions ---
+# ---------------------------------------------------------------------
+# Reuse LLM instance
+# ---------------------------------------------------------------------
+llm_instance = LLMFactory.create()
 
+# ---------------------------------------------------------------------
+# Workflow Nodes
+# ---------------------------------------------------------------------
 
-def contextualize_node(state: GraphState) -> GraphState:
-    """Contextualize the user query using LLM + provided prompt."""
-    llm = LLMFactory.create()
-
-    contextualize_prompt = ChatPromptTemplate.from_messages(
-        [
+async def contextualize_node(state: GraphState) -> GraphState:
+    """Contextualize user query using LLM."""
+    try:
+        contextualize_prompt = ChatPromptTemplate.from_messages([
             ("system", state["contextualize_prompt_str"]),
             MessagesPlaceholder("chat_history"),
             ("human", "{input}"),
-        ]
-    )
-    chain = contextualize_prompt | llm
+        ])
+        chain = contextualize_prompt | llm_instance
 
-    result = chain.invoke(
-        {"chat_history": state["chat_history"], "input": state["query"]}
-    )
+        result = await chain.ainvoke(
+            {"chat_history": state["chat_history"], "input": state["query"]}
+        )
 
-    state["contextual_query"] = result.content.strip()
-    return state
+        contextual_query = result.content.strip()
+        logger.info(f"Contextualized query: {contextual_query}")
+        return {**state, "contextual_query": contextual_query}
+
+    except Exception as e:
+        logger.exception(f"contextualize_node failed: {e}")
+        return {**state, "error": str(e)}
 
 
 async def scoping_node(state: GraphState) -> GraphState:
-    """Determine the scope (server, tool, input) using ScopingAgent."""
-    agent = ScopingAgent()
-    scope = await agent.scope_query(
-        query=state["contextual_query"], scope=state["scope"]
-    )
-    state["scope"] = scope
-    return state
+    """Determine the MCP tool scope using ScopingAgent."""
+    try:
+        agent = ScopingAgent()
+        scope = await agent.scope_query(
+            query=state["contextual_query"],
+            scope=state.get("scope", {}),
+        )
+        logger.info(f"Scope determined: {scope}")
+        return {**state, "scope": scope}
+
+    except Exception as e:
+        logger.exception(f"scoping_node failed: {e}")
+        return {**state, "error": str(e)}
 
 
 async def run_mcp_tool_node(state: GraphState) -> GraphState:
     """Run the MCP tool using the determined scope."""
-    manager = MCPClientManager()
-    scope = state["scope"]
+    try:
+        manager = MCPClientManager()
+        scope = state.get("scope", {})
 
-    result = await manager.run_tool(
-        server_name=scope["server_name"],
-        tool_name=scope["tool_name"],
-        param=scope.get("input", {}),
-    )
-    state["mcp_result"] = result
-    return state
+        result = await manager.run_tool(
+            server_name=scope.get("server_name"),
+            tool_name=scope.get("tool_name"),
+            param=scope.get("input", {}),
+        )
+
+        logger.info("MCP tool executed successfully.")
+        return {**state, "mcp_result": result}
+
+    except Exception as e:
+        logger.exception(f"run_mcp_tool_node failed: {e}")
+        return {**state, "error": str(e)}
 
 
-def post_processing_node(state):
+async def post_processing_node(state):
     """Extract and normalize MCP tool result into Document list format."""
     logger.info("[post_processing_node] Starting post-processing of MCP result...")
 
@@ -189,44 +223,44 @@ def post_processing_node(state):
 
 
 async def response_generation_node(state: GraphState):
-    """Generate final response using LLM, streaming supported."""
-    llm = LLMFactory.create()
-
-    qa_prompt = ChatPromptTemplate.from_messages(
-        [
+    """Stream the final LLM-generated response."""
+    try:
+        qa_prompt = ChatPromptTemplate.from_messages([
             ("system", state["qa_prompt_str"]),
             MessagesPlaceholder("chat_history"),
             ("human", "{input}"),
-        ]
-    )
+        ])
 
-    document_prompt = PromptTemplate.from_template("\n\n- {page_content}\n\n")
+        document_prompt = PromptTemplate.from_template("\n\n- {page_content}\n\n")
 
-    qa_chain = create_stuff_documents_chain(
-        llm=llm,
-        prompt=qa_prompt,
-        document_prompt=document_prompt,
-        document_variable_name="context",
-    )
+        qa_chain = create_stuff_documents_chain(
+            llm=llm_instance,
+            prompt=qa_prompt,
+            document_prompt=document_prompt,
+            document_variable_name="context",
+        )
 
-    full_response = ""
-    async for chunk in qa_chain.astream(
-        {
+        full_response = ""
+        async for chunk in qa_chain.astream({
             "input": state["contextual_query"],
-            "context": state["context"],
-            "chat_history": state["chat_history"],
-        }
-    ):
-        if isinstance(chunk, str):
-            full_response += chunk
-            escaped = chunk.replace('"', '\\"').replace("\n", "\\n")
-            yield f'0:"{escaped}"\n'
+            "context": state.get("context", []),
+            "chat_history": state.get("chat_history", []),
+        }):
+            if isinstance(chunk, str):
+                full_response += chunk
+                safe_chunk = chunk.replace("\n", "\\n")
+                yield f'0:"{safe_chunk}"\n'
 
-    state["answer"] = full_response
-    yield state
+        yield {**state, "answer": full_response}
+
+    except Exception as e:
+        logger.exception(f"response_generation_node failed: {e}")
+        yield {"type": "error", "error": str(e), "state": state}
 
 
-# Build workflow graph
+# ---------------------------------------------------------------------
+# Build Workflow Graph
+# ---------------------------------------------------------------------
 workflow = StateGraph(GraphState)
 workflow.add_node("contextualize", contextualize_node)
 workflow.add_node("scope", scoping_node)
