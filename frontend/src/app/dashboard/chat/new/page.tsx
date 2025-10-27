@@ -20,7 +20,7 @@ interface KnowledgeBase {
 export default function NewChatPage() {
   const router = useRouter();
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
-  const [selectedKB, setSelectedKB] = useState<number[] | []>([]);
+  const [selectedKB, setSelectedKB] = useState<number[]>([]);
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -83,7 +83,7 @@ export default function NewChatPage() {
   };
 
   const selectKnowledgeBase = (id: number) => {
-    setSelectedKB((prev: number[] = []) => {
+    setSelectedKB((prev: number[]) => {
       if (prev.some((x: number) => x === id)) {
         return prev.filter((x: number) => x !== id);
       }
