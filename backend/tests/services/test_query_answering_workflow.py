@@ -2,9 +2,8 @@ import json
 import base64
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-
-from langchain_core.documents import Document
 from types import SimpleNamespace
+from langchain_core.documents import Document
 
 from app.services.query_answering_workflow import (
     decode_mcp_context,
@@ -25,9 +24,7 @@ class TestQueryAnsweringWorkflow:
 
     def test_decode_mcp_context_valid(self):
         """decode_mcp_context() decodes base64 into Document objects."""
-        context = {
-            "context": [{"page_content": "hello", "metadata": {"x": 1}}]
-        }
+        context = {"context": [{"page_content": "hello", "metadata": {"x": 1}}]}
         encoded = base64.b64encode(json.dumps(context).encode()).decode()
 
         docs = decode_mcp_context(encoded)
@@ -39,25 +36,24 @@ class TestQueryAnsweringWorkflow:
         """decode_mcp_context() returns empty list when context missing."""
         context = {}
         encoded = base64.b64encode(json.dumps(context).encode()).decode()
-
         docs = decode_mcp_context(encoded)
         assert docs == []
 
     # ---------------- contextualize_node ----------------
 
-    def test_contextualize_node_success(self, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_contextualize_node_success(self, monkeypatch):
         """contextualize_node() updates state with contextual_query."""
 
-        # Monkeypatch chain.invoke to bypass real LLM/prompt logic
+        async def fake_ainvoke(inputs):
+            return SimpleNamespace(content=" refined query ")
+
+        fake_chain = MagicMock()
+        fake_chain.ainvoke = fake_ainvoke
+
         monkeypatch.setattr(
             "app.services.query_answering_workflow.ChatPromptTemplate.from_messages",
-            lambda msgs: MagicMock(
-                __or__=lambda self, other: MagicMock(
-                    invoke=lambda inputs: SimpleNamespace(
-                        content=" refined query "
-                    )
-                )
-            ),
+            lambda msgs: MagicMock(__or__=lambda self, other: fake_chain),
         )
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
@@ -76,7 +72,7 @@ class TestQueryAnsweringWorkflow:
             "answer": "",
         }
 
-        new_state = contextualize_node(state)
+        new_state = await contextualize_node(state)
         assert new_state["contextual_query"] == "refined query"
 
     # ---------------- scoping_node ----------------
@@ -98,15 +94,8 @@ class TestQueryAnsweringWorkflow:
         )
 
         state: GraphState = {
-            "query": "q",
-            "chat_history": [],
-            "contextualize_prompt_str": "",
-            "qa_prompt_str": "",
             "contextual_query": "q",
-            "scope": {"knowledge_base_ids": [1]},
-            "mcp_result": None,
-            "context": [],
-            "answer": "",
+            "scope": {},
         }
 
         new_state = await scoping_node(state)
@@ -116,9 +105,7 @@ class TestQueryAnsweringWorkflow:
 
     @pytest.mark.asyncio
     async def test_run_mcp_tool_node_success(self, monkeypatch):
-        """
-        run_mcp_tool_node() calls MCPClientManager.run_tool and stores result.
-        """
+        """run_mcp_tool_node() calls MCPClientManager.run_tool and stores result."""
         fake_manager = MagicMock()
         fake_manager.run_tool = AsyncMock(return_value={"res": 123})
         monkeypatch.setattr(
@@ -127,15 +114,7 @@ class TestQueryAnsweringWorkflow:
         )
 
         state: GraphState = {
-            "query": "",
-            "chat_history": [],
-            "contextualize_prompt_str": "",
-            "qa_prompt_str": "",
-            "contextual_query": "",
             "scope": {"server_name": "s1", "tool_name": "t1", "input": {}},
-            "mcp_result": None,
-            "context": [],
-            "answer": "",
         }
 
         new_state = await run_mcp_tool_node(state)
@@ -143,44 +122,30 @@ class TestQueryAnsweringWorkflow:
 
     # ---------------- post_processing_node ----------------
 
-    def test_post_processing_node_success(self):
+    @pytest.mark.asyncio
+    async def test_post_processing_node_success(self):
         """post_processing_node() decodes valid MCP base64 context."""
         context = {"context": [{"page_content": "doc", "metadata": {}}]}
         b64 = base64.b64encode(json.dumps(context).encode()).decode()
 
         state: GraphState = {
-            "query": "",
-            "chat_history": [],
-            "contextualize_prompt_str": "",
-            "qa_prompt_str": "",
-            "contextual_query": "",
-            "scope": {},
             "mcp_result": MagicMock(
                 content=[MagicMock(text=json.dumps({"context": b64}))]
-            ),
-            "context": [],
-            "answer": "",
+            )
         }
 
-        new_state = post_processing_node(state)
+        new_state = await post_processing_node(state)
         assert isinstance(new_state["context"][0], Document)
         assert new_state["context"][0].page_content == "doc"
 
-    def test_post_processing_node_invalid(self):
+    @pytest.mark.asyncio
+    async def test_post_processing_node_invalid(self):
         """post_processing_node() falls back to empty context on error."""
         state: GraphState = {
-            "query": "",
-            "chat_history": [],
-            "contextualize_prompt_str": "",
-            "qa_prompt_str": "",
-            "contextual_query": "",
-            "scope": {},
             "mcp_result": MagicMock(content=[MagicMock(text="not-json")]),
-            "context": [],
-            "answer": "",
         }
 
-        new_state = post_processing_node(state)
+        new_state = await post_processing_node(state)
         assert new_state["context"] == []
 
     # ---------------- response_generation_node ----------------
@@ -196,32 +161,24 @@ class TestQueryAnsweringWorkflow:
         fake_chain = MagicMock()
         fake_chain.astream = fake_astream
 
-        fake_llm = MagicMock()
-        monkeypatch.setattr(
-            "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
-        )
         monkeypatch.setattr(
             "app.services.query_answering_workflow.create_stuff_documents_chain",
             lambda **_: fake_chain,
         )
 
         state: GraphState = {
-            "query": "",
-            "chat_history": [],
-            "contextualize_prompt_str": "",
             "qa_prompt_str": "qa!",
             "contextual_query": "my query",
-            "scope": {},
-            "mcp_result": None,
+            "chat_history": [],
             "context": [],
-            "answer": "",
         }
 
         chunks = []
         async for chunk in response_generation_node(state):
             chunks.append(chunk)
 
-        # Verify yielded chunks and final state answer
+        # All chunks yielded as text
         assert any("Hello" in c or "world" in c for c in chunks)
-        assert state["answer"] == "Hello world"
+        # The final yield contains the completed answer
+        final = [c for c in chunks if isinstance(c, dict)][-1]
+        assert final["answer"] == "Hello world"

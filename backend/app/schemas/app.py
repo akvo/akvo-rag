@@ -11,7 +11,7 @@ class AppRegisterRequest(BaseModel):
     default_chat_prompt: Optional[str] = ""
     chat_callback: str
     upload_callback: str
-    callback_token: str
+    callback_token: Optional[str] = None
 
     @field_validator("chat_callback", "upload_callback")
     @classmethod
@@ -26,6 +26,7 @@ class AppRegisterResponse(BaseModel):
     client_id: str
     access_token: str
     scopes: List[str]
+    knowledge_base_id: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -40,6 +41,7 @@ class AppMeResponse(BaseModel):
     upload_callback_url: str
     scopes: List[str]
     status: AppStatus
+    knowledge_base_id: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -64,3 +66,15 @@ class AppRotateResponse(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
     message: str
+
+
+class DocumentUploadItem(BaseModel):
+    id: int
+    file_name: str
+    status: str
+    knowledge_base_id: int
+    content_type: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        orm_mode = True

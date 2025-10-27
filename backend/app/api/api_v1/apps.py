@@ -1,5 +1,12 @@
-from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from typing import Any, List
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+    Response,
+    UploadFile
+)
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -13,7 +20,9 @@ from app.schemas.app import (
     AppRotateRequest,
     AppRotateResponse,
     ErrorResponse,
+    DocumentUploadItem,
 )
+from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
 router = APIRouter()
 
@@ -27,7 +36,7 @@ router = APIRouter()
         409: {"model": ErrorResponse, "description": "Conflict"},
     },
 )
-def register_app(
+async def register_app(
     *,
     db: Session = Depends(get_db),
     register_data: AppRegisterRequest,
@@ -44,8 +53,21 @@ def register_app(
     Returns app credentials including access_token and callback_token.
     """
     try:
+        # register KB for the app
+        kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+        kb_result = await kb_mcp_endpoint_service.create_kb(
+            data={
+                "name": register_data.app_name,
+                "description": f"Knowledge base for {register_data.app_name}"
+            }
+        )
+        knowledge_base_id = kb_result.get('id', None)
+
+        # create app
         app, access_token = AppService.create_app(
-            db=db, register_data=register_data
+            db=db,
+            register_data=register_data,
+            knowledge_base_id=knowledge_base_id
         )
 
         return AppRegisterResponse(
@@ -53,6 +75,7 @@ def register_app(
             client_id=app.client_id,
             access_token=access_token,
             scopes=app.scopes,
+            knowledge_base_id=app.knowledge_base_id,
         )
     except ValueError as e:
         raise HTTPException(
@@ -96,6 +119,7 @@ def get_app_info(
         upload_callback_url=current_app.upload_callback_url,
         scopes=current_app.scopes,
         status=current_app.status,
+        knowledge_base_id=current_app.knowledge_base_id,
     )
 
 
@@ -179,3 +203,39 @@ def revoke_app(
     """
     AppService.revoke_app(db=db, app=current_app)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/upload")
+async def upload_and_process_documents(
+    *,
+    files: List[UploadFile],
+    current_app: App = Depends(get_current_app)
+) -> Any:
+    """
+    Upload and process documents for the app in one go
+    Send multiple files in a single request.
+    """
+    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+    await kb_mcp_endpoint_service.upload_and_process_documents(
+        kb_id=current_app.knowledge_base_id,
+        files=files
+    )
+    return {
+        "message": "Document received and is being processed.",
+        "file_count": len(files),
+    }
+
+
+@router.get("/documents", response_model=List[DocumentUploadItem])
+async def get_documents(
+    *,
+    current_app: App = Depends(get_current_app)
+) -> Any:
+    """
+    Get documents for the app's knowledge base.
+    """
+    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+    res = await kb_mcp_endpoint_service.get_documents_upload(
+        kb_id=current_app.knowledge_base_id,
+    )
+    return res
