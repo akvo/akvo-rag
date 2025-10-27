@@ -40,7 +40,20 @@ done
 echo "✅ MySQL started"
 
 # -------------------------------------------
+# Function to safely run MCP discovery
+# -------------------------------------------
+run_mcp_discovery_manager() {
+    echo "🚀 Running MCP discovery manager..."
+    if ! python -m mcp_clients.mcp_discovery_manager; then
+        echo "⚠️ MCP discovery manager failed, continuing startup..."
+    else
+        echo "✅ MCP discovery manager finished successfully"
+    fi
+}
+
+# -------------------------------------------
 # Start Celery worker
 # -------------------------------------------
+run_mcp_discovery_manager &
 echo "🚀 Starting Celery worker..."
 celery -A app.celery_app.celery_app worker --loglevel=info
