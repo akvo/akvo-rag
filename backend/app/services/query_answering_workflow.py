@@ -131,13 +131,13 @@ def fast_intent_check(query: str) -> str:
     if mentions_weather:
         return "weather_query"
 
-    # 2 Any explicit question goes to KB
+    # 2 Greeting-only text
+    if is_greeting and not mentions_weather:
+        return "small_talk"
+
+    # 3 Any explicit question goes to KB
     if looks_like_question:
         return "knowledge_query"
-
-    # 3 Greeting-only text
-    if is_greeting:
-        return "small_talk"
 
     # Unclear → defer to LLM
     return "uncertain"

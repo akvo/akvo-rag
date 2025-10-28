@@ -55,18 +55,22 @@ async def execute_chat_job(
             "scope": {
                 "knowledge_base_ids": knowledge_base_ids,
                 "top_k": top_k,
+                "intent_hint": None
             },
         }
         logger.info(f"Chat job {job_id} starting with state: {state}")
 
         result_state = await query_answering_workflow.ainvoke(state)
+        intent = result_state.get("intent")
+        logger.info(
+            f"Chat job {job_id} completed workflow with intent={intent}")
         logger.info(f"Chat job {job_id} completed workflow")
 
         answer = result_state.get("answer", "")
         error = result_state.get("error")
 
         citations = []
-        for context in result_state.get("context", []):
+        for context in result_state.get("context") or []:
             doc_metadata = context.metadata or {}
             citations.append({
                 "document": doc_metadata.get("source") or doc_metadata.get("title"),
