@@ -114,7 +114,7 @@ def fast_intent_check(query: str) -> str:
 
     # Define base pattern groups
     small_talk_patterns = r"\b(hi|hello|hey|good (morning|afternoon|evening)|halo|selamat|apa kabar|how are you)\b"
-    weather_patterns = r"\b(weather|rain|forecast|temperature|cuaca|hujan|panas|dingin|cerah|mendung)\b"
+    weather_patterns = r"\b(weather|rain|raining|wind|windy|summer|snow|forecast|temperature|cuaca|hujan|panas|dingin|cerah|mendung)\b"
 
     # Question indicators (generic, cross-domain)
     question_words = r"\b(how|what|why|when|where|which|explain|tell me|give me|show me|describe|cara|bagaimana|apa)\b"
