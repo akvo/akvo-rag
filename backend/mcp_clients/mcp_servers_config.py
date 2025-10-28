@@ -7,7 +7,7 @@ DEFAULT_MCP_SERVERS = {
         "type": "fastmcp",
     },
     "weather_mcp": {
-        "url": "http://host.docker.internal:8200",
+        "url": settings.WEATHER_MCP,
         "type": "rest",
         "tools": [
             {
@@ -15,6 +15,7 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Get multi-day weather forecasts for a given location.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": False,  # Uses open_meteo (free)
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -30,6 +31,7 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Fetch current weather conditions for a given location.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": False,  # Uses open_meteo (free)
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -44,6 +46,7 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Get historical weather data for a specific date and location.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": False,  # Uses open_meteo (free)
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -62,6 +65,7 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Analyze weather trends over a specified period for a location.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": False,  # Uses open_meteo (free)
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -79,6 +83,8 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Get weather forecast for tomorrow for a given location.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": True,  # Uses tomorrow_io API
+                "api_key_name": "TOMORROW_IO_API_KEY",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -94,6 +100,8 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Fetch active weather alerts for a specified location.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": True,  # Uses tomorrow_io API
+                "api_key_name": "TOMORROW_IO_API_KEY",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -109,6 +117,8 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Fetch current weather conditions from Google Weather for a given location.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": True,  # Uses Google Weather API
+                "api_key_name": "GOOGLE_WEATHER_API_KEY",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -125,6 +135,8 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Fetch current weather data from OpenWeatherMap for a given location.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": True,  # Uses OpenWeatherMap API
+                "api_key_name": "OPENWEATHERMAP_API_KEY",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -141,6 +153,8 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Fetch current weather conditions from AccuWeather for a given location key.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": True,  # Uses AccuWeather API
+                "api_key_name": "ACCUWEATHER_API_KEY",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -156,6 +170,8 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Predict potential weather alerts based on location.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": True,  # Uses OpenAI API
+                "api_key_name": "OPENAI_API_KEY",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -172,6 +188,7 @@ DEFAULT_MCP_SERVERS = {
                 "description": "List villages in a specified state and/or district.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": False,  # Geographic tools (no API needed)
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -188,6 +205,7 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Get location details from latitude and longitude.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": False,  # Geographic tools (no API needed)
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -203,6 +221,7 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Get administrative boundaries for a given village ID.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": False,  # Geographic tools (no API needed)
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -218,6 +237,7 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Get crop calendar information for a specific region and/or crop type.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": False,  # Crop calendar tools (no API needed)
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -234,6 +254,7 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Get prominent crops for a specific region and season.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": False,  # Crop calendar tools (no API needed)
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -250,6 +271,7 @@ DEFAULT_MCP_SERVERS = {
                 "description": "Estimate the growth stage of a crop based on planting date and current date.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": False,  # Crop calendar tools (no API needed)
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -264,9 +286,11 @@ DEFAULT_MCP_SERVERS = {
             },
             {
                 "name": "generate_weather_alert",
-                "description": "Estimate the growth stage of a crop based on planting date and current date.",
+                "description": "Generate weather alert based on crop and weather data.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": True,  # Uses OpenAI API
+                "api_key_name": "OPENAI_API_KEY",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -284,9 +308,11 @@ DEFAULT_MCP_SERVERS = {
             },
             {
                 "name": "prioritize_alerts",
-                "description": "Estimate the growth stage of a crop based on planting date and current date.",
+                "description": "Prioritize alerts based on urgency factors.",
                 "endpoint": "/mcp",
                 "method": "POST",
+                "api_key_required": True,  # Uses OpenAI API
+                "api_key_name": "OPENAI_API_KEY",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
