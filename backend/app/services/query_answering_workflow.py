@@ -1,3 +1,4 @@
+import re
 import json
 import base64
 import logging
@@ -31,6 +32,7 @@ class GraphState(TypedDict, total=False):
     chat_history: List[Dict[str, str]]
     contextualize_prompt_str: str
     qa_prompt_str: str
+    intent: str
     contextual_query: str
     scope: Dict[str, Any]
     mcp_result: Any
@@ -98,6 +100,98 @@ def ensure_documents(context_data):
     return [Document(page_content=str(context_data), metadata={"source": "mcp_rest_result"})]
 
 # ---------------------------------------------------------------------
+# Hybrid Intent Classification Helpers
+# ---------------------------------------------------------------------
+def fast_intent_check(query: str) -> str:
+    """
+    Generic hybrid regex-based intent classifier.
+    Detects:
+        - small_talk
+        - weather_query
+        - knowledge_query (for any fact/instructional question)
+    """
+    q = query.lower().strip()
+
+    # Define base pattern groups
+    small_talk_patterns = r"\b(hi|hello|hey|good (morning|afternoon|evening)|halo|selamat|apa kabar|how are you)\b"
+    weather_patterns = r"\b(weather|rain|forecast|temperature|cuaca|hujan|panas|dingin|cerah|mendung)\b"
+
+    # Question indicators (generic, cross-domain)
+    question_words = r"\b(how|what|why|when|where|which|explain|tell me|give me|show me|describe|cara|bagaimana|apa)\b"
+    has_question_mark = "?" in q
+
+    # Collect matches
+    is_greeting = bool(re.search(small_talk_patterns, q))
+    mentions_weather = bool(re.search(weather_patterns, q))
+    looks_like_question = (
+        bool(re.search(question_words, q)) or has_question_mark)
+
+    # --- Prioritization logic ---
+    # 1 Explicit weather reference dominates
+    if mentions_weather:
+        return "weather_query"
+
+    # 2 Any explicit question goes to KB
+    if looks_like_question:
+        return "knowledge_query"
+
+    # 3 Greeting-only text
+    if is_greeting:
+        return "small_talk"
+
+    # Unclear → defer to LLM
+    return "uncertain"
+
+# ---------------------------------------------------------------------
+# Node 1: Hybrid Intent Classification
+# ---------------------------------------------------------------------
+async def classify_intent_node(state: GraphState) -> GraphState:
+    """
+    Classify user message into:
+        - small_talk,
+        - weather_query,
+        - knowledge_query, or
+        - general_query.
+    Uses fast regex first; LLM fallback only if uncertain.
+    """
+    query = state.get("query", "")
+    fast_guess = fast_intent_check(query)
+    if fast_guess != "uncertain":
+        state["intent"] = fast_guess
+        logger.info(f"[classify_intent_node] Fast classified as: {fast_guess}")
+        return state
+
+    # Fallback to LLM for ambiguous cases
+    try:
+        llm = LLMFactory.create()
+        system_prompt = """
+        You are a classification model for a chatbot.
+        Classify the user's message into one of:
+        - "small_talk": greetings or casual conversation
+        - "weather_query": questions about weather or climate
+        - "knowledge_query": agriculture, farming, crops, fertilizer, pests, soil, and other question that needed a context
+        Respond ONLY in valid JSON: {"intent": "<intent>"}
+        """
+
+        response = await llm.ainvoke([
+            ("system", system_prompt),
+            ("user", query)
+        ])
+
+        raw = getattr(response, "content", "").strip()
+        match = re.search(r'\{.*\}', raw)
+        result = json.loads(match.group(0)) if match else {"intent": "general_query"}
+        state["intent"] = result.get("intent", "general_query")
+
+        logger.info(f"[classify_intent_node] LLM fallback classified as: {state['intent']}")
+        return state
+
+    except Exception as e:
+        logger.exception(f"classify_intent_node fallback failed: {e}")
+        state["intent"] = "general_query"
+        return state
+
+# ---------------------------------------------------------------------
 # Reuse LLM instance
 # ---------------------------------------------------------------------
 llm_instance = LLMFactory.create()
@@ -105,6 +199,29 @@ llm_instance = LLMFactory.create()
 # ---------------------------------------------------------------------
 # Workflow Nodes
 # ---------------------------------------------------------------------
+async def small_talk_node(state: GraphState) -> GraphState:
+    """Handle small talk with a short, friendly reply."""
+    try:
+        llm = LLMFactory.create()
+        system_prompt = """
+        You are a friendly assistant.
+        Reply briefly (max 1 sentence) to the user's greeting or small talk.
+        Keep it warm and simple.
+        """
+
+        response = await llm.ainvoke([
+            ("system", system_prompt),
+            ("user", state["query"])
+        ])
+
+        answer = getattr(response, "content", "Hello there!")
+        logger.info(f"[small_talk_node] Reply: {answer}")
+        return {**state, "answer": answer}
+
+    except Exception as e:
+        logger.exception(f"small_talk_node failed: {e}")
+        return {**state, "answer": "Hello!"}
+
 
 async def contextualize_node(state: GraphState) -> GraphState:
     """Contextualize user query using LLM."""
@@ -262,13 +379,26 @@ async def response_generation_node(state: GraphState):
 # Build Workflow Graph
 # ---------------------------------------------------------------------
 workflow = StateGraph(GraphState)
+workflow.add_node("classify_intent", classify_intent_node)
+workflow.add_node("small_talk", small_talk_node)
 workflow.add_node("contextualize", contextualize_node)
 workflow.add_node("scope", scoping_node)
 workflow.add_node("run_mcp", run_mcp_tool_node)
 workflow.add_node("post_process", post_processing_node)
 workflow.add_node("generate", response_generation_node)
 
-workflow.set_entry_point("contextualize")
+workflow.set_entry_point("classify_intent")
+
+workflow.add_conditional_edges(
+    "classify_intent",
+    lambda s: s.get("intent", "knowledge_query"),
+    {
+        "small_talk": "small_talk",
+        "weather_query": "contextualize",
+        "knowledge_query": "contextualize",
+    },
+)
+
 workflow.add_edge("contextualize", "scope")
 workflow.add_edge("scope", "run_mcp")
 workflow.add_edge("run_mcp", "post_process")
