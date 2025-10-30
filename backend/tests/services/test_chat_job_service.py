@@ -41,19 +41,14 @@ class TestChatJobService:
         return "https://example.com/callback"
 
     @pytest.fixture
-    def mock_current_app(self):
-        app = Mock()
-        app.default_chat_prompt = "Default app prompt."
-        app.chat_callback_url = "https://example.com/chat"
-        app.upload_callback_url = "https://example.com/upload"
-        app.callback_token = "cb_tok_123"
-        return app
+    def mock_app_default_prompt(self):
+        return "Default app prompt."
 
     # --- Core tests ---
 
     @pytest.mark.asyncio
     async def test_execute_chat_job_success(
-        self, mock_db, sample_job_id, sample_data, knowledge_base_ids, chat_callback_url, mock_current_app
+        self, mock_db, sample_job_id, sample_data, knowledge_base_ids, chat_callback_url, mock_app_default_prompt
     ):
         """✅ Test successful chat job execution with correct callback payload."""
         mock_job = Mock()
@@ -82,7 +77,7 @@ class TestChatJobService:
                 job_id=sample_job_id,
                 data=sample_data,
                 callback_url=chat_callback_url,
-                current_app=mock_current_app,
+                app_default_prompt=mock_app_default_prompt,
                 knowledge_base_ids=knowledge_base_ids,
             )
 
@@ -97,7 +92,7 @@ class TestChatJobService:
 
     @pytest.mark.asyncio
     async def test_execute_chat_job_failure(
-        self, mock_db, sample_job_id, sample_data, knowledge_base_ids, chat_callback_url, mock_current_app
+        self, mock_db, sample_job_id, sample_data, knowledge_base_ids, chat_callback_url, mock_app_default_prompt
     ):
         """❌ Test workflow crash handling."""
         mock_job = Mock()
@@ -119,7 +114,7 @@ class TestChatJobService:
                 job_id=sample_job_id,
                 data=sample_data,
                 callback_url=chat_callback_url,
-                current_app=mock_current_app,
+                app_default_prompt=mock_app_default_prompt,
                 knowledge_base_ids=knowledge_base_ids,
             )
 
@@ -127,7 +122,7 @@ class TestChatJobService:
 
     @pytest.mark.asyncio
     async def test_execute_chat_job_no_callback(
-        self, mock_db, sample_job_id, sample_data, mock_current_app
+        self, mock_db, sample_job_id, sample_data, mock_app_default_prompt
     ):
         """🚫 Ensure no callback is sent when callback_url is None."""
         mock_job = Mock()
@@ -146,7 +141,7 @@ class TestChatJobService:
                 job_id=sample_job_id,
                 data=sample_data,
                 callback_url=None,
-                current_app=mock_current_app,
+                app_default_prompt=mock_app_default_prompt,
                 knowledge_base_ids=[],
             )
 
@@ -157,7 +152,7 @@ class TestChatJobService:
 
     @pytest.mark.asyncio
     async def test_prompt_logic_job_prompt_overrides_default(
-        self, mock_db, sample_job_id, sample_data, mock_current_app
+        self, mock_db, sample_job_id, sample_data, mock_app_default_prompt
     ):
         """🧩 Ensure job.prompt overrides app.default_chat_prompt."""
         mock_job = Mock()
@@ -180,7 +175,7 @@ class TestChatJobService:
                 job_id=sample_job_id,
                 data=sample_data,  # contains "prompt"
                 callback_url=None,
-                current_app=mock_current_app,
+                app_default_prompt=mock_app_default_prompt,
                 knowledge_base_ids=[],
             )
 
@@ -191,7 +186,7 @@ class TestChatJobService:
 
     @pytest.mark.asyncio
     async def test_prompt_logic_uses_app_default_when_no_job_prompt(
-        self, mock_db, sample_job_id, mock_current_app
+        self, mock_db, sample_job_id, mock_app_default_prompt
     ):
         """🧩 Ensure default_chat_prompt used when no job.prompt provided."""
         mock_job = Mock()
@@ -215,17 +210,17 @@ class TestChatJobService:
                 job_id=sample_job_id,
                 data=data,
                 callback_url=None,
-                current_app=mock_current_app,
+                app_default_prompt=mock_app_default_prompt,
                 knowledge_base_ids=[],
             )
 
             state_arg = mock_workflow.ainvoke.call_args[0][0]
             assert "qa_prompt_str" in state_arg
-            assert mock_current_app.default_chat_prompt in state_arg["qa_prompt_str"]
+            assert mock_app_default_prompt in state_arg["qa_prompt_str"]
 
     @pytest.mark.asyncio
     async def test_prompt_logic_final_prompt_combines_qa_and_app_prompt(
-        self, mock_db, sample_job_id, mock_current_app
+        self, mock_db, sample_job_id, mock_app_default_prompt
     ):
         """🧠 Ensure qa_prompt_str is built as qa_prompt + app_final_prompt with separator."""
         mock_job = Mock()
@@ -249,7 +244,7 @@ class TestChatJobService:
                 job_id=sample_job_id,
                 data=data,
                 callback_url=None,
-                current_app=mock_current_app,
+                app_default_prompt=mock_app_default_prompt,
                 knowledge_base_ids=[],
             )
 
