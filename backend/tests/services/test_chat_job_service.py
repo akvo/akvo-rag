@@ -3,11 +3,12 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from app.services.chat_job_service import execute_chat_job
 from app.services import chat_job_service
+from app.models.app import App
 
 
 @pytest.mark.unit
 class TestChatJobService:
-    """Test suite for execute_chat_job."""
+    """Test suite for execute_chat_job (non-streaming)."""
 
     @pytest.fixture
     def mock_db(self):
@@ -38,9 +39,18 @@ class TestChatJobService:
     def chat_callback_url(self):
         return "https://example.com/callback"
 
+    @pytest.fixture
+    def mock_current_app(self):
+        """Mock App model instance."""
+        app = Mock(spec=App)
+        app.default_chat_prompt = "You are a helpful AI assistant."
+        app.chat_callback_url = "https://example.com/app_chat_callback"
+        return app
+
+    # ✅ SUCCESS CASE
     @pytest.mark.asyncio
     async def test_execute_chat_job_success(
-        self, mock_db, sample_job_id, sample_data, knowledge_base_ids, chat_callback_url
+        self, mock_db, sample_job_id, sample_data, knowledge_base_ids, chat_callback_url, mock_current_app
     ):
         """✅ Test successful chat job execution with correct callback payload."""
         mock_job = Mock()
@@ -60,15 +70,14 @@ class TestChatJobService:
             patch.object(chat_job_service, "query_answering_workflow") as mock_workflow,
             patch("app.services.chat_job_service.send_callback_async", new_callable=AsyncMock) as mock_callback,
         ):
-            # Mock successful workflow
             mock_workflow.ainvoke = AsyncMock(return_value={"answer": "AI means Artificial Intelligence"})
 
-            # Run function
             await execute_chat_job(
                 db=mock_db,
                 job_id=sample_job_id,
                 data=sample_data,
                 callback_url=chat_callback_url,
+                current_app=mock_current_app,
                 knowledge_base_ids=knowledge_base_ids,
             )
 
@@ -77,15 +86,14 @@ class TestChatJobService:
             mock_done.assert_called_once()
             mock_fail.assert_not_called()
             mock_workflow.ainvoke.assert_awaited_once()
-
-            # ✅ Verify callback
             mock_callback.assert_awaited_once()
 
+    # ❌ FAILURE CASE
     @pytest.mark.asyncio
     async def test_execute_chat_job_failure(
-        self, mock_db, sample_job_id, sample_data, knowledge_base_ids, chat_callback_url
+        self, mock_db, sample_job_id, sample_data, knowledge_base_ids, chat_callback_url, mock_current_app
     ):
-        """❌ Test workflow crash handling."""
+        """❌ Test workflow crash handling and failed job update."""
         mock_job = Mock()
         mock_job.id = sample_job_id
         mock_job.callback_params = {}
@@ -105,16 +113,18 @@ class TestChatJobService:
                 job_id=sample_job_id,
                 data=sample_data,
                 callback_url=chat_callback_url,
+                current_app=mock_current_app,
                 knowledge_base_ids=knowledge_base_ids,
             )
 
             mock_fail.assert_called_once()
 
+    # 🚫 NO CALLBACK CASE
     @pytest.mark.asyncio
     async def test_execute_chat_job_no_callback(
-        self, mock_db, sample_job_id, sample_data
+        self, mock_db, sample_job_id, sample_data, mock_current_app
     ):
-        """🚫 Ensure no callback is sent when callback_url is None."""
+        """🚫 Ensure callback still sent using app callback if data callback_url is None."""
         mock_job = Mock()
         mock_job.id = sample_job_id
         mock_job.callback_params = {}
@@ -131,8 +141,9 @@ class TestChatJobService:
                 job_id=sample_job_id,
                 data=sample_data,
                 callback_url=None,
-                knowledge_base_ids=[]
+                current_app=mock_current_app,
+                knowledge_base_ids=[],
             )
 
-            # ✅ Should be called using callback_url from apps table
-            mock_callback.assert_awaited()
+            # ✅ Should still call callback (using current_app.chat_callback_url)
+            mock_callback.assert_awaited_once()
