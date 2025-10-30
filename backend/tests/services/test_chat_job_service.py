@@ -3,12 +3,13 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from app.services.chat_job_service import execute_chat_job
 from app.services import chat_job_service
-from app.models.app import App
 
 
 @pytest.mark.unit
 class TestChatJobService:
-    """Test suite for execute_chat_job (non-streaming)."""
+    """Test suite for execute_chat_job."""
+
+    # --- Fixtures ---
 
     @pytest.fixture
     def mock_db(self):
@@ -41,13 +42,15 @@ class TestChatJobService:
 
     @pytest.fixture
     def mock_current_app(self):
-        """Mock App model instance."""
-        app = Mock(spec=App)
-        app.default_chat_prompt = "You are a helpful AI assistant."
-        app.chat_callback_url = "https://example.com/app_chat_callback"
+        app = Mock()
+        app.default_chat_prompt = "Default app prompt."
+        app.chat_callback_url = "https://example.com/chat"
+        app.upload_callback_url = "https://example.com/upload"
+        app.callback_token = "cb_tok_123"
         return app
 
-    # ✅ SUCCESS CASE
+    # --- Core tests ---
+
     @pytest.mark.asyncio
     async def test_execute_chat_job_success(
         self, mock_db, sample_job_id, sample_data, knowledge_base_ids, chat_callback_url, mock_current_app
@@ -70,8 +73,10 @@ class TestChatJobService:
             patch.object(chat_job_service, "query_answering_workflow") as mock_workflow,
             patch("app.services.chat_job_service.send_callback_async", new_callable=AsyncMock) as mock_callback,
         ):
+            # Mock successful workflow
             mock_workflow.ainvoke = AsyncMock(return_value={"answer": "AI means Artificial Intelligence"})
 
+            # Run function
             await execute_chat_job(
                 db=mock_db,
                 job_id=sample_job_id,
@@ -86,14 +91,15 @@ class TestChatJobService:
             mock_done.assert_called_once()
             mock_fail.assert_not_called()
             mock_workflow.ainvoke.assert_awaited_once()
+
+            # ✅ Verify callback
             mock_callback.assert_awaited_once()
 
-    # ❌ FAILURE CASE
     @pytest.mark.asyncio
     async def test_execute_chat_job_failure(
         self, mock_db, sample_job_id, sample_data, knowledge_base_ids, chat_callback_url, mock_current_app
     ):
-        """❌ Test workflow crash handling and failed job update."""
+        """❌ Test workflow crash handling."""
         mock_job = Mock()
         mock_job.id = sample_job_id
         mock_job.callback_params = {}
@@ -119,12 +125,11 @@ class TestChatJobService:
 
             mock_fail.assert_called_once()
 
-    # 🚫 NO CALLBACK CASE
     @pytest.mark.asyncio
     async def test_execute_chat_job_no_callback(
         self, mock_db, sample_job_id, sample_data, mock_current_app
     ):
-        """🚫 Ensure callback still sent using app callback if data callback_url is None."""
+        """🚫 Ensure no callback is sent when callback_url is None."""
         mock_job = Mock()
         mock_job.id = sample_job_id
         mock_job.callback_params = {}
@@ -145,5 +150,108 @@ class TestChatJobService:
                 knowledge_base_ids=[],
             )
 
-            # ✅ Should still call callback (using current_app.chat_callback_url)
-            mock_callback.assert_awaited_once()
+            # ✅ Should be called using callback_url from apps table
+            mock_callback.assert_awaited()
+
+    # --- Prompt logic tests ---
+
+    @pytest.mark.asyncio
+    async def test_prompt_logic_job_prompt_overrides_default(
+        self, mock_db, sample_job_id, sample_data, mock_current_app
+    ):
+        """🧩 Ensure job.prompt overrides app.default_chat_prompt."""
+        mock_job = Mock()
+        mock_job.id = sample_job_id
+
+        with (
+            patch.object(chat_job_service.JobService, "get_job", return_value=mock_job),
+            patch.object(chat_job_service.PromptService, "__init__", return_value=None),
+            patch.object(chat_job_service.PromptService, "get_full_contextualize_prompt", return_value="ctx"),
+            patch.object(chat_job_service.PromptService, "get_full_qa_strict_prompt", return_value="qa"),
+            patch.object(chat_job_service.SystemSettingsService, "__init__", return_value=None),
+            patch.object(chat_job_service.SystemSettingsService, "get_top_k", return_value=5),
+            patch.object(chat_job_service, "query_answering_workflow") as mock_workflow,
+            patch("app.services.chat_job_service.send_callback_async", new_callable=AsyncMock),
+        ):
+            mock_workflow.ainvoke = AsyncMock(return_value={"answer": "test"})
+
+            await execute_chat_job(
+                db=mock_db,
+                job_id=sample_job_id,
+                data=sample_data,  # contains "prompt"
+                callback_url=None,
+                current_app=mock_current_app,
+                knowledge_base_ids=[],
+            )
+
+            # Capture the state sent to query_answering_workflow
+            state_arg = mock_workflow.ainvoke.call_args[0][0]
+            assert "qa_prompt_str" in state_arg
+            assert "Explain AI in simple terms." in state_arg["qa_prompt_str"]
+
+    @pytest.mark.asyncio
+    async def test_prompt_logic_uses_app_default_when_no_job_prompt(
+        self, mock_db, sample_job_id, mock_current_app
+    ):
+        """🧩 Ensure default_chat_prompt used when no job.prompt provided."""
+        mock_job = Mock()
+        mock_job.id = sample_job_id
+        data = {"chats": [{"role": "user", "content": "Hello"}]}  # no "prompt"
+
+        with (
+            patch.object(chat_job_service.JobService, "get_job", return_value=mock_job),
+            patch.object(chat_job_service.PromptService, "__init__", return_value=None),
+            patch.object(chat_job_service.PromptService, "get_full_contextualize_prompt", return_value="ctx"),
+            patch.object(chat_job_service.PromptService, "get_full_qa_strict_prompt", return_value="qa"),
+            patch.object(chat_job_service.SystemSettingsService, "__init__", return_value=None),
+            patch.object(chat_job_service.SystemSettingsService, "get_top_k", return_value=5),
+            patch.object(chat_job_service, "query_answering_workflow") as mock_workflow,
+            patch("app.services.chat_job_service.send_callback_async", new_callable=AsyncMock),
+        ):
+            mock_workflow.ainvoke = AsyncMock(return_value={"answer": "ok"})
+
+            await execute_chat_job(
+                db=mock_db,
+                job_id=sample_job_id,
+                data=data,
+                callback_url=None,
+                current_app=mock_current_app,
+                knowledge_base_ids=[],
+            )
+
+            state_arg = mock_workflow.ainvoke.call_args[0][0]
+            assert "qa_prompt_str" in state_arg
+            assert mock_current_app.default_chat_prompt in state_arg["qa_prompt_str"]
+
+    @pytest.mark.asyncio
+    async def test_prompt_logic_final_prompt_combines_qa_and_app_prompt(
+        self, mock_db, sample_job_id, mock_current_app
+    ):
+        """🧠 Ensure qa_prompt_str is built as qa_prompt + app_final_prompt with separator."""
+        mock_job = Mock()
+        mock_job.id = sample_job_id
+        data = {"prompt": "Custom job prompt", "chats": [{"role": "user", "content": "Hello"}]}
+
+        with (
+            patch.object(chat_job_service.JobService, "get_job", return_value=mock_job),
+            patch.object(chat_job_service.PromptService, "__init__", return_value=None),
+            patch.object(chat_job_service.PromptService, "get_full_contextualize_prompt", return_value="CTX_PROMPT"),
+            patch.object(chat_job_service.PromptService, "get_full_qa_strict_prompt", return_value="QA_PROMPT"),
+            patch.object(chat_job_service.SystemSettingsService, "__init__", return_value=None),
+            patch.object(chat_job_service.SystemSettingsService, "get_top_k", return_value=3),
+            patch.object(chat_job_service, "query_answering_workflow") as mock_workflow,
+            patch("app.services.chat_job_service.send_callback_async", new_callable=AsyncMock),
+        ):
+            mock_workflow.ainvoke = AsyncMock(return_value={"answer": "done"})
+
+            await execute_chat_job(
+                db=mock_db,
+                job_id=sample_job_id,
+                data=data,
+                callback_url=None,
+                current_app=mock_current_app,
+                knowledge_base_ids=[],
+            )
+
+            state_arg = mock_workflow.ainvoke.call_args[0][0]
+            assert state_arg["qa_prompt_str"] == "QA_PROMPT\n\nCustom job prompt"
