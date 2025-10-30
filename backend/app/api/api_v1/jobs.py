@@ -110,7 +110,7 @@ async def create_job(
             job_id=job_record.id,
             data=data,
             callback_url=current_app.chat_callback_url,
-            current_app=current_app,
+            app_default_prompt=current_app.default_chat_prompt,
             knowledge_base_ids=knowledge_base_ids,
         )
     elif job_type == "upload":
