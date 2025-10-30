@@ -3,7 +3,7 @@ import secrets
 from sqlalchemy.orm import Session
 
 from app.models.app import App, AppStatus
-from app.schemas.app import AppRegisterRequest
+from app.schemas.app import AppRegisterRequest, AppUpdateRequest
 
 # Default scopes for new apps
 DEFAULT_SCOPES = ["jobs.write", "kb.read", "kb.write", "apps.read"]
@@ -63,6 +63,33 @@ class AppService:
         db.refresh(app)
 
         return app, access_token
+
+    @staticmethod
+    def update_app(
+        db: Session,
+        app: App,
+        update_data: AppUpdateRequest,
+    ) -> App:
+        """
+        Partially update app fields without resetting identifiers or tokens."""
+        updated = False
+        data = update_data.dict(exclude_unset=True)
+
+        for field, value in data.items():
+            if value is not None:
+                if field == "chat_callback":
+                    app.chat_callback_url = value
+                elif field == "upload_callback":
+                    app.upload_callback_url = value
+                elif hasattr(app, field):
+                    setattr(app, field, value)
+                updated = True
+
+        if updated:
+            db.add(app)
+            db.commit()
+            db.refresh(app)
+        return app
 
     @staticmethod
     def get_app_by_access_token(db: Session, access_token: str) -> Optional[App]:

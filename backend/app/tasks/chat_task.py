@@ -9,6 +9,7 @@ def execute_chat_job_task(
     job_id: str,
     data: dict,
     callback_url: str,
+    app_default_prompt: str,
     knowledge_base_ids: list[int] = [],
 ):
     """
@@ -22,6 +23,7 @@ def execute_chat_job_task(
                 job_id=job_id,
                 data=data,
                 callback_url=callback_url,
+                app_default_prompt=app_default_prompt,
                 knowledge_base_ids=knowledge_base_ids
             )
         )
