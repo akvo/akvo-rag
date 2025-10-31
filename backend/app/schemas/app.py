@@ -32,6 +32,36 @@ class AppRegisterResponse(BaseModel):
         from_attributes = True
 
 
+class AppUpdateRequest(BaseModel):
+    app_name: Optional[str] = None
+    domain: Optional[str] = None
+    default_chat_prompt: Optional[str] = None
+    chat_callback: Optional[str] = None
+    upload_callback: Optional[str] = None
+    callback_token: Optional[str] = None
+
+    @field_validator("chat_callback", "upload_callback")
+    @classmethod
+    def validate_https_url(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not v.startswith("https://"):
+            raise ValueError("Callback URLs must use HTTPS")
+        return v
+
+
+class AppUpdateResponse(BaseModel):
+    app_id: str
+    app_name: str
+    domain: str
+    default_chat_prompt: Optional[str] = None
+    chat_callback: str
+    upload_callback: str
+    callback_token: Optional[str] = None
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class AppMeResponse(BaseModel):
     app_id: str
     app_name: str
