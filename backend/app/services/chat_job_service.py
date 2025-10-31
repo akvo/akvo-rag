@@ -16,9 +16,10 @@ async def execute_chat_job(
     job_id: str,
     data: dict,
     callback_url: str,
-    knowledge_base_ids: List[int] = []
+    app_default_prompt: str,
+    knowledge_base_ids: List[int] = [],
 ):
-    """Background job executor for chat jobs (non-streaming)."""
+    """Background job executor for [chat job]s (non-streaming)."""
     job = JobService.get_job(db, job_id)
     if not job:
         return
@@ -26,12 +27,25 @@ async def execute_chat_job(
     try:
         JobService.update_status_to_running(db, job_id)
 
+        # prompt from app logic
+        app_default_prompt = app_default_prompt or None
+        job_payload_prompt = data.get("prompt") or None
+        app_final_prompt = (
+            job_payload_prompt if job_payload_prompt else app_default_prompt
+        ) or None
+        app_final_prompt = (
+            "**IMPORTANT: Follow these additional rules strictly:**\n\n"
+            + app_final_prompt
+            if app_final_prompt
+            else ""
+        )
+        # eol prompt from app logic
+
         prompt_service = PromptService(db=db)
         settings_service = SystemSettingsService(db=db)
         top_k = settings_service.get_top_k()
 
         chats = data.get("chats", [])
-        prompt = data.get("prompt") or None
         callback_url = data.get("callback_url") or callback_url
 
         chat_history = []
@@ -44,26 +58,34 @@ async def execute_chat_job(
         query = chat_history[-1].get("content") if chat_history else ""
         chat_history = chat_history[:-1] if chat_history else []
 
+        # default rag prompt
         contextualize_prompt = prompt_service.get_full_contextualize_prompt()
         qa_prompt = prompt_service.get_full_qa_strict_prompt()
+
+        # combined prompt
+        final_prompt = qa_prompt + "\n\n" + app_final_prompt
+        logger.info("[Chat job] BEGIN final prompt: ==============")
+        logger.info(f"[Chat job] final prompt: {final_prompt}")
+        logger.info("[Chat job] EOL final prompt: ==============")
 
         state = {
             "query": query,
             "chat_history": chat_history,
             "contextualize_prompt_str": contextualize_prompt,
-            "qa_prompt_str": prompt or qa_prompt,
+            "qa_prompt_str": final_prompt,
             "scope": {
                 "knowledge_base_ids": knowledge_base_ids,
                 "top_k": top_k,
-                "intent_hint": None
+                "intent_hint": None,
             },
         }
-        logger.info(f"Chat job {job_id} starting with state: {state}")
+        logger.info(f"[Chat job] {job_id} starting with state: {state}")
 
         result_state = await query_answering_workflow.ainvoke(state)
         intent = result_state.get("intent")
         logger.info(
-            f"Chat job {job_id} completed workflow with intent={intent}")
+            f"Chat job {job_id} completed workflow with intent={intent}"
+        )
         logger.info(f"Chat job {job_id} completed workflow")
 
         answer = result_state.get("answer", "")
@@ -72,11 +94,15 @@ async def execute_chat_job(
         citations = []
         for context in result_state.get("context") or []:
             doc_metadata = context.metadata or {}
-            citations.append({
-                "document": doc_metadata.get("source") or doc_metadata.get("title"),
-                "chunk": context.page_content,
-                "page": doc_metadata.get("page_label") or doc_metadata.get("page"),
-            })
+            citations.append(
+                {
+                    "document": doc_metadata.get("source")
+                    or doc_metadata.get("title"),
+                    "chunk": context.page_content,
+                    "page": doc_metadata.get("page_label")
+                    or doc_metadata.get("page"),
+                }
+            )
 
         output = {"answer": answer, "citations": citations}
 
@@ -95,7 +121,7 @@ async def execute_chat_job(
         return output
 
     except Exception as e:
-        logger.exception(f"Chat job execution failed: {e}")
+        logger.exception(f"[Chat job] execution failed: {e}")
         JobService.update_status_to_failed(db, job_id, output=str(e))
         await send_callback_async(callback_url, job, error=str(e))
         return str(e)

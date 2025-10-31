@@ -21,6 +21,8 @@ from app.schemas.app import (
     AppRotateResponse,
     ErrorResponse,
     DocumentUploadItem,
+    AppUpdateRequest,
+    AppUpdateResponse
 )
 from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
@@ -239,3 +241,56 @@ async def get_documents(
         kb_id=current_app.knowledge_base_id,
     )
     return res
+
+
+@router.patch(
+    "",
+    response_model=AppUpdateResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Validation error"},
+        401: {"model": ErrorResponse, "description": "Unauthorized - Invalid or missing token"},
+        403: {"model": ErrorResponse, "description": "Forbidden - Inactive app"},
+        404: {"model": ErrorResponse, "description": "App not found"},
+    },
+)
+def update_app(
+    *,
+    db: Session = Depends(get_db),
+    current_app: App = Depends(get_current_app),
+    update_data: AppUpdateRequest,
+) -> Any:
+    """
+    Partially update app metadata.
+
+    Only provided fields will be updated. Access token and client_id
+    will remain unchanged.
+
+    Requires Bearer token authentication.
+    """
+    if not AppService.is_app_active(current_app):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="App is not active",
+        )
+
+    try:
+        updated_app = AppService.update_app(
+            db=db,
+            app=current_app,
+            update_data=update_data,
+        )
+
+        return AppUpdateResponse(
+            app_id=updated_app.app_id,
+            app_name=updated_app.app_name,
+            domain=updated_app.domain,
+            default_chat_prompt=updated_app.default_chat_prompt,
+            chat_callback=updated_app.chat_callback_url,
+            upload_callback=updated_app.upload_callback_url,
+            callback_token=updated_app.callback_token,
+            updated_at=updated_app.updated_at,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update app: {str(e)}")

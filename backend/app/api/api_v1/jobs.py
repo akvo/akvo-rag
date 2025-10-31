@@ -41,18 +41,35 @@ async def create_job(
         Form(
             ...,
             description=(
-                "JSON string defining the job details.\n\n"
-                "Example:\n"
-                "{\n"
-                '  "job": "chat",\n'
-                '  "prompt": "Explain AI simply.",\n'
-                '  "chats": [\n'
-                '    {"role": "user", "content": "What is AI?"},\n'
-                '    {"role": "assistant", "content": "AI means Artificial Intelligence."}\n'
-                '  ],\n'
-                '  "callback_params": {"reply_to": "wa:+1234"},\n'
-                '  "trace_id": "trace_abc_123"\n'
-                "}"
+                """
+                JSON string defining the job details.
+                Example chat job:
+                "{
+                    "job": "chat",
+                    "prompt": "Explain AI simply.",
+                    "chats": [
+                        {"role": "user", "content": "What is AI?"},
+                        {"role": "assistant", "content": "AI means Artificial Intelligence."}
+                    ],
+                    "callback_params": {"reply_to": "wa:+1234"},
+                    "trace_id": "trace_abc_123"
+                }"
+
+                ---
+
+                Example upload job:
+                "{
+                    "job": "upload",
+                    "metadata": {
+                        "kb_id": 1,
+                        "title": "Chlorination SOP",
+                        "tags": ["chlorine","ops"]
+                    },
+                    "callback_params": {
+                        "ui_upload_id": "up_456"
+                    }
+                }"
+                """
             ),
         ),
     ],
@@ -93,6 +110,7 @@ async def create_job(
             job_id=job_record.id,
             data=data,
             callback_url=current_app.chat_callback_url,
+            app_default_prompt=current_app.default_chat_prompt,
             knowledge_base_ids=knowledge_base_ids,
         )
     elif job_type == "upload":
