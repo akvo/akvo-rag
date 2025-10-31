@@ -32,7 +32,13 @@ async def execute_chat_job(
         job_payload_prompt = data.get("prompt") or None
         app_final_prompt = (
             job_payload_prompt if job_payload_prompt else app_default_prompt
-        ) or ""
+        ) or None
+        app_final_prompt = (
+            "**IMPORTANT: Follow these additional rules strictly:**\n\n"
+            + app_final_prompt
+            if app_final_prompt
+            else ""
+        )
         # eol prompt from app logic
 
         prompt_service = PromptService(db=db)
@@ -57,11 +63,7 @@ async def execute_chat_job(
         qa_prompt = prompt_service.get_full_qa_strict_prompt()
 
         # combined prompt
-        final_prompt = (
-            qa_prompt
-            + "\n\n**IMPORTANT: Follow these additional rules strictly:**\n\n"
-            + app_final_prompt
-        )
+        final_prompt = qa_prompt + "\n\n" + app_final_prompt
         logger.info("[Chat job] BEGIN final prompt: ==============")
         logger.info(f"[Chat job] final prompt: {final_prompt}")
         logger.info("[Chat job] EOL final prompt: ==============")
