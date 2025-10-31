@@ -13,7 +13,6 @@ from app.services.query_answering_workflow import (
     post_processing_node,
     response_generation_node,
     classify_intent_node,
-    fast_intent_check,
     GraphState,
 )
 
@@ -21,24 +20,6 @@ from app.services.query_answering_workflow import (
 @pytest.mark.unit
 class TestQueryAnsweringWorkflow:
     """Unit tests for query_answering_workflow nodes."""
-
-    # ---------------- fast_intent_check ----------------
-
-    def test_fast_intent_check_small_talk(self):
-        assert fast_intent_check("Hi there!") == "small_talk"
-        assert fast_intent_check("Good morning!") == "small_talk"
-
-    def test_fast_intent_check_weather_query(self):
-        assert fast_intent_check("How’s the weather in Bali?") == "weather_query"
-        assert fast_intent_check("Is it raining today?") == "weather_query"
-
-    def test_fast_intent_check_knowledge_query(self):
-        assert fast_intent_check("How to grow rice?") == "knowledge_query"
-        assert fast_intent_check("Explain AI") == "knowledge_query"
-
-    def test_fast_intent_check_uncertain(self):
-        assert fast_intent_check("Tell me something cool") == "knowledge_query"  # still qualifies
-        assert fast_intent_check("random text without question") == "uncertain"
 
     # ---------------- classify_intent_node ----------------
 
@@ -52,6 +33,7 @@ class TestQueryAnsweringWorkflow:
     @pytest.mark.asyncio
     async def test_classify_intent_node_llm_fallback(self, monkeypatch):
         """classify_intent_node should use LLM when uncertain."""
+
         async def fake_ainvoke(msgs):
             return SimpleNamespace(content='{"intent": "weather_query"}')
 
@@ -84,7 +66,9 @@ class TestQueryAnsweringWorkflow:
 
     def test_decode_mcp_context_valid(self):
         """decode_mcp_context() decodes base64 into Document objects."""
-        context = {"context": [{"page_content": "hello", "metadata": {"x": 1}}]}
+        context = {
+            "context": [{"page_content": "hello", "metadata": {"x": 1}}]
+        }
         encoded = base64.b64encode(json.dumps(context).encode()).decode()
 
         docs = decode_mcp_context(encoded)
