@@ -17,7 +17,7 @@ async def execute_chat_job(
     data: dict,
     callback_url: str,
     app_default_prompt: str,
-    knowledge_base_ids: List[int] = []
+    knowledge_base_ids: List[int] = [],
 ):
     """Background job executor for chat jobs (non-streaming)."""
     job = JobService.get_job(db, job_id)
@@ -58,6 +58,7 @@ async def execute_chat_job(
 
         # combined prompt
         final_prompt = qa_prompt + "\n\n" + app_final_prompt
+        logger.info(f"Chat job final prompt: {final_prompt}")
 
         state = {
             "query": query,
@@ -80,11 +81,15 @@ async def execute_chat_job(
         citations = []
         for context in result_state.get("context", []):
             doc_metadata = context.metadata or {}
-            citations.append({
-                "document": doc_metadata.get("source") or doc_metadata.get("title"),
-                "chunk": context.page_content,
-                "page": doc_metadata.get("page_label") or doc_metadata.get("page"),
-            })
+            citations.append(
+                {
+                    "document": doc_metadata.get("source")
+                    or doc_metadata.get("title"),
+                    "chunk": context.page_content,
+                    "page": doc_metadata.get("page_label")
+                    or doc_metadata.get("page"),
+                }
+            )
 
         output = {"answer": answer, "citations": citations}
 
