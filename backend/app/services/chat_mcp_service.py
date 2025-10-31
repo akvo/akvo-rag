@@ -9,6 +9,8 @@ from app.services.prompt_service import PromptService
 from app.services.system_settings_service import SystemSettingsService
 
 from app.services.query_answering_workflow import (
+    classify_intent_node,
+    small_talk_node,
     contextualize_node,
     scoping_node,
     run_mcp_tool_node,
@@ -93,7 +95,24 @@ async def stream_mcp_response(
             },
         }
 
-        # 4) Run MCP nodes up to post-processing to
+        # 4) Clasify intent
+        state = await classify_intent_node(state)
+        intent = state.get("intent", "knowledge_query")
+        logger.info(f"[stream_mcp_response] Detected intent: {intent}")
+
+        # 5) Handle small talk directly
+        if intent == "small_talk":
+            state = await small_talk_node(state)
+            reply = state.get("answer", "Hello! How can I help you today?")
+            bot_message.content = reply
+            db.commit()
+
+            yield f'0:"{reply}"\n'
+            yield 'd:{"finishReason":"stop"}\n'
+            return
+
+        # =============== normal MCP process ============================
+        # 6) Run MCP nodes up to post-processing to
         # get `state["context"]` and `state["contextual_query"]`
         # note: contextualize_node and post_processing_node are sync,
         # scoping and run_mcp_tool_node are async
@@ -102,7 +121,7 @@ async def stream_mcp_response(
         state = await run_mcp_tool_node(state)
         state = await post_processing_node(state)
 
-        # 5) If context exists, stream it first (base64 + separator)
+        # 7) If context exists, stream it first (base64 + separator)
         context_prefix = ""
         if (
             state.get("context")
@@ -125,7 +144,7 @@ async def stream_mcp_response(
             # Vercel protocol: send context marker first
             yield f'0:"{context_prefix}"\n'
 
-        # 6) Build the QA chain and stream tokens directly from the LLM chain
+        # 8) Build the QA chain and stream tokens directly from the LLM chain
         llm = LLMFactory.create()
 
         qa_prompt_template = ChatPromptTemplate.from_messages(
