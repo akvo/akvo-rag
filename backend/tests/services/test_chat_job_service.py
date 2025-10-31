@@ -26,7 +26,10 @@ class TestChatJobService:
             "prompt": "Explain AI in simple terms.",
             "chats": [
                 {"role": "user", "content": "What is AI?"},
-                {"role": "assistant", "content": "AI stands for Artificial Intelligence."},
+                {
+                    "role": "assistant",
+                    "content": "AI stands for Artificial Intelligence.",
+                },
             ],
             "callback_params": {"reply_to": "wa:+679123456", "mode": "reply"},
             "trace_id": "trace_12345",
@@ -48,28 +51,72 @@ class TestChatJobService:
 
     @pytest.mark.asyncio
     async def test_execute_chat_job_success(
-        self, mock_db, sample_job_id, sample_data, knowledge_base_ids, chat_callback_url, mock_app_default_prompt
+        self,
+        mock_db,
+        sample_job_id,
+        sample_data,
+        knowledge_base_ids,
+        chat_callback_url,
+        mock_app_default_prompt,
     ):
-        """✅ Test successful chat job execution with correct callback payload."""
+        """
+        ✅ Test successful chat job execution with correct callback payload.
+        """
         mock_job = Mock()
         mock_job.id = sample_job_id
-        mock_job.callback_params = {"reply_to": "wa:+679123456", "mode": "reply"}
+        mock_job.callback_params = {
+            "reply_to": "wa:+679123456",
+            "mode": "reply",
+        }
 
         with (
-            patch.object(chat_job_service.JobService, "get_job", return_value=mock_job),
-            patch.object(chat_job_service.JobService, "update_status_to_running") as mock_run,
-            patch.object(chat_job_service.JobService, "update_status_to_completed") as mock_done,
-            patch.object(chat_job_service.JobService, "update_status_to_failed") as mock_fail,
-            patch.object(chat_job_service.PromptService, "__init__", return_value=None),
-            patch.object(chat_job_service.PromptService, "get_full_contextualize_prompt", return_value="ctx"),
-            patch.object(chat_job_service.PromptService, "get_full_qa_strict_prompt", return_value="qa"),
-            patch.object(chat_job_service.SystemSettingsService, "__init__", return_value=None),
-            patch.object(chat_job_service.SystemSettingsService, "get_top_k", return_value=5),
-            patch.object(chat_job_service, "query_answering_workflow") as mock_workflow,
-            patch("app.services.chat_job_service.send_callback_async", new_callable=AsyncMock) as mock_callback,
+            patch.object(
+                chat_job_service.JobService, "get_job", return_value=mock_job
+            ),
+            patch.object(
+                chat_job_service.JobService, "update_status_to_running"
+            ) as mock_run,
+            patch.object(
+                chat_job_service.JobService, "update_status_to_completed"
+            ) as mock_done,
+            patch.object(
+                chat_job_service.JobService, "update_status_to_failed"
+            ) as mock_fail,
+            patch.object(
+                chat_job_service.PromptService, "__init__", return_value=None
+            ),
+            patch.object(
+                chat_job_service.PromptService,
+                "get_full_contextualize_prompt",
+                return_value="ctx",
+            ),
+            patch.object(
+                chat_job_service.PromptService,
+                "get_full_qa_strict_prompt",
+                return_value="qa",
+            ),
+            patch.object(
+                chat_job_service.SystemSettingsService,
+                "__init__",
+                return_value=None,
+            ),
+            patch.object(
+                chat_job_service.SystemSettingsService,
+                "get_top_k",
+                return_value=5,
+            ),
+            patch.object(
+                chat_job_service, "query_answering_workflow"
+            ) as mock_workflow,
+            patch(
+                "app.services.chat_job_service.send_callback_async",
+                new_callable=AsyncMock,
+            ) as mock_callback,
         ):
             # Mock successful workflow
-            mock_workflow.ainvoke = AsyncMock(return_value={"answer": "AI means Artificial Intelligence"})
+            mock_workflow.ainvoke = AsyncMock(
+                return_value={"answer": "AI means Artificial Intelligence"}
+            )
 
             # Run function
             await execute_chat_job(
@@ -92,7 +139,13 @@ class TestChatJobService:
 
     @pytest.mark.asyncio
     async def test_execute_chat_job_failure(
-        self, mock_db, sample_job_id, sample_data, knowledge_base_ids, chat_callback_url, mock_app_default_prompt
+        self,
+        mock_db,
+        sample_job_id,
+        sample_data,
+        knowledge_base_ids,
+        chat_callback_url,
+        mock_app_default_prompt,
     ):
         """❌ Test workflow crash handling."""
         mock_job = Mock()
@@ -100,14 +153,29 @@ class TestChatJobService:
         mock_job.callback_params = {}
 
         with (
-            patch.object(chat_job_service.JobService, "get_job", return_value=mock_job),
-            patch.object(chat_job_service.JobService, "update_status_to_running"),
-            patch.object(chat_job_service.JobService, "update_status_to_completed"),
-            patch.object(chat_job_service.JobService, "update_status_to_failed") as mock_fail,
-            patch.object(chat_job_service, "query_answering_workflow") as mock_workflow,
-            patch("app.services.chat_job_service.send_callback_async", new_callable=AsyncMock),
+            patch.object(
+                chat_job_service.JobService, "get_job", return_value=mock_job
+            ),
+            patch.object(
+                chat_job_service.JobService, "update_status_to_running"
+            ),
+            patch.object(
+                chat_job_service.JobService, "update_status_to_completed"
+            ),
+            patch.object(
+                chat_job_service.JobService, "update_status_to_failed"
+            ) as mock_fail,
+            patch.object(
+                chat_job_service, "query_answering_workflow"
+            ) as mock_workflow,
+            patch(
+                "app.services.chat_job_service.send_callback_async",
+                new_callable=AsyncMock,
+            ),
         ):
-            mock_workflow.ainvoke = AsyncMock(side_effect=Exception("Workflow crashed"))
+            mock_workflow.ainvoke = AsyncMock(
+                side_effect=Exception("Workflow crashed")
+            )
 
             await execute_chat_job(
                 db=mock_db,
@@ -130,9 +198,16 @@ class TestChatJobService:
         mock_job.callback_params = {}
 
         with (
-            patch.object(chat_job_service.JobService, "get_job", return_value=mock_job),
-            patch.object(chat_job_service, "query_answering_workflow") as mock_workflow,
-            patch("app.services.chat_job_service.send_callback_async", new_callable=AsyncMock) as mock_callback,
+            patch.object(
+                chat_job_service.JobService, "get_job", return_value=mock_job
+            ),
+            patch.object(
+                chat_job_service, "query_answering_workflow"
+            ) as mock_workflow,
+            patch(
+                "app.services.chat_job_service.send_callback_async",
+                new_callable=AsyncMock,
+            ) as mock_callback,
         ):
             mock_workflow.ainvoke = AsyncMock(return_value={"answer": "ok"})
 
@@ -159,14 +234,39 @@ class TestChatJobService:
         mock_job.id = sample_job_id
 
         with (
-            patch.object(chat_job_service.JobService, "get_job", return_value=mock_job),
-            patch.object(chat_job_service.PromptService, "__init__", return_value=None),
-            patch.object(chat_job_service.PromptService, "get_full_contextualize_prompt", return_value="ctx"),
-            patch.object(chat_job_service.PromptService, "get_full_qa_strict_prompt", return_value="qa"),
-            patch.object(chat_job_service.SystemSettingsService, "__init__", return_value=None),
-            patch.object(chat_job_service.SystemSettingsService, "get_top_k", return_value=5),
-            patch.object(chat_job_service, "query_answering_workflow") as mock_workflow,
-            patch("app.services.chat_job_service.send_callback_async", new_callable=AsyncMock),
+            patch.object(
+                chat_job_service.JobService, "get_job", return_value=mock_job
+            ),
+            patch.object(
+                chat_job_service.PromptService, "__init__", return_value=None
+            ),
+            patch.object(
+                chat_job_service.PromptService,
+                "get_full_contextualize_prompt",
+                return_value="ctx",
+            ),
+            patch.object(
+                chat_job_service.PromptService,
+                "get_full_qa_strict_prompt",
+                return_value="qa",
+            ),
+            patch.object(
+                chat_job_service.SystemSettingsService,
+                "__init__",
+                return_value=None,
+            ),
+            patch.object(
+                chat_job_service.SystemSettingsService,
+                "get_top_k",
+                return_value=5,
+            ),
+            patch.object(
+                chat_job_service, "query_answering_workflow"
+            ) as mock_workflow,
+            patch(
+                "app.services.chat_job_service.send_callback_async",
+                new_callable=AsyncMock,
+            ),
         ):
             mock_workflow.ainvoke = AsyncMock(return_value={"answer": "test"})
 
@@ -194,14 +294,39 @@ class TestChatJobService:
         data = {"chats": [{"role": "user", "content": "Hello"}]}  # no "prompt"
 
         with (
-            patch.object(chat_job_service.JobService, "get_job", return_value=mock_job),
-            patch.object(chat_job_service.PromptService, "__init__", return_value=None),
-            patch.object(chat_job_service.PromptService, "get_full_contextualize_prompt", return_value="ctx"),
-            patch.object(chat_job_service.PromptService, "get_full_qa_strict_prompt", return_value="qa"),
-            patch.object(chat_job_service.SystemSettingsService, "__init__", return_value=None),
-            patch.object(chat_job_service.SystemSettingsService, "get_top_k", return_value=5),
-            patch.object(chat_job_service, "query_answering_workflow") as mock_workflow,
-            patch("app.services.chat_job_service.send_callback_async", new_callable=AsyncMock),
+            patch.object(
+                chat_job_service.JobService, "get_job", return_value=mock_job
+            ),
+            patch.object(
+                chat_job_service.PromptService, "__init__", return_value=None
+            ),
+            patch.object(
+                chat_job_service.PromptService,
+                "get_full_contextualize_prompt",
+                return_value="ctx",
+            ),
+            patch.object(
+                chat_job_service.PromptService,
+                "get_full_qa_strict_prompt",
+                return_value="qa",
+            ),
+            patch.object(
+                chat_job_service.SystemSettingsService,
+                "__init__",
+                return_value=None,
+            ),
+            patch.object(
+                chat_job_service.SystemSettingsService,
+                "get_top_k",
+                return_value=5,
+            ),
+            patch.object(
+                chat_job_service, "query_answering_workflow"
+            ) as mock_workflow,
+            patch(
+                "app.services.chat_job_service.send_callback_async",
+                new_callable=AsyncMock,
+            ),
         ):
             mock_workflow.ainvoke = AsyncMock(return_value={"answer": "ok"})
 
@@ -222,20 +347,51 @@ class TestChatJobService:
     async def test_prompt_logic_final_prompt_combines_qa_and_app_prompt(
         self, mock_db, sample_job_id, mock_app_default_prompt
     ):
-        """🧠 Ensure qa_prompt_str is built as qa_prompt + app_final_prompt with separator."""
+        """🧠
+        Ensure qa_prompt_str is built as qa_prompt + app_final_prompt with
+        separator.
+        """
         mock_job = Mock()
         mock_job.id = sample_job_id
-        data = {"prompt": "Custom job prompt", "chats": [{"role": "user", "content": "Hello"}]}
+        data = {
+            "prompt": "Custom job prompt",
+            "chats": [{"role": "user", "content": "Hello"}],
+        }
 
         with (
-            patch.object(chat_job_service.JobService, "get_job", return_value=mock_job),
-            patch.object(chat_job_service.PromptService, "__init__", return_value=None),
-            patch.object(chat_job_service.PromptService, "get_full_contextualize_prompt", return_value="CTX_PROMPT"),
-            patch.object(chat_job_service.PromptService, "get_full_qa_strict_prompt", return_value="QA_PROMPT"),
-            patch.object(chat_job_service.SystemSettingsService, "__init__", return_value=None),
-            patch.object(chat_job_service.SystemSettingsService, "get_top_k", return_value=3),
-            patch.object(chat_job_service, "query_answering_workflow") as mock_workflow,
-            patch("app.services.chat_job_service.send_callback_async", new_callable=AsyncMock),
+            patch.object(
+                chat_job_service.JobService, "get_job", return_value=mock_job
+            ),
+            patch.object(
+                chat_job_service.PromptService, "__init__", return_value=None
+            ),
+            patch.object(
+                chat_job_service.PromptService,
+                "get_full_contextualize_prompt",
+                return_value="CTX_PROMPT",
+            ),
+            patch.object(
+                chat_job_service.PromptService,
+                "get_full_qa_strict_prompt",
+                return_value="QA_PROMPT",
+            ),
+            patch.object(
+                chat_job_service.SystemSettingsService,
+                "__init__",
+                return_value=None,
+            ),
+            patch.object(
+                chat_job_service.SystemSettingsService,
+                "get_top_k",
+                return_value=3,
+            ),
+            patch.object(
+                chat_job_service, "query_answering_workflow"
+            ) as mock_workflow,
+            patch(
+                "app.services.chat_job_service.send_callback_async",
+                new_callable=AsyncMock,
+            ),
         ):
             mock_workflow.ainvoke = AsyncMock(return_value={"answer": "done"})
 
@@ -249,4 +405,7 @@ class TestChatJobService:
             )
 
             state_arg = mock_workflow.ainvoke.call_args[0][0]
-            assert state_arg["qa_prompt_str"] == "QA_PROMPT\n\nCustom job prompt"
+            assert (
+                state_arg["qa_prompt_str"]
+                == "QA_PROMPT\n\n**IMPORTANT: Follow these additional rules strictly:**\n\nCustom job prompt"
+            )

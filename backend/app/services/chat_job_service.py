@@ -19,7 +19,7 @@ async def execute_chat_job(
     app_default_prompt: str,
     knowledge_base_ids: List[int] = [],
 ):
-    """Background job executor for chat jobs (non-streaming)."""
+    """Background job executor for [chat job]s (non-streaming)."""
     job = JobService.get_job(db, job_id)
     if not job:
         return
@@ -57,8 +57,14 @@ async def execute_chat_job(
         qa_prompt = prompt_service.get_full_qa_strict_prompt()
 
         # combined prompt
-        final_prompt = qa_prompt + "\n\n" + app_final_prompt
-        logger.info(f"Chat job final prompt: {final_prompt}")
+        final_prompt = (
+            qa_prompt
+            + "\n\n**IMPORTANT: Follow these additional rules strictly:**\n\n"
+            + app_final_prompt
+        )
+        logger.info("[Chat job] BEGIN final prompt: ==============")
+        logger.info(f"[Chat job] final prompt: {final_prompt}")
+        logger.info("[Chat job] EOL final prompt: ==============")
 
         state = {
             "query": query,
@@ -70,10 +76,10 @@ async def execute_chat_job(
                 "top_k": top_k,
             },
         }
-        logger.info(f"Chat job {job_id} starting with state: {state}")
+        logger.info(f"[Chat job] {job_id} starting with state: {state}")
 
         result_state = await query_answering_workflow.ainvoke(state)
-        logger.info(f"Chat job {job_id} completed workflow")
+        logger.info(f"[Chat job] {job_id} completed workflow")
 
         answer = result_state.get("answer", "")
         error = result_state.get("error")
@@ -108,7 +114,7 @@ async def execute_chat_job(
         return output
 
     except Exception as e:
-        logger.exception(f"Chat job execution failed: {e}")
+        logger.exception(f"[Chat job] execution failed: {e}")
         JobService.update_status_to_failed(db, job_id, output=str(e))
         await send_callback_async(callback_url, job, error=str(e))
         return str(e)

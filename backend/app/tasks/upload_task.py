@@ -9,7 +9,6 @@ from app.celery_app import celery_app
 from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 from app.services.job_service import JobService
 from app.services.file_storage_service import FileStorageService
-from app.models.job import Job
 from app.utils import send_callback
 
 logger = logging.getLogger(__name__)
@@ -31,7 +30,7 @@ def upload_full_process_task(
         # 🔍 Get job record
         job = JobService.get_job(db=db, job_id=job_id)
         if not job:
-            logger.warning(f"Job {job_id} not found")
+            logger.warning(f"[Upload job] Job {job_id} not found")
             return
 
         # 🚀 Update to running
@@ -48,10 +47,9 @@ def upload_full_process_task(
                 )
             )
         except Exception as e:
-            logger.warning(f"Error processing upload: {e}")
+            logger.warning(f"[Upload job] Error processing upload: {e}")
             FileStorageService.mark_failed(file_paths)
             raise  # Re-raise so Celery marks it as failed
-
 
         output = json.dumps(result)
 
@@ -65,9 +63,11 @@ def upload_full_process_task(
         # 🧹 Cleanup only if all succeeded
         try:
             FileStorageService.cleanup_files(file_paths)
-            logger.info(f"Cleaned up uploaded files: {file_paths}")
+            logger.info(
+                f"[Upload job] Cleaned up uploaded files: {file_paths}"
+            )
         except Exception as clean_err:
-            logger.warning(f"Cleanup failed: {clean_err}")
+            logger.warning(f"[Upload job] Cleanup failed: {clean_err}")
 
         # 🔔 Callback if URL provided
         send_callback(callback_url, job, output=output)
@@ -76,11 +76,9 @@ def upload_full_process_task(
 
     except Exception as e:
         # ❌ Failure: mark job failed
-        JobService.update_status_to_failed(
-            db=db, job_id=job_id, output=str(e)
-        )
+        JobService.update_status_to_failed(db=db, job_id=job_id, output=str(e))
 
-        logger.exception(f"Upload job {job_id} failed: {e}")
+        logger.exception(f"[Upload job] Upload job {job_id} failed: {e}")
 
         # ⚠️ Keep files for inspection/debugging
         failed_dir = "/mnt/uploads/failed"
@@ -89,7 +87,9 @@ def upload_full_process_task(
             if os.path.exists(path):
                 new_path = os.path.join(failed_dir, os.path.basename(path))
                 os.rename(path, new_path)
-                logger.warning(f"Moved failed file {path} → {new_path}")
+                logger.warning(
+                    f"[Upload job] Moved failed file {path} → {new_path}"
+                )
 
         return str(e)
 
