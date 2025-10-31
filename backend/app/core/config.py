@@ -74,6 +74,12 @@ class Settings(BaseSettings):
         "KNOWLEDGE_BASES_API_ENDPOINT", "http:localhost:8100"
     )
 
+    # Weather MCP Server
+    USE_ONLY_FREE_WEATHER_MCP_TOOLS: bool = True
+    WEATHER_MCP: str = os.getenv(
+        "WEATHER_MCP", "http://localhost:8200/mcp/"
+    )
+
     class Config:
         env_file = ".env"
 

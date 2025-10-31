@@ -139,14 +139,42 @@ class TestQueryAnsweringWorkflow:
         assert new_state["context"][0].page_content == "doc"
 
     @pytest.mark.asyncio
-    async def test_post_processing_node_invalid(self):
-        """post_processing_node() falls back to empty context on error."""
+    async def test_post_processing_node_can_handle_dict(self):
+        """post_processing_node() can handle dict."""
         state: GraphState = {
-            "mcp_result": MagicMock(content=[MagicMock(text="not-json")]),
+            "query": "",
+            "chat_history": [],
+            "contextualize_prompt_str": "",
+            "qa_prompt_str": "",
+            "contextual_query": "",
+            "scope": {},
+            "mcp_result": {"weather": "sunny"},
+            "context": [],
+            "answer": "",
         }
 
         new_state = await post_processing_node(state)
-        assert new_state["context"] == []
+        assert new_state["context"] == [
+            Document(metadata={'source': 'mcp_rest_result'}, page_content='{\n  "weather": "sunny"\n}'),]
+
+    @pytest.mark.asyncio
+    async def test_post_processing_node_can_handle_raw_text(self):
+        """post_processing_node() can handle raw text."""
+        state: GraphState = {
+            "query": "",
+            "chat_history": [],
+            "contextualize_prompt_str": "",
+            "qa_prompt_str": "",
+            "contextual_query": "",
+            "scope": {},
+            "mcp_result": "Just some text response",
+            "context": [],
+            "answer": "",
+        }
+
+        new_state = await post_processing_node(state)
+        assert new_state["context"] == [
+            Document(metadata={'source': 'mcp_rest_result'}, page_content='{\n  "raw_text": "Just some text response"\n}'),]
 
     # ---------------- response_generation_node ----------------
 
