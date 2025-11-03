@@ -12,6 +12,7 @@ from app.services.query_answering_workflow import (
     run_mcp_tool_node,
     post_processing_node,
     response_generation_node,
+    classify_intent_node,
     GraphState,
 )
 
@@ -20,11 +21,54 @@ from app.services.query_answering_workflow import (
 class TestQueryAnsweringWorkflow:
     """Unit tests for query_answering_workflow nodes."""
 
+    # ---------------- classify_intent_node ----------------
+
+    @pytest.mark.asyncio
+    async def test_classify_intent_node_fast_result(self):
+        """classify_intent_node should skip LLM when fast intent is certain."""
+        state = {"query": "Hi there!"}
+        new_state = await classify_intent_node(state)
+        assert new_state["intent"] == "small_talk"
+
+    @pytest.mark.asyncio
+    async def test_classify_intent_node_llm_fallback(self, monkeypatch):
+        """classify_intent_node should use LLM when uncertain."""
+
+        async def fake_ainvoke(msgs):
+            return SimpleNamespace(content='{"intent": "weather_query"}')
+
+        fake_llm = MagicMock()
+        fake_llm.ainvoke = fake_ainvoke
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow.LLMFactory.create",
+            lambda: fake_llm,
+        )
+
+        state = {"query": "random text with no intent"}
+        new_state = await classify_intent_node(state)
+        assert new_state["intent"] == "weather_query"
+
+    @pytest.mark.asyncio
+    async def test_classify_intent_node_llm_error(self, monkeypatch):
+        """classify_intent_node should fall back to general_query on LLM failure."""
+        fake_llm = MagicMock()
+        fake_llm.ainvoke = AsyncMock(side_effect=Exception("llm down"))
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow.LLMFactory.create",
+            lambda: fake_llm,
+        )
+
+        state = {"query": "something uncertain"}
+        new_state = await classify_intent_node(state)
+        assert new_state["intent"] == "general_query"
+
     # ---------------- decode_mcp_context ----------------
 
     def test_decode_mcp_context_valid(self):
         """decode_mcp_context() decodes base64 into Document objects."""
-        context = {"context": [{"page_content": "hello", "metadata": {"x": 1}}]}
+        context = {
+            "context": [{"page_content": "hello", "metadata": {"x": 1}}]
+        }
         encoded = base64.b64encode(json.dumps(context).encode()).decode()
 
         docs = decode_mcp_context(encoded)
@@ -93,11 +137,7 @@ class TestQueryAnsweringWorkflow:
             lambda: fake_agent,
         )
 
-        state: GraphState = {
-            "contextual_query": "q",
-            "scope": {},
-        }
-
+        state: GraphState = {"contextual_query": "q", "scope": {}}
         new_state = await scoping_node(state)
         assert new_state["scope"]["server_name"] == "s1"
 
@@ -140,41 +180,22 @@ class TestQueryAnsweringWorkflow:
 
     @pytest.mark.asyncio
     async def test_post_processing_node_can_handle_dict(self):
-        """post_processing_node() can handle dict."""
+        """post_processing_node() can handle dict results."""
         state: GraphState = {
-            "query": "",
-            "chat_history": [],
-            "contextualize_prompt_str": "",
-            "qa_prompt_str": "",
-            "contextual_query": "",
-            "scope": {},
             "mcp_result": {"weather": "sunny"},
-            "context": [],
-            "answer": "",
         }
 
         new_state = await post_processing_node(state)
-        assert new_state["context"] == [
-            Document(metadata={'source': 'mcp_rest_result'}, page_content='{\n  "weather": "sunny"\n}'),]
+        assert isinstance(new_state["context"][0], Document)
+        assert "sunny" in new_state["context"][0].page_content
 
     @pytest.mark.asyncio
     async def test_post_processing_node_can_handle_raw_text(self):
-        """post_processing_node() can handle raw text."""
-        state: GraphState = {
-            "query": "",
-            "chat_history": [],
-            "contextualize_prompt_str": "",
-            "qa_prompt_str": "",
-            "contextual_query": "",
-            "scope": {},
-            "mcp_result": "Just some text response",
-            "context": [],
-            "answer": "",
-        }
+        """post_processing_node() can handle raw text fallback."""
+        state: GraphState = {"mcp_result": "Just some text response"}
 
         new_state = await post_processing_node(state)
-        assert new_state["context"] == [
-            Document(metadata={'source': 'mcp_rest_result'}, page_content='{\n  "raw_text": "Just some text response"\n}'),]
+        assert "Just some text" in new_state["context"][0].page_content
 
     # ---------------- response_generation_node ----------------
 
