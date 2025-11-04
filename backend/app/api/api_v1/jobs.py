@@ -103,9 +103,9 @@ async def create_job(
     )
 
     # ✅ Determine KB IDs
-    knowledge_base_ids = (
+    knowledge_base_ids = [
         [app_kb.knowledge_base_id] for app_kb in current_app.knowledge_bases
-    )
+    ]
 
     # 🚀 Dispatch tasks
     if job_type == "chat":

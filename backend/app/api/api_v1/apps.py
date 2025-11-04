@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.models.app import App
 from app.core.security import get_current_app
 from app.services.app_service import AppService
+from app.services.file_storage_service import FileStorageService
 from app.schemas.app import (
     AppRegisterRequest,
     AppRegisterResponse,
@@ -263,9 +264,14 @@ async def upload_and_process_documents(
             status_code=404, detail="Default KB not found for app"
         )
 
+    # ✅ Save uploaded files locally before sending to Celery
+    saved_file_paths = []
+    if files:
+        saved_file_paths = await FileStorageService.save_files(files)
+
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     await kb_mcp_endpoint_service.upload_and_process_documents(
-        kb_id=default_kb.knowledge_base_id, files=files
+        kb_id=default_kb.knowledge_base_id, files=saved_file_paths
     )
     return {
         "message": "Document received and is being processed.",
