@@ -225,3 +225,25 @@ class AppService:
         db.commit()
         db.refresh(app_kb)
         return app_kb
+
+    @staticmethod
+    def delete_knowledge_base(db: Session, app: App, kb_id: int):
+        """
+        Remove KB link for this app (not the MCP record itself).
+        """
+        app_kb = (
+            db.query(AppKnowledgeBase)
+            .filter(
+                AppKnowledgeBase.app_id == app.id,
+                AppKnowledgeBase.knowledge_base_id == kb_id,
+            )
+            .first()
+        )
+        if not app_kb:
+            raise HTTPException(
+                status_code=404,
+                detail="Knowledge base not found for this app.",
+            )
+
+        db.delete(app_kb)
+        db.commit()

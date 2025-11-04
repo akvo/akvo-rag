@@ -464,3 +464,77 @@ async def set_default_knowledge_base(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to set default KB: {str(e)}",
         )
+
+
+@router.delete(
+    "/knowledge-bases/{kb_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        403: {
+            "model": ErrorResponse,
+            "description": "Forbidden - Inactive app or cannot delete KB",
+        },
+        404: {
+            "model": ErrorResponse,
+            "description": "Knowledge base not found",
+        },
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
+async def delete_knowledge_base(
+    *,
+    kb_id: int,
+    db: Session = Depends(get_db),
+    current_app: App = Depends(get_current_app),
+) -> Response:
+    """
+    Delete a knowledge base for the authenticated app.
+    - Prevents deletion if:
+        - It's the last remaining KB, OR
+        - It's the default KB (unless another default exists)
+    """
+    # Find the KB under this app
+    app_kb = next(
+        (
+            kb
+            for kb in current_app.knowledge_bases
+            if kb.knowledge_base_id == kb_id
+        ),
+        None,
+    )
+    if not app_kb:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge base not found for this app.",
+        )
+
+    # Prevent deleting last KB
+    if len(current_app.knowledge_bases) <= 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot delete the last knowledge base for this app.",
+        )
+
+    # Prevent deleting the default KB
+    if app_kb.is_default:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot delete the default knowledge base. Set another KB as default first.",
+        )
+
+    try:
+        # Delete from MCP service
+        kb_mcp_service = KnowledgeBaseMCPEndpointService()
+        await kb_mcp_service.delete_kb(kb_id=kb_id)
+
+        # Delete link from app_knowledge_bases
+        AppService.delete_knowledge_base(db=db, app=current_app, kb_id=kb_id)
+
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete KB: {str(e)}",
+        )
