@@ -5,6 +5,14 @@ from datetime import datetime
 from app.models.app import AppStatus
 
 
+class KnowledgeBaseItem(BaseModel):
+    knowledge_base_id: int
+    is_default: bool
+
+    class Config:
+        from_attributes = True
+
+
 class AppRegisterRequest(BaseModel):
     app_name: str
     domain: str
@@ -26,7 +34,7 @@ class AppRegisterResponse(BaseModel):
     client_id: str
     access_token: str
     scopes: List[str]
-    knowledge_base_id: Optional[int] = None
+    knowledge_bases: List[KnowledgeBaseItem]
 
     class Config:
         from_attributes = True
@@ -71,7 +79,7 @@ class AppMeResponse(BaseModel):
     upload_callback_url: str
     scopes: List[str]
     status: AppStatus
-    knowledge_base_id: Optional[int] = None
+    knowledge_bases: List[KnowledgeBaseItem]
 
     class Config:
         from_attributes = True

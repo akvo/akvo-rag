@@ -2,7 +2,7 @@ from typing import Optional, List
 import secrets
 from sqlalchemy.orm import Session
 
-from app.models.app import App, AppStatus
+from app.models.app import App, AppStatus, AppKnowledgeBase
 from app.schemas.app import AppRegisterRequest, AppUpdateRequest
 
 # Default scopes for new apps
@@ -43,6 +43,7 @@ class AppService:
         if scopes is None:
             scopes = DEFAULT_SCOPES
 
+        # create app
         app = App(
             app_id=app_id,
             client_id=client_id,
@@ -55,8 +56,15 @@ class AppService:
             callback_token=register_data.callback_token or None,
             scopes=scopes,
             status=AppStatus.active,
-            knowledge_base_id=knowledge_base_id,
         )
+
+        # Set the default knowledge base
+        if knowledge_base_id is not None:
+            app_kb = AppKnowledgeBase(
+                knowledge_base_id=knowledge_base_id,
+                is_default=True,
+            )
+            app.knowledge_bases.append(app_kb)
 
         db.add(app)
         db.commit()
@@ -92,7 +100,9 @@ class AppService:
         return app
 
     @staticmethod
-    def get_app_by_access_token(db: Session, access_token: str) -> Optional[App]:
+    def get_app_by_access_token(
+        db: Session, access_token: str
+    ) -> Optional[App]:
         """Get app by access token."""
         return db.query(App).filter(App.access_token == access_token).first()
 
@@ -112,7 +122,9 @@ class AppService:
         return new_access_token
 
     @staticmethod
-    def rotate_callback_token(db: Session, app: App, new_callback_token: str) -> None:
+    def rotate_callback_token(
+        db: Session, app: App, new_callback_token: str
+    ) -> None:
         """Rotate the callback token for an app."""
         app.callback_token = new_callback_token
         db.add(app)

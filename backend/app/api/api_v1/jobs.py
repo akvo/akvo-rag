@@ -81,11 +81,15 @@ async def create_job(
 
     data = safe_json_parse(payload)
     if not isinstance(data, dict):
-        raise HTTPException(status_code=400, detail="Payload must be a JSON object")
+        raise HTTPException(
+            status_code=400, detail="Payload must be a JSON object"
+        )
 
     job_type = data.get("job")
     if not job_type:
-        raise HTTPException(status_code=400, detail="Missing 'job' field in payload")
+        raise HTTPException(
+            status_code=400, detail="Missing 'job' field in payload"
+        )
 
     # ✅ Save uploaded files locally before sending to Celery
     saved_file_paths = []
@@ -100,7 +104,7 @@ async def create_job(
 
     # ✅ Determine KB IDs
     knowledge_base_ids = (
-        [current_app.knowledge_base_id] if current_app.knowledge_base_id else []
+        [app_kb.knowledge_base_id] for app_kb in current_app.knowledge_bases
     )
 
     # 🚀 Dispatch tasks
@@ -115,14 +119,23 @@ async def create_job(
         )
     elif job_type == "upload":
         logger.info("🚀 Dispatching UPLOAD job to Celery")
+        default_kb = next(
+            (kb for kb in current_app.knowledge_bases if kb.is_default), None
+        )
+        if not default_kb:
+            raise HTTPException(
+                status_code=404, detail="Default KB not found for app"
+            )
         celery_task = upload_full_process_task.delay(
             job_id=job_record.id,
             file_paths=saved_file_paths,  # ✅ pass local file paths to Celery
             callback_url=current_app.upload_callback_url,
-            knowledge_base_id=current_app.knowledge_base_id,
+            knowledge_base_id=default_kb.knowledge_base_id,
         )
     else:
-        raise HTTPException(status_code=400, detail=f"Unsupported job type: {job_type}")
+        raise HTTPException(
+            status_code=400, detail=f"Unsupported job type: {job_type}"
+        )
 
     # ✅ Store Celery task ID
     JobService.update_celery_task_id(db, job_record.id, celery_task.id)

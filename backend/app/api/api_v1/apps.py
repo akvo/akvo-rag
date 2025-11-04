@@ -5,7 +5,7 @@ from fastapi import (
     HTTPException,
     status,
     Response,
-    UploadFile
+    UploadFile,
 )
 from sqlalchemy.orm import Session
 
@@ -22,7 +22,8 @@ from app.schemas.app import (
     ErrorResponse,
     DocumentUploadItem,
     AppUpdateRequest,
-    AppUpdateResponse
+    AppUpdateResponse,
+    KnowledgeBaseItem,
 )
 from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
@@ -60,24 +61,32 @@ async def register_app(
         kb_result = await kb_mcp_endpoint_service.create_kb(
             data={
                 "name": register_data.app_name,
-                "description": f"Knowledge base for {register_data.app_name}"
+                "description": f"Knowledge base for {register_data.app_name}",
             }
         )
-        knowledge_base_id = kb_result.get('id', None)
+        knowledge_base_id = kb_result.get("id", None)
 
         # create app
         app, access_token = AppService.create_app(
             db=db,
             register_data=register_data,
-            knowledge_base_id=knowledge_base_id
+            knowledge_base_id=knowledge_base_id,
         )
+
+        knowledge_bases = [
+            KnowledgeBaseItem(
+                knowledge_base_id=kb.knowledge_base_id,
+                is_default=kb.is_default,
+            )
+            for kb in app.knowledge_bases
+        ]
 
         return AppRegisterResponse(
             app_id=app.app_id,
             client_id=app.client_id,
             access_token=access_token,
             scopes=app.scopes,
-            knowledge_base_id=app.knowledge_base_id,
+            knowledge_bases=knowledge_bases,
         )
     except ValueError as e:
         raise HTTPException(
@@ -99,7 +108,10 @@ async def register_app(
             "model": ErrorResponse,
             "description": "Unauthorized - Invalid or missing token",
         },
-        403: {"model": ErrorResponse, "description": "Forbidden - Inactive app"},
+        403: {
+            "model": ErrorResponse,
+            "description": "Forbidden - Inactive app",
+        },
     },
 )
 def get_app_info(
@@ -112,6 +124,14 @@ def get_app_info(
     Requires Bearer token authentication via Authorization header.
     Returns app information if token is valid and app is active.
     """
+    knowledge_bases = [
+        KnowledgeBaseItem(
+            knowledge_base_id=kb.knowledge_base_id,
+            is_default=kb.is_default,
+        )
+        for kb in current_app.knowledge_bases
+    ]
+
     return AppMeResponse(
         app_id=current_app.app_id,
         app_name=current_app.app_name,
@@ -121,7 +141,7 @@ def get_app_info(
         upload_callback_url=current_app.upload_callback_url,
         scopes=current_app.scopes,
         status=current_app.status,
-        knowledge_base_id=current_app.knowledge_base_id,
+        knowledge_bases=knowledge_bases,
     )
 
 
@@ -133,7 +153,10 @@ def get_app_info(
             "model": ErrorResponse,
             "description": "Unauthorized - Invalid or missing token",
         },
-        403: {"model": ErrorResponse, "description": "Forbidden - Inactive app"},
+        403: {
+            "model": ErrorResponse,
+            "description": "Forbidden - Inactive app",
+        },
     },
 )
 def rotate_tokens(
@@ -154,19 +177,33 @@ def rotate_tokens(
     new_access_token = None
 
     if rotate_request.rotate_access_token:
-        new_access_token = AppService.rotate_access_token(db=db, app=current_app)
+        new_access_token = AppService.rotate_access_token(
+            db=db, app=current_app
+        )
 
     if rotate_request.rotate_callback_token:
         if not rotate_request.new_callback_token:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="new_callback_token is required when rotate_callback_token is true",
+                detail=(
+                    "new_callback_token is required when rotate_callback_token is true"
+                ),
             )
-        AppService.rotate_callback_token(db=db, app=current_app, new_callback_token=rotate_request.new_callback_token)
+        AppService.rotate_callback_token(
+            db=db,
+            app=current_app,
+            new_callback_token=rotate_request.new_callback_token,
+        )
 
-    if not rotate_request.rotate_access_token and not rotate_request.rotate_callback_token:
+    if (
+        not rotate_request.rotate_access_token
+        and not rotate_request.rotate_callback_token
+    ):
         message = "No tokens were rotated"
-    elif rotate_request.rotate_access_token and rotate_request.rotate_callback_token:
+    elif (
+        rotate_request.rotate_access_token
+        and rotate_request.rotate_callback_token
+    ):
         message = "Both tokens rotated successfully"
     elif rotate_request.rotate_access_token:
         message = "Access token rotated successfully"
@@ -189,7 +226,10 @@ def rotate_tokens(
             "model": ErrorResponse,
             "description": "Unauthorized - Invalid or missing token",
         },
-        403: {"model": ErrorResponse, "description": "Forbidden - Inactive app"},
+        403: {
+            "model": ErrorResponse,
+            "description": "Forbidden - Inactive app",
+        },
     },
 )
 def revoke_app(
@@ -209,18 +249,23 @@ def revoke_app(
 
 @router.post("/upload")
 async def upload_and_process_documents(
-    *,
-    files: List[UploadFile],
-    current_app: App = Depends(get_current_app)
+    *, files: List[UploadFile], current_app: App = Depends(get_current_app)
 ) -> Any:
     """
     Upload and process documents for the app in one go
     Send multiple files in a single request.
     """
+    default_kb = next(
+        (kb for kb in current_app.knowledge_bases if kb.is_default), None
+    )
+    if not default_kb:
+        raise HTTPException(
+            status_code=404, detail="Default KB not found for app"
+        )
+
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     await kb_mcp_endpoint_service.upload_and_process_documents(
-        kb_id=current_app.knowledge_base_id,
-        files=files
+        kb_id=default_kb.knowledge_base_id, files=files
     )
     return {
         "message": "Document received and is being processed.",
@@ -229,16 +274,21 @@ async def upload_and_process_documents(
 
 
 @router.get("/documents", response_model=List[DocumentUploadItem])
-async def get_documents(
-    *,
-    current_app: App = Depends(get_current_app)
-) -> Any:
+async def get_documents(*, current_app: App = Depends(get_current_app)) -> Any:
     """
     Get documents for the app's knowledge base.
     """
+    default_kb = next(
+        (kb for kb in current_app.knowledge_bases if kb.is_default), None
+    )
+    if not default_kb:
+        raise HTTPException(
+            status_code=404, detail="Default KB not found for app"
+        )
+
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     res = await kb_mcp_endpoint_service.get_documents_upload(
-        kb_id=current_app.knowledge_base_id,
+        kb_id=default_kb.knowledge_base_id,
     )
     return res
 
@@ -248,8 +298,14 @@ async def get_documents(
     response_model=AppUpdateResponse,
     responses={
         400: {"model": ErrorResponse, "description": "Validation error"},
-        401: {"model": ErrorResponse, "description": "Unauthorized - Invalid or missing token"},
-        403: {"model": ErrorResponse, "description": "Forbidden - Inactive app"},
+        401: {
+            "model": ErrorResponse,
+            "description": "Unauthorized - Invalid or missing token",
+        },
+        403: {
+            "model": ErrorResponse,
+            "description": "Forbidden - Inactive app",
+        },
         404: {"model": ErrorResponse, "description": "App not found"},
     },
 )
@@ -291,6 +347,11 @@ def update_app(
             updated_at=updated_app.updated_at,
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+        )
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update app: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update app: {str(e)}",
+        )
