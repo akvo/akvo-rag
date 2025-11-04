@@ -25,6 +25,8 @@ from app.schemas.app import (
     AppUpdateRequest,
     AppUpdateResponse,
     KnowledgeBaseItem,
+    KnowledgeBaseCreateRequest,
+    KnowledgeBaseResponse,
 )
 from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
@@ -329,12 +331,6 @@ def update_app(
 
     Requires Bearer token authentication.
     """
-    if not AppService.is_app_active(current_app):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="App is not active",
-        )
-
     try:
         updated_app = AppService.update_app(
             db=db,
@@ -360,4 +356,111 @@ def update_app(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update app: {str(e)}",
+        )
+
+
+@router.post(
+    "/knowledge-bases",
+    response_model=KnowledgeBaseResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        400: {"model": ErrorResponse, "description": "Validation error"},
+        403: {
+            "model": ErrorResponse,
+            "description": "Forbidden - Inactive app",
+        },
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
+async def create_knowledge_base(
+    *,
+    db: Session = Depends(get_db),
+    current_app: App = Depends(get_current_app),
+    request_data: KnowledgeBaseCreateRequest,
+) -> Any:
+    """
+    Create a new Knowledge Base for the current authenticated app.
+    - If `is_default=True`,
+        it will automatically unset the existing default KB.
+    """
+    try:
+        app_kb = await AppService.create_knowledge_base(
+            db=db,
+            app=current_app,
+            name=request_data.name,
+            description=request_data.description,
+            is_default=request_data.is_default,
+        )
+
+        return KnowledgeBaseResponse(
+            id=app_kb.id,
+            knowledge_base_id=app_kb.knowledge_base_id,
+            name=request_data.name,
+            description=request_data.description,
+            is_default=app_kb.is_default,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create KB: {str(e)}",
+        )
+
+
+@router.patch(
+    "/knowledge-bases/{kb_id}/default",
+    response_model=KnowledgeBaseResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        403: {
+            "model": ErrorResponse,
+            "description": "Forbidden - Inactive app",
+        },
+        404: {
+            "model": ErrorResponse,
+            "description": "Knowledge base not found",
+        },
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
+async def set_default_knowledge_base(
+    *,
+    kb_id: int,
+    db: Session = Depends(get_db),
+    current_app: App = Depends(get_current_app),
+) -> Any:
+    """
+    Set a specific KB as the default for the authenticated app.
+    - Automatically unsets the previous default KB.
+    - Returns the updated KB record.
+    """
+    if current_app.status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="App must be active to change default KB.",
+        )
+
+    try:
+        app_kb = AppService.set_default_knowledge_base(
+            db=db, app=current_app, kb_id=kb_id
+        )
+
+        # get KB detail from MCP service
+        kb_mcp_service = KnowledgeBaseMCPEndpointService()
+        kb_result = await kb_mcp_service.get_kb(kb_id=kb_id)
+
+        return KnowledgeBaseResponse(
+            id=app_kb.id,
+            knowledge_base_id=app_kb.knowledge_base_id,
+            name=kb_result.get("name", ""),
+            description=kb_result.get("description", ""),
+            is_default=app_kb.is_default,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to set default KB: {str(e)}",
         )

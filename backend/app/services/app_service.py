@@ -1,9 +1,13 @@
 from typing import Optional, List
 import secrets
 from sqlalchemy.orm import Session
+from fastapi import HTTPException
 
 from app.models.app import App, AppStatus, AppKnowledgeBase
 from app.schemas.app import AppRegisterRequest, AppUpdateRequest
+from mcp_clients.kb_mcp_endpoint_service import (
+    KnowledgeBaseMCPEndpointService,
+)
 
 # Default scopes for new apps
 DEFAULT_SCOPES = ["jobs.write", "kb.read", "kb.write", "apps.read"]
@@ -142,3 +146,82 @@ class AppService:
     def is_app_active(app: App) -> bool:
         """Check if app status is active."""
         return app.status == AppStatus.active
+
+    @staticmethod
+    def _unset_existing_default(db: Session, app: App) -> None:
+        """
+        Helper: Unset the current default KB for the given app.
+        This is a small helper to keep logic consistent across operations.
+        """
+        db.query(AppKnowledgeBase).filter(
+            AppKnowledgeBase.app_id == app.id,
+            AppKnowledgeBase.is_default == 1,
+        ).update({"is_default": 0})
+        db.flush()
+
+    @staticmethod
+    async def create_knowledge_base(
+        db: Session,
+        app: App,
+        name: str,
+        description: str | None = None,
+        is_default: bool = False,
+    ) -> AppKnowledgeBase:
+        """
+        Create a new KB for the given app and optionally set it as default.
+        """
+        # Create KB in MCP service
+        kb_mcp_service = KnowledgeBaseMCPEndpointService()
+        kb_result = await kb_mcp_service.create_kb(
+            data={
+                "name": name,
+                "description": description or f"KB for {app.app_name}",
+            }
+        )
+
+        knowledge_base_id = kb_result.get("id")
+        if not knowledge_base_id:
+            raise HTTPException(
+                status_code=500, detail="Failed to create KB from MCP service"
+            )
+
+        # If new KB is default → unset existing default
+        if is_default:
+            AppService._unset_existing_default(db, app)
+
+        # Create record
+        app_kb = AppKnowledgeBase(
+            app_id=app.id,
+            knowledge_base_id=knowledge_base_id,
+            is_default=is_default,
+        )
+        db.add(app_kb)
+        db.commit()
+        db.refresh(app_kb)
+        return app_kb
+
+    @staticmethod
+    def set_default_knowledge_base(
+        db: Session, app: App, kb_id: int
+    ) -> AppKnowledgeBase:
+        """
+        Set the specified KB as the default for the given app.
+        """
+        app_kb = (
+            db.query(AppKnowledgeBase)
+            .filter_by(knowledge_base_id=kb_id, app_id=app.id)
+            .first()
+        )
+        if not app_kb:
+            raise HTTPException(
+                status_code=404, detail="Knowledge base not found for this app"
+            )
+
+        # Unset existing default
+        AppService._unset_existing_default(db, app)
+
+        # Set new default
+        app_kb.is_default = True
+        db.commit()
+        db.refresh(app_kb)
+        return app_kb
