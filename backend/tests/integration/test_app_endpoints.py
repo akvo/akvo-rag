@@ -32,7 +32,7 @@ def mock_mcp_create_kb():
         mock_create_kb.return_value = {
             "id": 42,
             "name": "Fake KB",
-            "description": "KB for testing"
+            "description": "KB for testing",
         }
         yield mock_create_kb
 
@@ -103,8 +103,10 @@ class TestAppRegistration:
         assert "client_id" in data
         assert "access_token" in data
         assert "scopes" in data
-        assert "knowledge_base_id" in data
-        assert data["knowledge_base_id"] == 42
+        assert "knowledge_bases" in data
+        assert data["knowledge_bases"] == [
+            {"knowledge_base_id": 42, "is_default": True}
+        ]
 
         # Verify ID prefixes
         assert data["app_id"].startswith("app_")
@@ -117,23 +119,33 @@ class TestAppRegistration:
         assert "kb.write" in data["scopes"]
         assert "apps.read" in data["scopes"]
 
-    def test_register_app_validates_https_chat_callback(self, client,sample_app_data):
+    def test_register_app_validates_https_chat_callback(
+        self, client, sample_app_data
+    ):
         """Test that non-HTTPS chat_callback URL is rejected."""
-        sample_app_data["chat_callback"] = "http://agriconnect.akvo.org/api/ai/callback"
+        sample_app_data["chat_callback"] = (
+            "http://agriconnect.akvo.org/api/ai/callback"
+        )
         response = client.post("/api/apps/register", json=sample_app_data)
 
         assert response.status_code == 422  # Validation error
         assert "https" in response.text.lower()
 
-    def test_register_app_validates_https_upload_callback(self, client, sample_app_data):
+    def test_register_app_validates_https_upload_callback(
+        self, client, sample_app_data
+    ):
         """Test that non-HTTPS upload_callback URL is rejected."""
-        sample_app_data["upload_callback"] = "http://agriconnect.akvo.org/api/kb/callback"
+        sample_app_data["upload_callback"] = (
+            "http://agriconnect.akvo.org/api/kb/callback"
+        )
         response = client.post("/api/apps/register", json=sample_app_data)
 
         assert response.status_code == 422  # Validation error
         assert "https" in response.text.lower()
 
-    def test_register_app_success_without_callback_token(self, client, sample_app_data):
+    def test_register_app_success_without_callback_token(
+        self, client, sample_app_data
+    ):
         """Test successful app registration returns credentials."""
 
         # reset callback token
@@ -148,8 +160,10 @@ class TestAppRegistration:
         assert "client_id" in data
         assert "access_token" in data
         assert "scopes" in data
-        assert "knowledge_base_id" in data
-        assert data["knowledge_base_id"] == 42
+        assert "knowledge_bases" in data
+        assert data["knowledge_bases"] == [
+            {"knowledge_base_id": 42, "is_default": True}
+        ]
 
         # Verify ID prefixes
         assert data["app_id"].startswith("app_")
@@ -184,11 +198,19 @@ class TestAppMe:
         assert data["app_id"] == registered_app["app_id"]
         assert data["app_name"] == "agriconnect"
         assert data["domain"] == "agriconnect.akvo.org/api"
-        assert data["chat_callback_url"] == "https://agriconnect.akvo.org/api/ai/callback"
-        assert data["upload_callback_url"] == "https://agriconnect.akvo.org/api/kb/callback"
+        assert (
+            data["chat_callback_url"]
+            == "https://agriconnect.akvo.org/api/ai/callback"
+        )
+        assert (
+            data["upload_callback_url"]
+            == "https://agriconnect.akvo.org/api/kb/callback"
+        )
         assert data["status"] == "active"
         assert data["scopes"] == registered_app["scopes"]
-        assert data["knowledge_base_id"] == 42
+        assert data["knowledge_bases"] == [
+            {"knowledge_base_id": 42, "is_default": True}
+        ]
 
     def test_app_me_returns_401_with_invalid_token(self, client):
         """Test /me endpoint returns 401 with invalid token."""
@@ -203,10 +225,16 @@ class TestAppMe:
 
         assert response.status_code == 401
 
-    def test_app_me_returns_403_for_inactive_app(self, client, db, registered_app):
+    def test_app_me_returns_403_for_inactive_app(
+        self, client, db, registered_app
+    ):
         """Test /me endpoint returns 403 for inactive app."""
         # Manually set app to revoked status
-        app = db.query(App).filter(App.app_id == registered_app["app_id"]).first()
+        app = (
+            db.query(App)
+            .filter(App.app_id == registered_app["app_id"])
+            .first()
+        )
         app.status = AppStatus.revoked
         db.commit()
         db.close()
@@ -232,7 +260,9 @@ class TestAppRotate:
         headers = {"Authorization": f"Bearer {old_token}"}
         payload = {"rotate_access_token": True, "rotate_callback_token": False}
 
-        response = client.post("/api/apps/rotate", json=payload, headers=headers)
+        response = client.post(
+            "/api/apps/rotate", json=payload, headers=headers
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -261,10 +291,12 @@ class TestAppRotate:
         payload = {
             "rotate_access_token": False,
             "rotate_callback_token": True,
-            "new_callback_token": "new_test_callback_token_456"
+            "new_callback_token": "new_test_callback_token_456",
         }
 
-        response = client.post("/api/apps/rotate", json=payload, headers=headers)
+        response = client.post(
+            "/api/apps/rotate", json=payload, headers=headers
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -276,7 +308,11 @@ class TestAppRotate:
         assert data["access_token"] is None
 
         # Verify the callback token was updated in the database
-        app = db.query(App).filter(App.app_id == registered_app["app_id"]).first()
+        app = (
+            db.query(App)
+            .filter(App.app_id == registered_app["app_id"])
+            .first()
+        )
         assert app.callback_token == "new_test_callback_token_456"
         db.close()
 
@@ -287,10 +323,12 @@ class TestAppRotate:
         payload = {
             "rotate_access_token": True,
             "rotate_callback_token": True,
-            "new_callback_token": "new_test_callback_token_789"
+            "new_callback_token": "new_test_callback_token_789",
         }
 
-        response = client.post("/api/apps/rotate", json=payload, headers=headers)
+        response = client.post(
+            "/api/apps/rotate", json=payload, headers=headers
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -298,20 +336,31 @@ class TestAppRotate:
         # Verify both tokens were rotated
         assert data["access_token"] is not None
         assert data["access_token"] != old_access_token
-        assert data["callback_token"] is None  # callback_token not returned in response
+        assert (
+            data["callback_token"] is None
+        )  # callback_token not returned in response
         assert data["message"] == "Both tokens rotated successfully"
 
         # Verify the callback token was updated in the database
-        app = db.query(App).filter(App.app_id == registered_app["app_id"]).first()
+        app = (
+            db.query(App)
+            .filter(App.app_id == registered_app["app_id"])
+            .first()
+        )
         assert app.callback_token == "new_test_callback_token_789"
         db.close()
 
     def test_rotate_no_tokens(self, client, registered_app):
         """Test rotate endpoint when no tokens are requested to rotate."""
         headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
-        payload = {"rotate_access_token": False, "rotate_callback_token": False}
+        payload = {
+            "rotate_access_token": False,
+            "rotate_callback_token": False,
+        }
 
-        response = client.post("/api/apps/rotate", json=payload, headers=headers)
+        response = client.post(
+            "/api/apps/rotate", json=payload, headers=headers
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -379,11 +428,19 @@ class TestAppUpload:
 
         # Create dummy files to upload
         files = [
-            ("files", ("doc1.txt", io.BytesIO(b"Test content 1"), "text/plain")),
-            ("files", ("doc2.txt", io.BytesIO(b"Test content 2"), "text/plain")),
+            (
+                "files",
+                ("doc1.txt", io.BytesIO(b"Test content 1"), "text/plain"),
+            ),
+            (
+                "files",
+                ("doc2.txt", io.BytesIO(b"Test content 2"), "text/plain"),
+            ),
         ]
 
-        response = client.post("/api/apps/upload", headers=headers, files=files)
+        response = client.post(
+            "/api/apps/upload", headers=headers, files=files
+        )
 
         # Assert response
         assert response.status_code == 200
@@ -407,13 +464,19 @@ class TestAppUpload:
             ("files", ("doc.txt", io.BytesIO(b"Test content"), "text/plain")),
         ]
 
-        response = client.post("/api/apps/upload", headers=headers, files=files)
+        response = client.post(
+            "/api/apps/upload", headers=headers, files=files
+        )
         assert response.status_code == 401
 
     def test_upload_forbidden_revoked_app(self, client, db, registered_app):
         """Test upload returns 403 for revoked app."""
         # Set app status to revoked manually
-        app = db.query(App).filter(App.app_id == registered_app["app_id"]).first()
+        app = (
+            db.query(App)
+            .filter(App.app_id == registered_app["app_id"])
+            .first()
+        )
         app.status = "revoked"
         db.commit()
         db.close()
@@ -423,7 +486,9 @@ class TestAppUpload:
             ("files", ("doc.txt", io.BytesIO(b"Test content"), "text/plain")),
         ]
 
-        response = client.post("/api/apps/upload", headers=headers, files=files)
+        response = client.post(
+            "/api/apps/upload", headers=headers, files=files
+        )
         assert response.status_code == 403
 
     def test_get_upload_docs(self, client, registered_app):

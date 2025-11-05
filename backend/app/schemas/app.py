@@ -1,8 +1,16 @@
 from typing import List, Optional
-from pydantic import BaseModel, HttpUrl, field_validator
+from pydantic import BaseModel, field_validator, Field
 from datetime import datetime
 
 from app.models.app import AppStatus
+
+
+class KnowledgeBaseItem(BaseModel):
+    knowledge_base_id: int
+    is_default: bool
+
+    class Config:
+        from_attributes = True
 
 
 class AppRegisterRequest(BaseModel):
@@ -26,7 +34,7 @@ class AppRegisterResponse(BaseModel):
     client_id: str
     access_token: str
     scopes: List[str]
-    knowledge_base_id: Optional[int] = None
+    knowledge_bases: List[KnowledgeBaseItem]
 
     class Config:
         from_attributes = True
@@ -71,7 +79,7 @@ class AppMeResponse(BaseModel):
     upload_callback_url: str
     scopes: List[str]
     status: AppStatus
-    knowledge_base_id: Optional[int] = None
+    knowledge_bases: List[KnowledgeBaseItem]
 
     class Config:
         from_attributes = True
@@ -108,3 +116,24 @@ class DocumentUploadItem(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class KnowledgeBaseCreateRequest(BaseModel):
+    name: str = Field(..., description="Name of the knowledge base")
+    description: Optional[str] = Field(
+        None, description="Description of the KB"
+    )
+    is_default: bool = Field(
+        False, description="Whether this KB is the default for the app"
+    )
+
+
+class KnowledgeBaseResponse(BaseModel):
+    id: int
+    knowledge_base_id: int
+    name: str
+    description: Optional[str]
+    is_default: bool
+
+    class Config:
+        from_attributes = True
