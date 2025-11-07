@@ -192,7 +192,14 @@ class KnowledgeBaseMCPEndpointService:
                 filename = os.path.basename(f)
                 content_type, _ = mimetypes.guess_type(filename)
                 file_payload.append(
-                    ("files", (filename, content, content_type or "application/octet-stream"))
+                    (
+                        "files",
+                        (
+                            filename,
+                            content,
+                            content_type or "application/octet-stream",
+                        ),
+                    )
                 )
             else:
                 raise ValueError(f"Invalid file input: {f!r}")

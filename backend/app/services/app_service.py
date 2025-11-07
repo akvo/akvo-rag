@@ -4,7 +4,11 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from app.models.app import App, AppStatus, AppKnowledgeBase
-from app.schemas.app import AppRegisterRequest, AppUpdateRequest
+from app.schemas.app import (
+    AppRegisterRequest,
+    AppUpdateRequest,
+    KnowledgeBaseResponse,
+)
 from mcp_clients.kb_mcp_endpoint_service import (
     KnowledgeBaseMCPEndpointService,
 )
@@ -201,11 +205,16 @@ class AppService:
         return app_kb
 
     @staticmethod
-    def set_default_knowledge_base(
-        db: Session, app: App, kb_id: int
-    ) -> AppKnowledgeBase:
+    async def update_knowledge_base(
+        db: Session,
+        app: App,
+        kb_id: int,
+        name: str | None = None,
+        description: str | None = None,
+        is_default: bool | None = None,
+    ) -> KnowledgeBaseResponse:
         """
-        Set the specified KB as the default for the given app.
+        Update knowledge base detail
         """
         app_kb = (
             db.query(AppKnowledgeBase)
@@ -217,14 +226,36 @@ class AppService:
                 status_code=404, detail="Knowledge base not found for this app"
             )
 
-        # Unset existing default
-        AppService._unset_existing_default(db, app)
+        kb_mcp_service = KnowledgeBaseMCPEndpointService()
 
-        # Set new default
-        app_kb.is_default = True
+        data = {}
+        if name is not None:
+            data["name"] = name
+        if description is not None:
+            data["description"] = description
+
+        kb_result = await kb_mcp_service.update_kb(
+            kb_id=kb_id,
+            data=data,
+        )
+        if not kb_result:
+            raise HTTPException(
+                status_code=500, detail="Failed to update KB from MCP service"
+            )
+
+        if is_default is not None:
+            # Update  default
+            app_kb.is_default = is_default
+
         db.commit()
         db.refresh(app_kb)
-        return app_kb
+        return KnowledgeBaseResponse(
+            id=app_kb.id,
+            knowledge_base_id=app_kb.knowledge_base_id,
+            name=kb_result.get("name"),
+            description=kb_result.get("description"),
+            is_default=app_kb.is_default,
+        )
 
     @staticmethod
     def delete_knowledge_base(db: Session, app: App, kb_id: int):

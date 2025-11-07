@@ -46,7 +46,7 @@ async def create_job(
                     ],
                     "callback_params": {"reply_to": "wa:+1234"},
                     "trace_id": "trace_abc_123",
-                    "knowledge_base_ids": [1, 2]  // Optional, defaults to app default KB
+                    "knowledge_base_ids": [1, 2]  // Optional, default app KB
                 }
 
                 Example upload job:
@@ -54,7 +54,7 @@ async def create_job(
                     "job": "upload",
                     "metadata": {"title": "Chlorination SOP"},
                     "callback_params": {"ui_upload_id": "up_456"},
-                    "knowledge_base_id": 1  // Optional, defaults to app default KB
+                    "knowledge_base_id": 1  // Optional, default app KB
                 }
                 """
             ),
@@ -94,6 +94,7 @@ async def create_job(
     # 🚀 Handle CHAT jobs
     if job_type == "chat":
         kb_ids = data.get("knowledge_base_ids", [])
+        kb_ids = [int(kbid) for kbid in kb_ids]
         valid_app_kb_ids = [
             kb.knowledge_base_id
             for kb in current_app.knowledge_bases
@@ -104,7 +105,7 @@ async def create_job(
         if kb_ids and not valid_app_kb_ids:
             raise HTTPException(
                 status_code=404,
-                detail="Provided knowledge_base_ids are invalid or not linked to this app",
+                detail="Provided knowledge_base_ids are invalid or not linked to this app",  # noqa
             )
 
         # If no kb_ids provided, fallback to default KB
@@ -132,6 +133,7 @@ async def create_job(
     # 🚀 Handle UPLOAD jobs
     elif job_type == "upload":
         kb_id = data.get("knowledge_base_id")
+        kb_id = int(kb_id) if kb_id else None
         app_kb = None
         if kb_id:
             app_kb = next(
@@ -145,7 +147,7 @@ async def create_job(
             if not app_kb:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Knowledge base {kb_id} not found or not associated with this app",
+                    detail=f"Knowledge base {kb_id} not found or not associated with this app",  # noqa
                 )
 
         # Default fallback

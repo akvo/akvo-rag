@@ -128,6 +128,16 @@ class KnowledgeBaseCreateRequest(BaseModel):
     )
 
 
+class KnowledgeBaseUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, description="Name of the knowledge base")
+    description: Optional[str] = Field(
+        None, description="Description of the KB"
+    )
+    is_default: Optional[bool] = Field(
+        None, description="Whether this KB is the default for the app"
+    )
+
+
 class KnowledgeBaseResponse(BaseModel):
     id: int
     knowledge_base_id: int
