@@ -97,7 +97,7 @@ async def scoping_node(state: GraphState) -> GraphState:
     """Determine the MCP tool scope using ScopingAgent."""
     try:
         agent = ScopingAgent()
-        scope = agent.scope_query(
+        scope = await agent.scope_query(
             query=state["contextual_query"],
             scope=state.get("scope", {}),
         )
