@@ -24,10 +24,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { useUser } from "@/contexts/userContext";
-import { set } from "date-fns";
+import { Switch } from "@/components/ui/switch";
 
 const UsersPage: React.FC = () => {
   const router = useRouter();
@@ -60,6 +60,27 @@ const UsersPage: React.FC = () => {
     }
   };
 
+  const onToggleUserSuperuserStatus = async (
+    userId: string,
+    isSuperuser: boolean
+  ) => {
+    setLoading(true);
+    try {
+      // Update UI optimistically
+      setUsers((prevUsers) =>
+        prevUsers.map((user) =>
+          user.id === userId ? { ...user, is_superuser: isSuperuser } : user
+        )
+      );
+      // Make API call to toggle superuser status
+      await api.patch(`/api/users/${userId}/toggle-superuser`);
+    } catch (error) {
+      console.error("Error updating superuser status:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const onSearch = (searchTerm: string) => {
     // Implement search functionality with timeout/debounce as needed
     console.log("Search term:", searchTerm);
@@ -86,6 +107,7 @@ const UsersPage: React.FC = () => {
   };
 
   const fetchUsers = useCallback(async () => {
+    setLoading(true);
     try {
       const apiURL =
         selectedTab === "pending"
@@ -103,6 +125,8 @@ const UsersPage: React.FC = () => {
       setPageSize(_size);
     } catch (error) {
       console.error("Error fetching users:", error);
+    } finally {
+      setLoading(false);
     }
   }, [selectedTab]);
 
@@ -186,12 +210,28 @@ const UsersPage: React.FC = () => {
                         <TableCell>{user.email}</TableCell>
                         <TableCell>{user.username}</TableCell>
                         <TableCell>
-                          {user.is_superuser ? "Yes" : "No"}
+                          {selectedTab === "approved" &&
+                          user.id !== authUser.id ? (
+                            <Switch
+                              checked={user.is_superuser}
+                              onCheckedChange={(checked) =>
+                                onToggleUserSuperuserStatus(user.id, checked)
+                              }
+                            />
+                          ) : user.is_superuser ? (
+                            "Yes"
+                          ) : (
+                            "No"
+                          )}
                         </TableCell>
                         <TableCell>
                           {authUser.id !== user.id && (
                             <Button
-                              variant="ghost"
+                              variant={
+                                selectedTab === "pending"
+                                  ? "default"
+                                  : "destructive"
+                              }
                               size="sm"
                               onClick={() =>
                                 onToggleUserActiveStatus(
