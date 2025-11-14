@@ -274,3 +274,86 @@ class TestUsersEndpoints:
         assert data["email"] == "schema@example.com"
         assert data["is_active"] is False
         assert data["is_superuser"] is False
+
+    def test_toggle_user_superuser_status_response_schema(
+        self, db, client, admin_token
+    ):
+        """Test response schema for toggling user superuser status."""
+        user = User(
+            id=20,
+            username="superuser_schema",
+            email="superuser@example.com",
+            is_active=True,
+            is_superuser=False,
+            hashed_password=get_password_hash("pass")
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        response = client.patch(
+            f"/api/users/{user.id}/toggle-superuser",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "id" in data
+        assert "email" in data
+        assert "is_active" in data
+        assert "is_superuser" in data
+        assert data["id"] == user.id
+        assert data["email"] == "superuser@example.com"
+        assert data["is_active"] is True
+        assert data["is_superuser"] is True
+
+    def test_toggle_own_superuser_status(self, db, client, admin_token):
+        """Test that an admin cannot toggle their own superuser status."""
+        response = client.patch(
+            "/api/users/1/toggle-superuser",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == (
+            "Cannot change own superuser status"
+        )
+
+    def test_toggle_user_superuser_status_non_existent_user(
+        self, db, client, admin_token
+    ):
+        """Test toggling superuser status for a non-existent user."""
+        response = client.patch(
+            "/api/users/999999/toggle-superuser",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "User not found"
+
+    def test_toggle_user_superuser_status_non_active_user(
+        self, db, client, admin_token
+    ):
+        """Test toggling superuser status for a non-active user."""
+        # Create inactive user
+        user = User(
+            id=30,
+            username="inactive_superuser",
+            email="inactive_superuser@example.com",
+            is_active=False,
+            is_superuser=False,
+            hashed_password=get_password_hash("pass")
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        response = client.patch(
+            f"/api/users/{user.id}/toggle-superuser",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == (
+            "Cannot change superuser status of inactive user"
+        )
