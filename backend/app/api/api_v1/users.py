@@ -81,3 +81,41 @@ def toggle_user_active_status(
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.patch("/{user_id}/toggle-superuser", response_model=UserResponse)
+def toggle_user_superuser_status(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """
+    Toggle a user's superuser status. Admin access required.
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this resource"
+        )
+
+    if current_user.id == user_id:
+        raise HTTPException(
+            status_code=400, detail="Cannot change own superuser status"
+        )
+
+    user = db.query(User).filter(
+        User.id == user_id
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=400, detail=(
+                "Cannot change superuser status of inactive user"
+            )
+        )
+
+    user.is_superuser = not user.is_superuser
+    db.commit()
+    db.refresh(user)
+    return user
