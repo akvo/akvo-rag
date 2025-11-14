@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Book, MessageSquare, LogOut, Menu, User, Wrench, Users } from "lucide-react";
@@ -41,13 +41,18 @@ export default function DashboardLayout({
     router.push("/login");
   };
 
-  const navigation = [
-    { name: "Knowledge Base", href: "/dashboard/knowledge", icon: Book },
-    { name: "Chat", href: "/dashboard/chat", icon: MessageSquare },
-    { name: "API Keys", href: "/dashboard/api-keys", icon: User },
-    { name: "Fine Tuning", href: "/dashboard/fine-tuning", icon: Wrench },
-    authUser?.is_superuser && { name: "Users", href: "/dashboard/users", icon: Users },
-  ].filter(Boolean);
+  const navigation = useMemo(()  => {
+    const navItems = [
+      { name: "Knowledge Base", href: "/dashboard/knowledge", icon: Book },
+      { name: "Chat", href: "/dashboard/chat", icon: MessageSquare },
+      { name: "API Keys", href: "/dashboard/api-keys", icon: User },
+      { name: "Fine Tuning", href: "/dashboard/fine-tuning", icon: Wrench },
+    ];
+    if (authUser?.is_superuser) {
+      navItems.push({ name: "Users", href: "/dashboard/users", icon: Users });
+    }
+    return navItems;
+  }, [authUser]);
 
   return (
     <div className="min-h-screen bg-background">
