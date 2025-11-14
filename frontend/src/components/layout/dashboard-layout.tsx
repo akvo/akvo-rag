@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Book, MessageSquare, LogOut, Menu, User, Wrench } from "lucide-react";
+import { Book, MessageSquare, LogOut, Menu, User, Wrench, Users } from "lucide-react";
 import Breadcrumb from "@/components/ui/breadcrumb";
 import { useUser } from "@/contexts/userContext";
 import { InitialAvatar } from "../ui/avatar";
@@ -17,7 +17,7 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { user, loading: userLoading, setUser } = useUser();
+  const { user: authUser, loading: userLoading, setUser } = useUser();
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -28,12 +28,12 @@ export default function DashboardLayout({
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (token && !user) {
+    if (token && !authUser) {
       api.get("/api/auth/me").then(data => {
         setUser(data);
       })
     }
-  }, [user])
+  }, [authUser])
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -46,7 +46,8 @@ export default function DashboardLayout({
     { name: "Chat", href: "/dashboard/chat", icon: MessageSquare },
     { name: "API Keys", href: "/dashboard/api-keys", icon: User },
     { name: "Fine Tuning", href: "/dashboard/fine-tuning", icon: Wrench },
-  ];
+    authUser?.is_superuser && { name: "Users", href: "/dashboard/users", icon: Users },
+  ].filter(Boolean);
 
   return (
     <div className="min-h-screen bg-background">
@@ -113,21 +114,21 @@ export default function DashboardLayout({
           </nav>
           {/* User profile and logout */}
           <div className="border-t p-4">
-            {!userLoading && user ? (
+            {!userLoading && authUser ? (
               <div className="flex items-center space-x-4 mb-4">
                 <div className="shrink-0">
-                  <InitialAvatar username={user?.username} />
+                  <InitialAvatar username={authUser?.username} />
                 </div>
                 <div className="flex flex-col">
                   <span className="text-sm font-semibold text-foreground">
-                    {user?.username}
+                    {authUser?.username}
                   </span>
-                  {user?.email && (
+                  {authUser?.email && (
                     <span className="text-xs text-muted-foreground truncate max-w-[150px]">
-                      {user.email}
+                      {authUser.email}
                     </span>
                   )}
-                  {user?.is_superuser ? (
+                  {authUser?.is_superuser ? (
                     <span className="text-[11px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded w-fit mt-1">
                       Super User
                     </span>
