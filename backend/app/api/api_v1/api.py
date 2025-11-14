@@ -5,7 +5,8 @@ from app.api.api_v1 import (
     chat,
     api_keys,
     prompt,
-    system_settings
+    system_settings,
+    users,
 )
 
 
@@ -34,4 +35,8 @@ api_router.include_router(
 
 api_router.include_router(
     system_settings.router, prefix="/system-settings", tags=["system-settings"]
+)
+
+api_router.include_router(
+    users.router, prefix="/users", tags=["users"]
 )
