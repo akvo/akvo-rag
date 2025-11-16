@@ -1,8 +1,18 @@
-from typing import List, Optional
+from typing import List, Optional, Generic, TypeVar
 from pydantic import BaseModel, field_validator, Field
 from datetime import datetime
 
 from app.models.app import AppStatus
+
+
+T = TypeVar("T")
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    total: int
+    page: int
+    size: int
+    data: List[T]
 
 
 class KnowledgeBaseItem(BaseModel):
@@ -147,3 +157,19 @@ class KnowledgeBaseResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class KnowledgeBaseListItem(BaseModel):
+    id: int
+    name: str
+    description: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    documents: List[dict] = []  # or create a DocumentResponse model
+
+    class Config:
+        from_attributes = True
+
+
+class PaginatedKnowledgeBaseResponse(PaginatedResponse[KnowledgeBaseListItem]):
+    pass

@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any, List, Optional
 from fastapi import (
     APIRouter,
     Depends,
@@ -28,6 +28,7 @@ from app.schemas.app import (
     KnowledgeBaseCreateRequest,
     KnowledgeBaseResponse,
     KnowledgeBaseUpdateRequest,
+    PaginatedKnowledgeBaseResponse,
 )
 from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
@@ -285,7 +286,8 @@ async def upload_and_process_documents(
 @router.get("/documents", response_model=List[DocumentUploadItem])
 async def get_documents(*, current_app: App = Depends(get_current_app)) -> Any:
     """
-    Get documents for the app's knowledge base.
+    Get documents upload status fire forget method
+    for the app's knowledge base.
     """
     default_kb = next(
         (kb for kb in current_app.knowledge_bases if kb.is_default), None
@@ -357,6 +359,43 @@ def update_app(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update app: {str(e)}",
+        )
+
+
+@router.get(
+    "/knowledge-bases",
+    response_model=PaginatedKnowledgeBaseResponse,
+)
+async def list_knowledge_bases(
+    *,
+    skip: int = 0,
+    limit: int = 100,
+    search: Optional[str] = None,
+    current_app: App = Depends(get_current_app),
+) -> Any:
+    """
+    Proxies KB listing request to MCP Knowledge Base service:
+    GET /api/v1/knowledge-base?skip=&limit=&with_documents=&include_total=
+    """
+    try:
+        kb_mcp = KnowledgeBaseMCPEndpointService()
+        result = await kb_mcp.list_kbs(
+            skip=skip,
+            limit=limit,
+            with_documents=False,
+            include_total=True,
+            search=search,
+        )
+
+        return result
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch KB list: {str(e)}",
         )
 
 

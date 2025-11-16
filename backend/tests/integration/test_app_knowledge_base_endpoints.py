@@ -68,6 +68,39 @@ def mock_mcp_crud_kb():
         yield mock_create_kb, mock_get_kb, mock_update_kb, mock_delete_kb
 
 
+@pytest.fixture
+def mock_mcp_list_kbs():
+    """Mock list_kbs call for the list knowledge bases endpoint."""
+    with patch(
+        "mcp_clients.kb_mcp_endpoint_service.KnowledgeBaseMCPEndpointService.list_kbs",  # noqa
+        new_callable=AsyncMock,
+    ) as mock_list_kbs:
+        mock_list_kbs.return_value = {
+            "total": 2,
+            "page": 1,
+            "size": 2,
+            "data": [
+                {
+                    "id": 1,
+                    "name": "KB One",
+                    "description": "First KB",
+                    "created_at": "2025-01-01T00:00:00",
+                    "updated_at": "2025-01-01T00:00:00",
+                    "documents": [],
+                },
+                {
+                    "id": 2,
+                    "name": "KB Two",
+                    "description": "Second KB",
+                    "created_at": "2025-01-02T00:00:00",
+                    "updated_at": "2025-01-02T00:00:00",
+                    "documents": [],
+                },
+            ],
+        }
+        yield mock_list_kbs
+
+
 @pytest.mark.usefixtures("mock_mcp_crud_kb")
 class TestAppKnowledgeBaseEndpoints:
     """Test suite for multi-KB per app endpoints."""
@@ -318,3 +351,115 @@ class TestDeleteKnowledgeBaseEndpoint:
         )
         assert response.status_code == 404
         assert "not found" in response.text.lower()
+
+
+@pytest.mark.usefixtures("mock_mcp_list_kbs")
+class TestListKnowledgeBasesEndpoint:
+    """Test suite for listing knowledge bases."""
+
+    def test_list_kb_success(self, client, auth_header, mock_mcp_list_kbs):
+        """Should return paginated KB list successfully."""
+        response = client.get(
+            "/api/apps/knowledge-bases?skip=0&limit=10",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["total"] == 2
+        assert data["page"] == 1
+        assert data["size"] == 2
+        assert isinstance(data["data"], list)
+        assert len(data["data"]) == 2
+
+        # Verify MCP call was correct
+        mock_mcp_list_kbs.assert_awaited_once_with(
+            skip=0,
+            limit=10,
+            with_documents=False,
+            include_total=True,
+            search=None,
+        )
+
+    def test_list_kb_with_search(self, client, auth_header, mock_mcp_list_kbs):
+        """Should pass search parameter to MCP."""
+        response = client.get(
+            "/api/apps/knowledge-bases?search=library",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 200
+
+        mock_mcp_list_kbs.assert_awaited_once_with(
+            skip=0,
+            limit=100,
+            with_documents=False,
+            include_total=True,
+            search="library",
+        )
+
+    def test_list_kb_empty_result(
+        self, client, auth_header, mock_mcp_list_kbs
+    ):
+        """Should handle empty paginated result cleanly."""
+        mock_mcp_list_kbs.return_value = {
+            "total": 0,
+            "page": 1,
+            "size": 0,
+            "data": [],
+        }
+
+        response = client.get(
+            "/api/apps/knowledge-bases",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 0
+        assert data["data"] == []
+
+    def test_list_kb_inactive_app_forbidden(
+        self, client, db, registered_app, mock_mcp_list_kbs
+    ):
+        """Should return 403 if app is inactive."""
+        app = (
+            db.query(App)
+            .filter(App.app_id == registered_app["app_id"])
+            .first()
+        )
+        app.status = AppStatus.revoked
+        db.commit()
+
+        headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
+
+        response = client.get(
+            "/api/apps/knowledge-bases",
+            headers=headers,
+        )
+
+        assert response.status_code == 403
+        assert "active" in response.text.lower()
+
+        # MCP should NOT be called
+        mock_mcp_list_kbs.assert_not_awaited()
+
+    def test_list_kb_missing_auth(self, client):
+        """Should return 401 if no Authorization header."""
+        response = client.get("/api/apps/knowledge-bases")
+        assert response.status_code == 401
+
+    def test_list_kb_mcp_error_raises_500(
+        self, client, auth_header, mock_mcp_list_kbs
+    ):
+        """If MCP throws an exception, endpoint should return 500."""
+        mock_mcp_list_kbs.side_effect = Exception("MCP failure")
+
+        response = client.get(
+            "/api/apps/knowledge-bases",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 500
+        assert "Failed to fetch KB list" in response.text
