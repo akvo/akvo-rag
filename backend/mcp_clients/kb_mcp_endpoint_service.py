@@ -136,8 +136,13 @@ class KnowledgeBaseMCPEndpointService:
         }
         return await self._request("GET", "", params=params)
 
-    async def get_kb(self, kb_id: int) -> Dict[str, Any]:
-        return await self._request("GET", f"/{kb_id}")
+    async def get_kb(
+        self,
+        kb_id: int,
+        with_documents: bool = True,
+    ) -> Dict[str, Any]:
+        params = {"with_documents": str(with_documents).lower()}
+        return await self._request("GET", f"/{kb_id}", params=params)
 
     async def update_kb(self, kb_id: int, data: dict) -> Dict[str, Any]:
         return await self._request("PUT", f"/{kb_id}", data=data)

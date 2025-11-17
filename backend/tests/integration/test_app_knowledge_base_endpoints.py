@@ -8,7 +8,7 @@ from app.models.app import App, AppStatus, AppKnowledgeBase
 def sample_app_data():
     """Sample data for app registration."""
     return {
-        "app_name": "agriconnect",
+        "app_name": "agriconnect2",
         "domain": "agriconnect.akvo.org/api",
         "default_chat_prompt": "",
         "chat_callback": "https://agriconnect.akvo.org/api/ai/callback",
@@ -382,6 +382,7 @@ class TestDeleteKnowledgeBaseEndpoint:
         assert "not found" in response.text.lower()
 
 
+@pytest.mark.usefixtures("mock_mcp_crud_kb")
 @pytest.mark.usefixtures("mock_mcp_list_kbs")
 class TestListKnowledgeBasesEndpoint:
     """Test suite for listing knowledge bases."""
@@ -494,6 +495,7 @@ class TestListKnowledgeBasesEndpoint:
         assert "Failed to fetch KB list" in response.text
 
 
+@pytest.mark.usefixtures("mock_mcp_crud_kb")
 @pytest.mark.usefixtures("mock_mcp_list_documents")
 class TestListDocumentsWithKbId:
     """Tests for /documents when kb_id is provided."""
@@ -577,3 +579,98 @@ class TestListDocumentsWithKbId:
 
         # MCP should NOT be called
         mock_mcp_list_documents.assert_not_awaited()
+
+
+@pytest.mark.usefixtures("mock_mcp_crud_kb")
+class TestGetKnowledgeBaseDetails:
+    """Test suite for GET /knowledge-bases/{kb_id}"""
+
+    def test_get_kb_details_success(
+        self, client, auth_header, registered_app, mock_mcp_crud_kb
+    ):
+        """Should successfully return KB details merged from MCP + link."""
+        (_, mock_get_kb, _, _) = mock_mcp_crud_kb
+
+        # MCP response override (add timestamps for coverage)
+        mock_get_kb.return_value = {
+            "id": 1,
+            "name": "KB One",
+            "description": "Merged KB test",
+            "created_at": "2025-01-01T00:00:00",
+            "updated_at": "2025-01-01T00:00:00",
+        }
+
+        kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
+
+        res = client.get(
+            f"/api/apps/knowledge-bases/{kb_id}",
+            headers=auth_header,
+        )
+        assert res.status_code == 200
+
+        data = res.json()
+        assert data["id"] == kb_id
+        assert data["name"] == "KB One"
+        assert data["description"] == "Merged KB test"
+        assert data["is_default"] is True
+        assert data["documents"] == []
+        assert "created_at" in data
+        assert "updated_at" in data
+
+        mock_get_kb.assert_awaited_once_with(kb_id, with_documents=False)
+
+    def test_get_kb_details_not_linked_returns_404(self, client, auth_header):
+        """Should return 404 when KB is not linked to the app."""
+
+        res = client.get(
+            "/api/apps/knowledge-bases/9999",
+            headers=auth_header,
+        )
+        assert res.status_code == 404
+        assert "not found" in res.text.lower()
+
+    def test_get_kb_details_inactive_app_forbidden(
+        self, client, db, registered_app
+    ):
+        """Should block inactive app from accessing KB details."""
+        # Deactivate app
+        app = (
+            db.query(App)
+            .filter(App.app_id == registered_app["app_id"])
+            .first()
+        )
+        app.status = AppStatus.revoked
+        db.commit()
+
+        kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
+
+        res = client.get(
+            f"/api/apps/knowledge-bases/{kb_id}",
+            headers={
+                "Authorization": f"Bearer {registered_app['access_token']}"
+            },
+        )
+        assert res.status_code == 403
+        assert "active" in res.text.lower()
+
+    def test_get_kb_details_missing_auth_returns_401(self, client):
+        """Should return 401 when no auth is provided."""
+        res = client.get("/api/apps/knowledge-bases/1")
+        assert res.status_code == 401
+
+    def test_get_kb_details_mcp_error_returns_500(
+        self, client, auth_header, registered_app, mock_mcp_crud_kb
+    ):
+        """If MCP raises an error, return a 500 response."""
+        (_, mock_get_kb, _, _) = mock_mcp_crud_kb
+
+        mock_get_kb.side_effect = Exception("MCP exploded")
+
+        kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
+
+        res = client.get(
+            f"/api/apps/knowledge-bases/{kb_id}",
+            headers=auth_header,
+        )
+        assert res.status_code == 500
+        assert "Failed to fetch KB details" in res.text

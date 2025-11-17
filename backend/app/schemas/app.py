@@ -175,6 +175,16 @@ class PaginatedKnowledgeBaseResponse(PaginatedResponse[KnowledgeBaseListItem]):
     pass
 
 
+class KnowledgeBaseDetailResponse(BaseModel):
+    name: str
+    description: Optional[str]
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    is_default: bool
+    documents: List[dict] = []
+
+
 class ProcessingTaskItem(BaseModel):
     id: int
     document_id: int

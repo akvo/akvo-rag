@@ -30,6 +30,7 @@ from app.schemas.app import (
     KnowledgeBaseUpdateRequest,
     PaginatedKnowledgeBaseResponse,
     PaginatedDocumentResponse,
+    KnowledgeBaseDetailResponse,
 )
 from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
@@ -424,6 +425,58 @@ async def list_knowledge_bases(
             status_code=500,
             detail=f"Failed to fetch KB list: {str(e)}",
         )
+
+
+@router.get(
+    "/knowledge-bases/{kb_id}",
+    response_model=KnowledgeBaseDetailResponse,
+)
+async def get_knowledge_base_details(
+    kb_id: int,
+    current_app: App = Depends(get_current_app),
+):
+    """
+    Fetch a single Knowledge Base.
+    Optionally include full document list from MCP.
+    """
+
+    # Ensure KB belongs to the current app
+    kb_link = next(
+        (
+            kb
+            for kb in current_app.knowledge_bases
+            if kb.knowledge_base_id == kb_id
+        ),
+        None,
+    )
+    if not kb_link:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge Base not found for this app.",
+        )
+
+    mcp = KnowledgeBaseMCPEndpointService()
+
+    try:
+        kb_details = await mcp.get_kb(kb_id, with_documents=False)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch KB details: {e}",
+        )
+
+    # Merge local/link info (id, is_default) with MCP details
+    merged = {
+        "id": kb_id,
+        "name": kb_details.get("name"),
+        "description": kb_details.get("description"),
+        "is_default": kb_link.is_default,
+        "created_at": kb_details.get("created_at"),
+        "updated_at": kb_details.get("updated_at"),
+        "documents": [],
+    }
+
+    return merged
 
 
 @router.post(

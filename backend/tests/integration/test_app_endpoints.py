@@ -9,7 +9,7 @@ from app.models.app import App, AppStatus
 def sample_app_data():
     """Sample data for app registration."""
     return {
-        "app_name": "agriconnect",
+        "app_name": "agriconnect1",
         "domain": "agriconnect.akvo.org/api",
         "default_chat_prompt": "",
         "chat_callback": "https://agriconnect.akvo.org/api/ai/callback",
@@ -196,7 +196,7 @@ class TestAppMe:
 
         # Verify response structure
         assert data["app_id"] == registered_app["app_id"]
-        assert data["app_name"] == "agriconnect"
+        assert data["app_name"] == "agriconnect1"
         assert data["domain"] == "agriconnect.akvo.org/api"
         assert (
             data["chat_callback_url"]
