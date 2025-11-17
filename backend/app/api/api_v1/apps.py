@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 from fastapi import (
     APIRouter,
     Depends,
@@ -29,6 +29,7 @@ from app.schemas.app import (
     KnowledgeBaseResponse,
     KnowledgeBaseUpdateRequest,
     PaginatedKnowledgeBaseResponse,
+    PaginatedDocumentResponse,
 )
 from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
@@ -283,25 +284,51 @@ async def upload_and_process_documents(
     }
 
 
-@router.get("/documents", response_model=List[DocumentUploadItem])
-async def get_documents(*, current_app: App = Depends(get_current_app)) -> Any:
+@router.get(
+    "/documents",
+    response_model=Union[PaginatedDocumentResponse, List[DocumentUploadItem]],
+)
+async def get_documents(
+    *,
+    current_app: App = Depends(get_current_app),
+    kb_id: Optional[int] = None,
+    skip: Optional[int] = 0,
+    limit: Optional[int] = 100,
+    include_total: Optional[bool] = True,
+    search: Optional[str] = None,
+):
     """
-    Get documents upload status fire forget method
-    for the app's knowledge base.
+    If kb_id is provided, proxy to MCP /documents list endpoint.
+    If kb_id is NOT provided, return upload statuses for the default KB.
     """
-    default_kb = next(
-        (kb for kb in current_app.knowledge_bases if kb.is_default), None
-    )
-    if not default_kb:
-        raise HTTPException(
-            status_code=404, detail="Default KB not found for app"
+
+    kb_mcp_service = KnowledgeBaseMCPEndpointService()
+
+    # --- CASE 1: kb_id Explicitly Provided → List documents ---
+    if kb_id is not None:
+        return await kb_mcp_service.list_documents_by_kb_id(
+            kb_id=kb_id,
+            skip=skip,
+            limit=limit,
+            include_total=include_total,
+            search=search,
         )
 
-    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
-    res = await kb_mcp_endpoint_service.get_documents_upload(
+    # --- CASE 2: No kb_id → Use Default KB Upload Status ---
+    default_kb = next(
+        (kb for kb in current_app.knowledge_bases if kb.is_default),
+        None,
+    )
+
+    if not default_kb:
+        raise HTTPException(
+            status_code=404,
+            detail="Default KB not found for app",
+        )
+
+    return await kb_mcp_service.get_documents_upload(
         kb_id=default_kb.knowledge_base_id,
     )
-    return res
 
 
 @router.patch(

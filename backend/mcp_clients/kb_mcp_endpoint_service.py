@@ -146,6 +146,22 @@ class KnowledgeBaseMCPEndpointService:
         return await self._request("DELETE", f"/{kb_id}")
 
     # ---- Document related ----
+    async def list_documents_by_kb_id(
+        self,
+        kb_id: int,
+        skip: Optional[int] = 0,
+        limit: Optional[int] = 100,
+        include_total: Optional[bool] = False,
+        search: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        params = {
+            "skip": skip,
+            "limit": limit,
+            "include_total": include_total,
+            "search": search,
+        }
+        return await self._request("GET", f"/{kb_id}/documents", params=params)
+
     async def get_document(self, kb_id: int, doc_id: int) -> Dict[str, Any]:
         return await self._request("GET", f"/{kb_id}/documents/{doc_id}")
 

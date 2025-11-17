@@ -101,6 +101,35 @@ def mock_mcp_list_kbs():
         yield mock_list_kbs
 
 
+@pytest.fixture
+def mock_mcp_list_documents():
+    """Mock MCP list documents (paginated document listing)."""
+    with patch(
+        "mcp_clients.kb_mcp_endpoint_service.KnowledgeBaseMCPEndpointService.list_documents_by_kb_id",  # noqa
+        new_callable=AsyncMock,
+    ) as mock_list_docs:
+        mock_list_docs.return_value = {
+            "total": 18,
+            "page": 2,
+            "size": 1,
+            "data": [
+                {
+                    "id": 14,
+                    "knowledge_base_id": 1,
+                    "file_name": "example.pdf",
+                    "file_path": "kb_1/example.pdf",
+                    "file_hash": "abc123",
+                    "file_size": 123456,
+                    "content_type": "application/pdf",
+                    "created_at": "2025-10-13T07:38:24.232874",
+                    "updated_at": "2025-10-13T07:38:24.232878",
+                    "processing_tasks": [],
+                }
+            ],
+        }
+        yield mock_list_docs
+
+
 @pytest.mark.usefixtures("mock_mcp_crud_kb")
 class TestAppKnowledgeBaseEndpoints:
     """Test suite for multi-KB per app endpoints."""
@@ -463,3 +492,88 @@ class TestListKnowledgeBasesEndpoint:
 
         assert response.status_code == 500
         assert "Failed to fetch KB list" in response.text
+
+
+@pytest.mark.usefixtures("mock_mcp_list_documents")
+class TestListDocumentsWithKbId:
+    """Tests for /documents when kb_id is provided."""
+
+    def test_list_documents_with_kb_id_success(
+        self, client, auth_header, registered_app, mock_mcp_list_documents
+    ):
+        """Should proxy to MCP list_documents when kb_id is provided."""
+
+        response = client.get(
+            "/api/apps/documents"
+            "?kb_id=1&skip=0&limit=100&include_total=true&search=CDIP",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Validate paginated structure
+        assert data["total"] == 18
+        assert data["page"] == 2
+        assert data["size"] == 1
+        assert isinstance(data["data"], list)
+        assert len(data["data"]) == 1
+
+        # Validate MCP call
+        mock_mcp_list_documents.assert_awaited_once_with(
+            kb_id=1,
+            skip=0,
+            limit=100,
+            include_total=True,
+            search="CDIP",
+        )
+
+    def test_list_documents_with_kb_id_and_custom_pagination(
+        self, client, auth_header, mock_mcp_list_documents
+    ):
+        """Should forward custom skip/limit/search/flags to MCP."""
+        response = client.get(
+            "/api/apps/documents"
+            "?kb_id=5&skip=20&limit=5&include_total=false&search=test",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 200
+
+        mock_mcp_list_documents.assert_awaited_once_with(
+            kb_id=5,
+            skip=20,
+            limit=5,
+            include_total=False,
+            search="test",
+        )
+
+    def test_list_documents_requires_auth(self, client):
+        """Should return 401 when Authorization header is missing."""
+        response = client.get("/api/apps/documents?kb_id=1")
+        assert response.status_code == 401
+
+    def test_list_documents_inactive_app_forbidden(
+        self, client, db, registered_app, mock_mcp_list_documents
+    ):
+        """Should block inactive app from listing documents."""
+        app = (
+            db.query(App)
+            .filter(App.app_id == registered_app["app_id"])
+            .first()
+        )
+        app.status = AppStatus.revoked
+        db.commit()
+
+        response = client.get(
+            "/api/apps/documents?kb_id=1",
+            headers={
+                "Authorization": f"Bearer {registered_app['access_token']}"
+            },
+        )
+
+        assert response.status_code == 403
+        assert "active" in response.text.lower()
+
+        # MCP should NOT be called
+        mock_mcp_list_documents.assert_not_awaited()

@@ -173,3 +173,39 @@ class KnowledgeBaseListItem(BaseModel):
 
 class PaginatedKnowledgeBaseResponse(PaginatedResponse[KnowledgeBaseListItem]):
     pass
+
+
+class ProcessingTaskItem(BaseModel):
+    id: int
+    document_id: int
+    knowledge_base_id: int
+    status: str
+    error_message: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DocumentItem(BaseModel):
+    id: int
+    knowledge_base_id: int
+
+    file_name: str
+    file_path: str
+    file_hash: str
+    file_size: int
+    content_type: Optional[str]
+
+    created_at: datetime
+    updated_at: datetime
+
+    processing_tasks: List[ProcessingTaskItem] = []
+
+    class Config:
+        from_attributes = True
+
+
+class PaginatedDocumentResponse(PaginatedResponse[DocumentItem]):
+    pass
