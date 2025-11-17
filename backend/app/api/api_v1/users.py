@@ -5,11 +5,12 @@ GET: List users with pagination and filter by active status.
 PATCH: Update toggle user's active status.
 """
 
+from datetime import datetime, timezone
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.models import User
-from app.schemas.user import UserResponse, UserPagination
+from app.schemas.user import UserDataResponse, UserPagination
 from app.db.session import get_db
 from app.api.api_v1.auth import get_current_user
 
@@ -59,7 +60,7 @@ def read_users(
     )
 
 
-@router.patch("/{user_id}/toggle-active", response_model=UserResponse)
+@router.patch("/{user_id}/toggle-active", response_model=UserDataResponse)
 def toggle_user_active_status(
     user_id: int,
     db: Session = Depends(get_db),
@@ -78,12 +79,18 @@ def toggle_user_active_status(
         raise HTTPException(status_code=404, detail="User not found")
 
     user.is_active = not user.is_active
+    if user.is_active:
+        user.approved_by = current_user.id
+        user.approved_at = datetime.now(timezone.utc)
+    else:
+        user.approved_by = None
+        user.approved_at = None
     db.commit()
     db.refresh(user)
     return user
 
 
-@router.patch("/{user_id}/toggle-superuser", response_model=UserResponse)
+@router.patch("/{user_id}/toggle-superuser", response_model=UserDataResponse)
 def toggle_user_superuser_status(
     user_id: int,
     db: Session = Depends(get_db),

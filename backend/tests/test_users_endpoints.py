@@ -10,6 +10,7 @@ Uses FastAPI's TestClient and pytest for testing.
 """
 
 import pytest
+from datetime import datetime, timezone
 from app.models import User
 from app.core.security import get_password_hash
 
@@ -102,7 +103,7 @@ class TestUsersEndpoints:
         assert "user1@example.com" in emails
         assert "user2@example.com" in emails
 
-    def test_toggle_user_active_status(self, db, client, admin_token):
+    def test_toggle_user_deactivation(self, db, client, admin_token):
         """Test toggling a user's active status."""
         # Create test user
         user = User(
@@ -124,6 +125,34 @@ class TestUsersEndpoints:
 
         assert response.status_code == 200
         assert response.json()["is_active"] is False
+        assert response.json()["approver"] is None
+        assert response.json()["approved_at"] is None
+
+    def test_toggle_user_activation(self, db, client, admin_token):
+        """Test toggling a user's active status back to active."""
+        # Create test user
+        user = User(
+            id=15,
+            username="user_pending_activation",
+            email="user_pending_activation@example.com",
+            is_active=False,
+            is_superuser=False,
+            hashed_password=get_password_hash("pass")
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        response = client.patch(
+            f"/api/users/{user.id}/toggle-active",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["is_active"] is True
+        assert response.json()["approver"] is not None
+        assert response.json()["approver"]["id"] == 1  # Admin ID
+        assert response.json()["approved_at"] is not None
 
     def test_read_users_non_admin_access(self, db, client, user_token):
         """Test reading users with non-admin access."""
@@ -161,7 +190,9 @@ class TestUsersEndpoints:
             email="active@example.com",
             is_active=True,
             is_superuser=False,
-            hashed_password=get_password_hash("pass")
+            hashed_password=get_password_hash("pass"),
+            approved_by=1,
+            approved_at=datetime.now(timezone.utc)
         )
         inactive_user = User(
             id=7,
@@ -186,6 +217,13 @@ class TestUsersEndpoints:
         # Check all returned users are active
         for user in data["data"]:
             assert user["is_active"] is True
+        
+        # Verify the active_user with approver info exists
+        active_users = [u for u in data["data"] if u["id"] == 6]
+        assert len(active_users) == 1
+        assert active_users[0]["approver"] is not None
+        assert active_users[0]["approver"]["id"] == 1  # Admin ID
+        assert active_users[0]["approved_at"] is not None
 
     def test_read_users_with_search_filter(self, db, client, admin_token):
         """Test reading users with search filter."""
@@ -356,4 +394,58 @@ class TestUsersEndpoints:
         assert response.status_code == 400
         assert response.json()["detail"] == (
             "Cannot change superuser status of inactive user"
+        )
+
+    def test_toggle_user_superuser_status_non_admin_access(
+        self, db, client, user_token
+    ):
+        """Test toggling superuser status with non-admin access."""
+        # Create test user
+        user = User(
+            id=40,
+            username="normal_user",
+            email="normal_user@example.com",
+            is_active=True,
+            is_superuser=False,
+            hashed_password=get_password_hash("pass")
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        response = client.patch(
+            f"/api/users/{user.id}/toggle-superuser",
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == (
+            "Not authorized to access this resource"
+        )
+
+    def test_toggle_user_active_status_non_admin_access(
+        self, db, client, user_token
+    ):
+        """Test toggling active status with non-admin access."""
+        # Create test user
+        user = User(
+            id=50,
+            username="normal_user2",
+            email="normal_user2@example.com",
+            is_active=True,
+            is_superuser=False,
+            hashed_password=get_password_hash("pass")
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        response = client.patch(
+            f"/api/users/{user.id}/toggle-active",
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == (
+            "Not authorized to access this resource"
         )
