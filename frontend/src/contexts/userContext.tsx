@@ -19,6 +19,8 @@ type UserContextType = {
   loading: boolean;
   error: string | null;
   setUser: (user: User | null) => void;
+  isNewUser: boolean;
+  setIsNewUser: (isNew: boolean) => void;
 };
 
 const UserContext = createContext<UserContextType>({
@@ -26,12 +28,15 @@ const UserContext = createContext<UserContextType>({
   loading: true,
   error: null,
   setUser: () => {},
+  isNewUser: false,
+  setIsNewUser: () => {},
 });
 
 export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isNewUser, setIsNewUser] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -59,7 +64,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   return (
-    <UserContext.Provider value={{ user, loading, error, setUser }}>
+    <UserContext.Provider value={{ user, loading, error, setUser, isNewUser, setIsNewUser }}>
       {children}
     </UserContext.Provider>
   );

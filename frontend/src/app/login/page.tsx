@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
+import { useUser } from "@/contexts/userContext";
 
 interface LoginResponse {
   access_token: string;
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const { isNewUser, setIsNewUser } = useUser();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -38,6 +40,7 @@ export default function LoginPage() {
       localStorage.setItem("token", data.access_token);
       router.push("/dashboard");
     } catch (err) {
+      setIsNewUser(false);
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
@@ -52,6 +55,18 @@ export default function LoginPage() {
     <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-lg shadow-md p-8 space-y-6">
+          {isNewUser && (
+            <div className="p-3 rounded-md bg-green-50 text-green-700 text-sm relative">
+              <button
+                type="button"
+                className="absolute top-2 right-2 text-green-700 hover:text-green-600"
+                onClick={() => setIsNewUser(false)}
+              >
+                &times;
+              </button>
+              Your account has been created successfully. Please contact admin to activate it.
+            </div>
+          )}
           <div className="text-center">
             <h1 className="text-3xl font-bold text-gray-900">
               Welcome To RAG Web UI

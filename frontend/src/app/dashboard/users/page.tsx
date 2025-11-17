@@ -206,7 +206,22 @@ const UsersPage: React.FC = () => {
                     )
                     .map((user) => (
                       <TableRow key={user.id}>
-                        <TableCell>{user.created_at}</TableCell>
+                        <TableCell>
+                        {user.created_at}
+                        {user?.approver?.username && (
+                          <div className="text-xs text-green-600" title={new Date(user.approved_at).toLocaleString("en-US", {
+                                month: "long",
+                                day: "numeric",
+                                year: "numeric",
+                                hour: "numeric",
+                                minute: "numeric",
+                                hour12: true,
+                              })}
+                            >
+                              Approved by {user.approver.username}
+                            </div>
+                        )}
+                        </TableCell>
                         <TableCell>{user.email}</TableCell>
                         <TableCell>{user.username}</TableCell>
                         <TableCell>
