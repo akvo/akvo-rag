@@ -98,7 +98,11 @@ def login_access_token(
     elif not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Inactive user",
+            detail=(
+                "Your account is currently inactive and "
+                "requires administrator approval. "
+                "Please contact your administrator to activate your account."
+            ),
             headers={"WWW-Authenticate": "Bearer"},
         )
 
