@@ -28,6 +28,14 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { useUser } from "@/contexts/userContext";
 import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+  DialogHeader,
+} from "@/components/ui/dialog";
 
 const UsersPage: React.FC = () => {
   const router = useRouter();
@@ -38,18 +46,20 @@ const UsersPage: React.FC = () => {
   const [pageSize, setPageSize] = useState<number>(10);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [selectedTab, setSelectedTab] = useState<string>("pending");
+  const [dialogOpen, setDialogOpen] = useState<boolean>(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
 
   const onToggleUserActiveStatus = async (
     userId: string,
-    isActive: boolean
+    isActive: boolean,
   ) => {
     setLoading(true);
     try {
       // Update UI optimistically
       setUsers((prevUsers) =>
         prevUsers.map((user) =>
-          user.id === userId ? { ...user, is_active: isActive } : user
-        )
+          user.id === userId ? { ...user, is_active: isActive } : user,
+        ),
       );
       // Make API call to deactivate user
       await api.patch(`/api/users/${userId}/toggle-active`);
@@ -62,15 +72,15 @@ const UsersPage: React.FC = () => {
 
   const onToggleUserSuperuserStatus = async (
     userId: string,
-    isSuperuser: boolean
+    isSuperuser: boolean,
   ) => {
     setLoading(true);
     try {
       // Update UI optimistically
       setUsers((prevUsers) =>
         prevUsers.map((user) =>
-          user.id === userId ? { ...user, is_superuser: isSuperuser } : user
-        )
+          user.id === userId ? { ...user, is_superuser: isSuperuser } : user,
+        ),
       );
       // Make API call to toggle superuser status
       await api.patch(`/api/users/${userId}/toggle-superuser`);
@@ -202,25 +212,30 @@ const UsersPage: React.FC = () => {
                     .filter((user) =>
                       selectedTab === "pending"
                         ? !user.is_active
-                        : user.is_active
+                        : user.is_active,
                     )
                     .map((user) => (
                       <TableRow key={user.id}>
                         <TableCell>
-                        {user.created_at}
-                        {user?.approver?.username && (
-                          <div className="text-xs text-green-600" title={new Date(user.approved_at).toLocaleString("en-US", {
-                                month: "long",
-                                day: "numeric",
-                                year: "numeric",
-                                hour: "numeric",
-                                minute: "numeric",
-                                hour12: true,
-                              })}
+                          {user.created_at}
+                          {user?.approver?.username && (
+                            <div
+                              className="text-xs text-green-600"
+                              title={new Date(user.approved_at).toLocaleString(
+                                "en-US",
+                                {
+                                  month: "long",
+                                  day: "numeric",
+                                  year: "numeric",
+                                  hour: "numeric",
+                                  minute: "numeric",
+                                  hour12: true,
+                                },
+                              )}
                             >
                               Approved by {user.approver.username}
                             </div>
-                        )}
+                          )}
                         </TableCell>
                         <TableCell>{user.email}</TableCell>
                         <TableCell>{user.username}</TableCell>
@@ -248,12 +263,10 @@ const UsersPage: React.FC = () => {
                                   : "destructive"
                               }
                               size="sm"
-                              onClick={() =>
-                                onToggleUserActiveStatus(
-                                  user.id,
-                                  selectedTab === "pending" ? true : false
-                                )
-                              }
+                              onClick={() => {
+                                setSelectedUser(user);
+                                setDialogOpen(true);
+                              }}
                             >
                               {selectedTab === "pending"
                                 ? "Approve"
@@ -265,6 +278,67 @@ const UsersPage: React.FC = () => {
                     ))}
                 </TableBody>
               </Table>
+              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                <DialogContent className="max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle>
+                      {selectedTab === "pending"
+                        ? "Approve User"
+                        : "Deactivate User"}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {selectedTab === "pending" && selectedUser && (
+                        <>
+                          <p>
+                            Are you sure you want to{" "}
+                            <b style={{ color: "green" }}>approve</b> the user{" "}
+                            <strong>{selectedUser.email}</strong>?
+                          </p>
+                          <br />
+                          <p>This will grant them access to the platform.</p>
+                        </>
+                      )}
+                      {selectedTab === "approved" && selectedUser && (
+                        <>
+                          <p>
+                            Are you sure you want to{" "}
+                            <b style={{ color: "red" }}>deactivate</b> the user{" "}
+                            <strong>{selectedUser.email}</strong>? <br />
+                          </p>
+                          <br />
+                          <p>This will revoke their access to the platform.</p>
+                        </>
+                      )}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="mt-4 flex justify-end gap-2">
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setDialogOpen(false);
+                        setSelectedUser(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant={
+                        selectedTab === "pending" ? "default" : "destructive"
+                      }
+                      onClick={() => {
+                        onToggleUserActiveStatus(
+                          selectedUser.id,
+                          selectedTab === "pending" ? true : false,
+                        );
+                        setSelectedUser(null);
+                        setDialogOpen(false);
+                      }}
+                    >
+                      {selectedTab === "pending" ? "Approve" : "Deactivate"}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
               {users.length === 0 && !loading && (
                 <div className="p-4 text-center text-gray-500">
                   No users found.
