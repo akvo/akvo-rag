@@ -8,7 +8,7 @@ from app.models.app import App, AppStatus, AppKnowledgeBase
 def sample_app_data():
     """Sample data for app registration."""
     return {
-        "app_name": "agriconnect",
+        "app_name": "agriconnect2",
         "domain": "agriconnect.akvo.org/api",
         "default_chat_prompt": "",
         "chat_callback": "https://agriconnect.akvo.org/api/ai/callback",
@@ -66,6 +66,68 @@ def mock_mcp_crud_kb():
         mock_delete_kb.return_value = {"message": "Deleted"}
 
         yield mock_create_kb, mock_get_kb, mock_update_kb, mock_delete_kb
+
+
+@pytest.fixture
+def mock_mcp_list_kbs():
+    """Mock list_kbs call for the list knowledge bases endpoint."""
+    with patch(
+        "mcp_clients.kb_mcp_endpoint_service.KnowledgeBaseMCPEndpointService.list_kbs",  # noqa
+        new_callable=AsyncMock,
+    ) as mock_list_kbs:
+        mock_list_kbs.return_value = {
+            "total": 2,
+            "page": 1,
+            "size": 2,
+            "data": [
+                {
+                    "id": 1,
+                    "name": "KB One",
+                    "description": "First KB",
+                    "created_at": "2025-01-01T00:00:00",
+                    "updated_at": "2025-01-01T00:00:00",
+                    "documents": [],
+                },
+                {
+                    "id": 2,
+                    "name": "KB Two",
+                    "description": "Second KB",
+                    "created_at": "2025-01-02T00:00:00",
+                    "updated_at": "2025-01-02T00:00:00",
+                    "documents": [],
+                },
+            ],
+        }
+        yield mock_list_kbs
+
+
+@pytest.fixture
+def mock_mcp_list_documents():
+    """Mock MCP list documents (paginated document listing)."""
+    with patch(
+        "mcp_clients.kb_mcp_endpoint_service.KnowledgeBaseMCPEndpointService.list_documents_by_kb_id",  # noqa
+        new_callable=AsyncMock,
+    ) as mock_list_docs:
+        mock_list_docs.return_value = {
+            "total": 18,
+            "page": 2,
+            "size": 1,
+            "data": [
+                {
+                    "id": 14,
+                    "knowledge_base_id": 1,
+                    "file_name": "example.pdf",
+                    "file_path": "kb_1/example.pdf",
+                    "file_hash": "abc123",
+                    "file_size": 123456,
+                    "content_type": "application/pdf",
+                    "created_at": "2025-10-13T07:38:24.232874",
+                    "updated_at": "2025-10-13T07:38:24.232878",
+                    "processing_tasks": [],
+                }
+            ],
+        }
+        yield mock_list_docs
 
 
 @pytest.mark.usefixtures("mock_mcp_crud_kb")
@@ -318,3 +380,297 @@ class TestDeleteKnowledgeBaseEndpoint:
         )
         assert response.status_code == 404
         assert "not found" in response.text.lower()
+
+
+@pytest.mark.usefixtures("mock_mcp_crud_kb")
+@pytest.mark.usefixtures("mock_mcp_list_kbs")
+class TestListKnowledgeBasesEndpoint:
+    """Test suite for listing knowledge bases."""
+
+    def test_list_kb_success(self, client, auth_header, mock_mcp_list_kbs):
+        """Should return paginated KB list successfully."""
+        response = client.get(
+            "/api/apps/knowledge-bases?skip=0&limit=10",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["total"] == 2
+        assert data["page"] == 1
+        assert data["size"] == 2
+        assert isinstance(data["data"], list)
+        assert len(data["data"]) == 2
+
+        # Verify MCP call was correct
+        mock_mcp_list_kbs.assert_awaited_once_with(
+            skip=0,
+            limit=10,
+            with_documents=False,
+            include_total=True,
+            search=None,
+        )
+
+    def test_list_kb_with_search(self, client, auth_header, mock_mcp_list_kbs):
+        """Should pass search parameter to MCP."""
+        response = client.get(
+            "/api/apps/knowledge-bases?search=library",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 200
+
+        mock_mcp_list_kbs.assert_awaited_once_with(
+            skip=0,
+            limit=100,
+            with_documents=False,
+            include_total=True,
+            search="library",
+        )
+
+    def test_list_kb_empty_result(
+        self, client, auth_header, mock_mcp_list_kbs
+    ):
+        """Should handle empty paginated result cleanly."""
+        mock_mcp_list_kbs.return_value = {
+            "total": 0,
+            "page": 1,
+            "size": 0,
+            "data": [],
+        }
+
+        response = client.get(
+            "/api/apps/knowledge-bases",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 0
+        assert data["data"] == []
+
+    def test_list_kb_inactive_app_forbidden(
+        self, client, db, registered_app, mock_mcp_list_kbs
+    ):
+        """Should return 403 if app is inactive."""
+        app = (
+            db.query(App)
+            .filter(App.app_id == registered_app["app_id"])
+            .first()
+        )
+        app.status = AppStatus.revoked
+        db.commit()
+
+        headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
+
+        response = client.get(
+            "/api/apps/knowledge-bases",
+            headers=headers,
+        )
+
+        assert response.status_code == 403
+        assert "active" in response.text.lower()
+
+        # MCP should NOT be called
+        mock_mcp_list_kbs.assert_not_awaited()
+
+    def test_list_kb_missing_auth(self, client):
+        """Should return 401 if no Authorization header."""
+        response = client.get("/api/apps/knowledge-bases")
+        assert response.status_code == 401
+
+    def test_list_kb_mcp_error_raises_500(
+        self, client, auth_header, mock_mcp_list_kbs
+    ):
+        """If MCP throws an exception, endpoint should return 500."""
+        mock_mcp_list_kbs.side_effect = Exception("MCP failure")
+
+        response = client.get(
+            "/api/apps/knowledge-bases",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 500
+        assert "Failed to fetch KB list" in response.text
+
+
+@pytest.mark.usefixtures("mock_mcp_crud_kb")
+@pytest.mark.usefixtures("mock_mcp_list_documents")
+class TestListDocumentsWithKbId:
+    """Tests for /documents when kb_id is provided."""
+
+    def test_list_documents_with_kb_id_success(
+        self, client, auth_header, registered_app, mock_mcp_list_documents
+    ):
+        """Should proxy to MCP list_documents when kb_id is provided."""
+
+        response = client.get(
+            "/api/apps/documents"
+            "?kb_id=1&skip=0&limit=100&include_total=true&search=CDIP",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Validate paginated structure
+        assert data["total"] == 18
+        assert data["page"] == 2
+        assert data["size"] == 1
+        assert isinstance(data["data"], list)
+        assert len(data["data"]) == 1
+
+        # Validate MCP call
+        mock_mcp_list_documents.assert_awaited_once_with(
+            kb_id=1,
+            skip=0,
+            limit=100,
+            include_total=True,
+            search="CDIP",
+        )
+
+    def test_list_documents_with_kb_id_and_custom_pagination(
+        self, client, auth_header, mock_mcp_list_documents
+    ):
+        """Should forward custom skip/limit/search/flags to MCP."""
+        response = client.get(
+            "/api/apps/documents"
+            "?kb_id=5&skip=20&limit=5&include_total=false&search=test",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 200
+
+        mock_mcp_list_documents.assert_awaited_once_with(
+            kb_id=5,
+            skip=20,
+            limit=5,
+            include_total=False,
+            search="test",
+        )
+
+    def test_list_documents_requires_auth(self, client):
+        """Should return 401 when Authorization header is missing."""
+        response = client.get("/api/apps/documents?kb_id=1")
+        assert response.status_code == 401
+
+    def test_list_documents_inactive_app_forbidden(
+        self, client, db, registered_app, mock_mcp_list_documents
+    ):
+        """Should block inactive app from listing documents."""
+        app = (
+            db.query(App)
+            .filter(App.app_id == registered_app["app_id"])
+            .first()
+        )
+        app.status = AppStatus.revoked
+        db.commit()
+
+        response = client.get(
+            "/api/apps/documents?kb_id=1",
+            headers={
+                "Authorization": f"Bearer {registered_app['access_token']}"
+            },
+        )
+
+        assert response.status_code == 403
+        assert "active" in response.text.lower()
+
+        # MCP should NOT be called
+        mock_mcp_list_documents.assert_not_awaited()
+
+
+@pytest.mark.usefixtures("mock_mcp_crud_kb")
+class TestGetKnowledgeBaseDetails:
+    """Test suite for GET /knowledge-bases/{kb_id}"""
+
+    def test_get_kb_details_success(
+        self, client, auth_header, registered_app, mock_mcp_crud_kb
+    ):
+        """Should successfully return KB details merged from MCP + link."""
+        (_, mock_get_kb, _, _) = mock_mcp_crud_kb
+
+        # MCP response override (add timestamps for coverage)
+        mock_get_kb.return_value = {
+            "id": 1,
+            "name": "KB One",
+            "description": "Merged KB test",
+            "created_at": "2025-01-01T00:00:00",
+            "updated_at": "2025-01-01T00:00:00",
+        }
+
+        kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
+
+        res = client.get(
+            f"/api/apps/knowledge-bases/{kb_id}",
+            headers=auth_header,
+        )
+        assert res.status_code == 200
+
+        data = res.json()
+        assert data["id"] == kb_id
+        assert data["name"] == "KB One"
+        assert data["description"] == "Merged KB test"
+        assert data["is_default"] is True
+        assert data["documents"] == []
+        assert "created_at" in data
+        assert "updated_at" in data
+
+        mock_get_kb.assert_awaited_once_with(kb_id, with_documents=False)
+
+    def test_get_kb_details_not_linked_returns_404(self, client, auth_header):
+        """Should return 404 when KB is not linked to the app."""
+
+        res = client.get(
+            "/api/apps/knowledge-bases/9999",
+            headers=auth_header,
+        )
+        assert res.status_code == 404
+        assert "not found" in res.text.lower()
+
+    def test_get_kb_details_inactive_app_forbidden(
+        self, client, db, registered_app
+    ):
+        """Should block inactive app from accessing KB details."""
+        # Deactivate app
+        app = (
+            db.query(App)
+            .filter(App.app_id == registered_app["app_id"])
+            .first()
+        )
+        app.status = AppStatus.revoked
+        db.commit()
+
+        kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
+
+        res = client.get(
+            f"/api/apps/knowledge-bases/{kb_id}",
+            headers={
+                "Authorization": f"Bearer {registered_app['access_token']}"
+            },
+        )
+        assert res.status_code == 403
+        assert "active" in res.text.lower()
+
+    def test_get_kb_details_missing_auth_returns_401(self, client):
+        """Should return 401 when no auth is provided."""
+        res = client.get("/api/apps/knowledge-bases/1")
+        assert res.status_code == 401
+
+    def test_get_kb_details_mcp_error_returns_500(
+        self, client, auth_header, registered_app, mock_mcp_crud_kb
+    ):
+        """If MCP raises an error, return a 500 response."""
+        (_, mock_get_kb, _, _) = mock_mcp_crud_kb
+
+        mock_get_kb.side_effect = Exception("MCP exploded")
+
+        kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
+
+        res = client.get(
+            f"/api/apps/knowledge-bases/{kb_id}",
+            headers=auth_header,
+        )
+        assert res.status_code == 500
+        assert "Failed to fetch KB details" in res.text

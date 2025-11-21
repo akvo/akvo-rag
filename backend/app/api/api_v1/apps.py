@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any, List, Optional, Union
 from fastapi import (
     APIRouter,
     Depends,
@@ -28,6 +28,9 @@ from app.schemas.app import (
     KnowledgeBaseCreateRequest,
     KnowledgeBaseResponse,
     KnowledgeBaseUpdateRequest,
+    PaginatedKnowledgeBaseResponse,
+    PaginatedDocumentResponse,
+    KnowledgeBaseDetailResponse,
 )
 from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
@@ -282,24 +285,51 @@ async def upload_and_process_documents(
     }
 
 
-@router.get("/documents", response_model=List[DocumentUploadItem])
-async def get_documents(*, current_app: App = Depends(get_current_app)) -> Any:
+@router.get(
+    "/documents",
+    response_model=Union[PaginatedDocumentResponse, List[DocumentUploadItem]],
+)
+async def get_documents(
+    *,
+    current_app: App = Depends(get_current_app),
+    kb_id: Optional[int] = None,
+    skip: Optional[int] = 0,
+    limit: Optional[int] = 100,
+    include_total: Optional[bool] = True,
+    search: Optional[str] = None,
+):
     """
-    Get documents for the app's knowledge base.
+    If kb_id is provided, proxy to MCP /documents list endpoint.
+    If kb_id is NOT provided, return upload statuses for the default KB.
     """
-    default_kb = next(
-        (kb for kb in current_app.knowledge_bases if kb.is_default), None
-    )
-    if not default_kb:
-        raise HTTPException(
-            status_code=404, detail="Default KB not found for app"
+
+    kb_mcp_service = KnowledgeBaseMCPEndpointService()
+
+    # --- CASE 1: kb_id Explicitly Provided → List documents ---
+    if kb_id is not None:
+        return await kb_mcp_service.list_documents_by_kb_id(
+            kb_id=kb_id,
+            skip=skip,
+            limit=limit,
+            include_total=include_total,
+            search=search,
         )
 
-    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
-    res = await kb_mcp_endpoint_service.get_documents_upload(
+    # --- CASE 2: No kb_id → Use Default KB Upload Status ---
+    default_kb = next(
+        (kb for kb in current_app.knowledge_bases if kb.is_default),
+        None,
+    )
+
+    if not default_kb:
+        raise HTTPException(
+            status_code=404,
+            detail="Default KB not found for app",
+        )
+
+    return await kb_mcp_service.get_documents_upload(
         kb_id=default_kb.knowledge_base_id,
     )
-    return res
 
 
 @router.patch(
@@ -358,6 +388,95 @@ def update_app(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update app: {str(e)}",
         )
+
+
+@router.get(
+    "/knowledge-bases",
+    response_model=PaginatedKnowledgeBaseResponse,
+)
+async def list_knowledge_bases(
+    *,
+    skip: int = 0,
+    limit: int = 100,
+    search: Optional[str] = None,
+    current_app: App = Depends(get_current_app),
+) -> Any:
+    """
+    Proxies KB listing request to MCP Knowledge Base service:
+    GET /api/v1/knowledge-base?skip=&limit=&with_documents=&include_total=
+    """
+    try:
+        kb_mcp = KnowledgeBaseMCPEndpointService()
+        result = await kb_mcp.list_kbs(
+            skip=skip,
+            limit=limit,
+            with_documents=False,
+            include_total=True,
+            search=search,
+        )
+
+        return result
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch KB list: {str(e)}",
+        )
+
+
+@router.get(
+    "/knowledge-bases/{kb_id}",
+    response_model=KnowledgeBaseDetailResponse,
+)
+async def get_knowledge_base_details(
+    kb_id: int,
+    current_app: App = Depends(get_current_app),
+):
+    """
+    Fetch a single Knowledge Base.
+    Optionally include full document list from MCP.
+    """
+
+    # Ensure KB belongs to the current app
+    kb_link = next(
+        (
+            kb
+            for kb in current_app.knowledge_bases
+            if kb.knowledge_base_id == kb_id
+        ),
+        None,
+    )
+    if not kb_link:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge Base not found for this app.",
+        )
+
+    mcp = KnowledgeBaseMCPEndpointService()
+
+    try:
+        kb_details = await mcp.get_kb(kb_id, with_documents=False)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch KB details: {e}",
+        )
+
+    # Merge local/link info (id, is_default) with MCP details
+    merged = {
+        "id": kb_id,
+        "name": kb_details.get("name"),
+        "description": kb_details.get("description"),
+        "is_default": kb_link.is_default,
+        "created_at": kb_details.get("created_at"),
+        "updated_at": kb_details.get("updated_at"),
+        "documents": [],
+    }
+
+    return merged
 
 
 @router.post(
