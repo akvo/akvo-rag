@@ -53,9 +53,13 @@ export async function fetchApi(fullUrl: string, options: FetchOptions = {}) {
     if (response.status === 401) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
-        window.location.href = '/login';
+        // Only redirect to login if we're not already on the login page
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
       }
-      throw new ApiError(401, 'Unauthorized - Please log in again');
+      const errorData = await response.json().catch(() => ({}));
+      throw new ApiError(401, errorData.message || errorData.detail || 'Unauthorized - Please log in again');
     }
 
     if (!response.ok) {
