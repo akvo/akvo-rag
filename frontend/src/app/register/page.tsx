@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
+import { useUser } from "@/contexts/userContext";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function RegisterPage() {
     password: "",
     confirmPassword: "",
   });
+  const { setIsNewUser } = useUser();
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -93,8 +95,8 @@ export default function RegisterPage() {
         email,
         password,
       });
-
-      router.push("/login");
+      setIsNewUser(true);
+      router.replace("/login");
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);

@@ -67,7 +67,7 @@ def register(*, db: Session = Depends(get_db), user_in: UserCreate) -> Any:
             username=user_in.username,
             hashed_password=security.get_password_hash(user_in.password),
             is_superuser=user_in.is_superuser,
-            is_active=user_in.is_active,
+            is_active=False,  # New users are inactive by default
         )
         db.add(user)
         db.commit()
@@ -98,7 +98,11 @@ def login_access_token(
     elif not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Inactive user",
+            detail=(
+                "Your account is currently inactive and "
+                "requires administrator approval. "
+                "Please contact your administrator to activate your account."
+            ),
             headers={"WWW-Authenticate": "Bearer"},
         )
 
