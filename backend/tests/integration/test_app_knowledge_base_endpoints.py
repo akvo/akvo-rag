@@ -410,6 +410,7 @@ class TestListKnowledgeBasesEndpoint:
             with_documents=False,
             include_total=True,
             search=None,
+            kb_ids=None,
         )
 
     def test_list_kb_with_search(self, client, auth_header, mock_mcp_list_kbs):
@@ -427,6 +428,79 @@ class TestListKnowledgeBasesEndpoint:
             with_documents=False,
             include_total=True,
             search="library",
+            kb_ids=None,
+        )
+
+    def test_list_kb_with_kb_ids(self, client, auth_header, mock_mcp_list_kbs):
+        """Should pass search parameter to MCP."""
+        mock_mcp_list_kbs.return_value = {
+            "total": 0,
+            "page": 1,
+            "size": 0,
+            "data": [],
+        }
+
+        response = client.get(
+            "/api/apps/knowledge-bases?kb_ids=9999",
+            headers=auth_header,
+        )
+        assert response.status_code == 200
+
+        mock_mcp_list_kbs.assert_awaited_once_with(
+            skip=0,
+            limit=100,
+            with_documents=False,
+            include_total=True,
+            search=None,
+            kb_ids=[9999],
+        )
+
+    def test_list_kb_with_multiple_kb_ids(
+        self, client, auth_header, mock_mcp_list_kbs
+    ):
+        """Should handle multiple kb_ids."""
+        mock_mcp_list_kbs.return_value = {
+            "total": 0,
+            "page": 1,
+            "size": 0,
+            "data": [],
+        }
+        response = client.get(
+            "/api/apps/knowledge-bases?kb_ids=1&kb_ids=2&kb_ids=3",
+            headers=auth_header,
+        )
+        assert response.status_code == 200
+        mock_mcp_list_kbs.assert_awaited_once_with(
+            skip=0,
+            limit=100,
+            with_documents=False,
+            include_total=True,
+            search=None,
+            kb_ids=[1, 2, 3],
+        )
+
+    def test_list_kb_with_search_and_kb_ids(
+        self, client, auth_header, mock_mcp_list_kbs
+    ):
+        """Should pass both search and kb_ids parameters."""
+        mock_mcp_list_kbs.return_value = {
+            "total": 0,
+            "page": 1,
+            "size": 0,
+            "data": [],
+        }
+        response = client.get(
+            "/api/apps/knowledge-bases?search=test&kb_ids=9999",
+            headers=auth_header,
+        )
+        assert response.status_code == 200
+        mock_mcp_list_kbs.assert_awaited_once_with(
+            skip=0,
+            limit=100,
+            with_documents=False,
+            include_total=True,
+            search="test",
+            kb_ids=[9999],
         )
 
     def test_list_kb_empty_result(

@@ -126,6 +126,7 @@ class KnowledgeBaseMCPEndpointService:
         with_documents: bool = True,
         include_total=False,
         search: int = None,
+        kb_ids: Optional[List[int]] = None,
     ) -> List[Dict[str, Any]]:
         params = {
             "skip": skip,
@@ -134,6 +135,8 @@ class KnowledgeBaseMCPEndpointService:
             "include_total": include_total,
             "search": search,
         }
+        if kb_ids:
+            params["kb_ids"] = kb_ids
         return await self._request("GET", "", params=params)
 
     async def get_kb(

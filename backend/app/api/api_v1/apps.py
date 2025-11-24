@@ -6,6 +6,7 @@ from fastapi import (
     status,
     Response,
     UploadFile,
+    Query,
 )
 from sqlalchemy.orm import Session
 
@@ -399,6 +400,9 @@ async def list_knowledge_bases(
     skip: int = 0,
     limit: int = 100,
     search: Optional[str] = None,
+    kb_ids: Optional[List[int]] = Query(
+        None, description="Filter KB by KB IDs"
+    ),
     current_app: App = Depends(get_current_app),
 ) -> Any:
     """
@@ -413,6 +417,7 @@ async def list_knowledge_bases(
             with_documents=False,
             include_total=True,
             search=search,
+            kb_ids=kb_ids,
         )
 
         return result
