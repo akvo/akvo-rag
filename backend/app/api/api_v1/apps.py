@@ -262,6 +262,7 @@ async def upload_and_process_documents(
     """
     Upload and process documents for the app in one go
     Send multiple files in a single request.
+    * OLD route
     """
     default_kb = next(
         (kb for kb in current_app.knowledge_bases if kb.is_default), None
@@ -303,11 +304,24 @@ async def get_documents(
     If kb_id is provided, proxy to MCP /documents list endpoint.
     If kb_id is NOT provided, return upload statuses for the default KB.
     """
-
     kb_mcp_service = KnowledgeBaseMCPEndpointService()
 
     # --- CASE 1: kb_id Explicitly Provided → List documents ---
     if kb_id is not None:
+        app_kb = next(
+            (
+                kb
+                for kb in current_app.knowledge_bases
+                if kb.knowledge_base_id == kb_id
+            ),
+            None,
+        )
+        if not app_kb:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Knowledge base not found for this app.",
+            )
+
         return await kb_mcp_service.list_documents_by_kb_id(
             kb_id=kb_id,
             skip=skip,
@@ -452,6 +466,12 @@ async def list_knowledge_bases(
     GET /api/v1/knowledge-base?skip=&limit=&with_documents=&include_total=
     """
     try:
+        if not kb_ids:
+            # use kb_ids for related app to filter the list of KB
+            kb_ids = [
+                kb.knowledge_base_id for kb in current_app.knowledge_bases
+            ]
+
         kb_mcp = KnowledgeBaseMCPEndpointService()
         result = await kb_mcp.list_kbs(
             skip=skip,
@@ -488,7 +508,7 @@ async def get_knowledge_base_details(
     """
 
     # Ensure KB belongs to the current app
-    kb_link = next(
+    app_kb = next(
         (
             kb
             for kb in current_app.knowledge_bases
@@ -496,7 +516,7 @@ async def get_knowledge_base_details(
         ),
         None,
     )
-    if not kb_link:
+    if not app_kb:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Knowledge Base not found for this app.",
@@ -517,7 +537,7 @@ async def get_knowledge_base_details(
         "id": kb_id,
         "name": kb_details.get("name"),
         "description": kb_details.get("description"),
-        "is_default": kb_link.is_default,
+        "is_default": app_kb.is_default,
         "created_at": kb_details.get("created_at"),
         "updated_at": kb_details.get("updated_at"),
         "documents": [],
@@ -603,6 +623,21 @@ async def update_knowledge_base(
     - Automatically unsets the previous default KB.
     - Returns the updated KB record.
     """
+    # Find the KB under this app
+    app_kb = next(
+        (
+            kb
+            for kb in current_app.knowledge_bases
+            if kb.knowledge_base_id == kb_id
+        ),
+        None,
+    )
+    if not app_kb:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge base not found for this app.",
+        )
+
     try:
         update_result = await AppService.update_knowledge_base(
             db=db,

@@ -196,7 +196,6 @@ class TestAppKnowledgeBaseEndpoints:
 
         assert response.status_code == 200
         data = response.json()
-        print(data, "xxx")
 
         assert data["knowledge_base_id"] == kb_id
         assert data["is_default"] is True
@@ -387,7 +386,9 @@ class TestDeleteKnowledgeBaseEndpoint:
 class TestListKnowledgeBasesEndpoint:
     """Test suite for listing knowledge bases."""
 
-    def test_list_kb_success(self, client, auth_header, mock_mcp_list_kbs):
+    def test_list_kb_success(
+        self, client, auth_header, mock_mcp_list_kbs, registered_app
+    ):
         """Should return paginated KB list successfully."""
         response = client.get(
             "/api/apps/knowledge-bases?skip=0&limit=10",
@@ -404,16 +405,19 @@ class TestListKnowledgeBasesEndpoint:
         assert len(data["data"]) == 2
 
         # Verify MCP call was correct
+        kb_ids = [registered_app["knowledge_bases"][0]["knowledge_base_id"]]
         mock_mcp_list_kbs.assert_awaited_once_with(
             skip=0,
             limit=10,
             with_documents=False,
             include_total=True,
             search=None,
-            kb_ids=None,
+            kb_ids=kb_ids,
         )
 
-    def test_list_kb_with_search(self, client, auth_header, mock_mcp_list_kbs):
+    def test_list_kb_with_search(
+        self, client, auth_header, mock_mcp_list_kbs, registered_app
+    ):
         """Should pass search parameter to MCP."""
         response = client.get(
             "/api/apps/knowledge-bases?search=library",
@@ -422,13 +426,14 @@ class TestListKnowledgeBasesEndpoint:
 
         assert response.status_code == 200
 
+        kb_ids = [registered_app["knowledge_bases"][0]["knowledge_base_id"]]
         mock_mcp_list_kbs.assert_awaited_once_with(
             skip=0,
             limit=100,
             with_documents=False,
             include_total=True,
             search="library",
-            kb_ids=None,
+            kb_ids=kb_ids,
         )
 
     def test_list_kb_with_kb_ids(self, client, auth_header, mock_mcp_list_kbs):
@@ -579,9 +584,9 @@ class TestListDocumentsWithKbId:
     ):
         """Should proxy to MCP list_documents when kb_id is provided."""
 
+        kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
         response = client.get(
-            "/api/apps/documents"
-            "?kb_id=1&skip=0&limit=100&include_total=true&search=CDIP",
+            f"/api/apps/documents?kb_id={kb_id}&skip=0&limit=100&include_total=true&search=CDIP",  # noqa
             headers=auth_header,
         )
 
@@ -597,7 +602,7 @@ class TestListDocumentsWithKbId:
 
         # Validate MCP call
         mock_mcp_list_documents.assert_awaited_once_with(
-            kb_id=1,
+            kb_id=kb_id,
             skip=0,
             limit=100,
             include_total=True,
@@ -605,19 +610,21 @@ class TestListDocumentsWithKbId:
         )
 
     def test_list_documents_with_kb_id_and_custom_pagination(
-        self, client, auth_header, mock_mcp_list_documents
+        self, client, auth_header, mock_mcp_list_documents, registered_app
     ):
         """Should forward custom skip/limit/search/flags to MCP."""
+        kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
+
         response = client.get(
             "/api/apps/documents"
-            "?kb_id=5&skip=20&limit=5&include_total=false&search=test",
+            f"?kb_id={kb_id}&skip=20&limit=5&include_total=false&search=test",
             headers=auth_header,
         )
 
         assert response.status_code == 200
 
         mock_mcp_list_documents.assert_awaited_once_with(
-            kb_id=5,
+            kb_id=kb_id,
             skip=20,
             limit=5,
             include_total=False,
@@ -769,7 +776,9 @@ class TestDeleteDocumentEndpoint:
     def test_delete_document_success(
         self, client, auth_header, registered_app, mock_mcp_delete_document
     ):
-        """Should successfully delete a document when KB is linked to the app."""
+        """
+        Should successfully delete a document when KB is linked to the app.
+        """
 
         kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
 
