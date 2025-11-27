@@ -333,6 +333,48 @@ async def get_documents(
     )
 
 
+@router.delete(
+    "/documents",
+    response_model=dict,
+)
+async def delete_document(
+    *,
+    kb_id: int = Query(
+        ..., description="KB ID for the document that want to delete"
+    ),
+    doc_id: int = Query(
+        ..., description="Document ID for the document that want to delete"
+    ),
+    current_app: App = Depends(get_current_app),
+):
+    """
+    Delete a document by kb_id and doc_id
+    """
+    app_kb = next(
+        (
+            kb
+            for kb in current_app.knowledge_bases
+            if kb.knowledge_base_id == kb_id
+        ),
+        None,
+    )
+    if not app_kb:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge base not found for this app.",
+        )
+
+    kb_mcp_service = KnowledgeBaseMCPEndpointService()
+
+    try:
+        return await kb_mcp_service.delete_document(kb_id=kb_id, doc_id=doc_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete document: {e}",
+        ) from e
+
+
 @router.patch(
     "",
     response_model=AppUpdateResponse,

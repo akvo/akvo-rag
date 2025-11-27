@@ -748,3 +748,105 @@ class TestGetKnowledgeBaseDetails:
         )
         assert res.status_code == 500
         assert "Failed to fetch KB details" in res.text
+
+
+@pytest.mark.usefixtures("mock_mcp_crud_kb")
+@pytest.mark.usefixtures("mock_mcp_list_documents")
+class TestDeleteDocumentEndpoint:
+    """Tests for DELETE /api/apps/documents"""
+
+    @pytest.fixture
+    def mock_mcp_delete_document(self):
+        """Mock MCP delete_document call."""
+        with patch(
+            "mcp_clients.kb_mcp_endpoint_service."
+            "KnowledgeBaseMCPEndpointService.delete_document",
+            new_callable=AsyncMock,
+        ) as mock_delete:
+            mock_delete.return_value = {"status": "deleted"}
+            yield mock_delete
+
+    def test_delete_document_success(
+        self, client, auth_header, registered_app, mock_mcp_delete_document
+    ):
+        """Should successfully delete a document when KB is linked to the app."""
+
+        kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
+
+        response = client.delete(
+            f"/api/apps/documents?kb_id={kb_id}&doc_id=123",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "deleted"}
+
+        mock_mcp_delete_document.assert_awaited_once_with(
+            kb_id=kb_id, doc_id=123
+        )
+
+    def test_delete_document_kb_not_linked_returns_404(
+        self, client, auth_header, mock_mcp_delete_document
+    ):
+        """Should return 404 if KB is NOT linked to this app."""
+
+        response = client.delete(
+            "/api/apps/documents?kb_id=9999&doc_id=1",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+        mock_mcp_delete_document.assert_not_awaited()
+
+    def test_delete_document_inactive_app_forbidden(
+        self, client, db, registered_app, mock_mcp_delete_document
+    ):
+        """Should block an inactive app from deleting document."""
+
+        # deactivate app
+        app = (
+            db.query(App)
+            .filter(App.app_id == registered_app["app_id"])
+            .first()
+        )
+        app.status = AppStatus.revoked
+        db.commit()
+
+        kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
+
+        response = client.delete(
+            f"/api/apps/documents?kb_id={kb_id}&doc_id=55",
+            headers={
+                "Authorization": f"Bearer {registered_app['access_token']}"
+            },
+        )
+
+        assert response.status_code == 403
+        assert "active" in response.text.lower()
+
+        mock_mcp_delete_document.assert_not_awaited()
+
+    def test_delete_document_missing_auth_returns_401(self, client):
+        """Should return 401 when no Authorization header is provided."""
+
+        response = client.delete("/api/apps/documents?kb_id=1&doc_id=1")
+        assert response.status_code == 401
+
+    def test_delete_document_mcp_error_returns_500(
+        self, client, auth_header, registered_app, mock_mcp_delete_document
+    ):
+        """Return 500 if MCP throws an exception."""
+
+        mock_mcp_delete_document.side_effect = Exception("MCP error")
+
+        kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
+
+        response = client.delete(
+            f"/api/apps/documents?kb_id={kb_id}&doc_id=123",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 500
+        assert "Failed to delete document" in response.text
