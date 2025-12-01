@@ -11,7 +11,7 @@
  * Only superusers can access this page; others are redirected.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
@@ -43,33 +43,25 @@ const UsersPage: React.FC = () => {
   const [users, setUsers] = useState<Array<any>>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(10);
+  const [pageSize, setPageSize] = useState<number>(1);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [selectedTab, setSelectedTab] = useState<string>("pending");
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const onToggleUserActiveStatus = async (
     userId: string,
     isActive: boolean,
   ) => {
-    setLoading(true);
     try {
-      // Update UI optimistically
-      setUsers((prevUsers) =>
-        prevUsers.map((user) =>
-          user.id === userId ? { ...user, is_active: isActive } : user,
-        ),
-      );
-      // Make API call to deactivate user
+      // Make API call to toggle active status
       await api.patch(`/api/users/${userId}/toggle-active`);
       // Refresh the users list
       fetchUsers();
     } catch (error) {
-      console.error("Error deactivating user:", error);
-    } finally {
-      setLoading(false);
+      console.error("Error toggling user active status:", error);
     }
   };
 
@@ -77,7 +69,6 @@ const UsersPage: React.FC = () => {
     userId: string,
     isSuperuser: boolean,
   ) => {
-    setLoading(true);
     try {
       // Update UI optimistically
       setUsers((prevUsers) =>
@@ -89,8 +80,8 @@ const UsersPage: React.FC = () => {
       await api.patch(`/api/users/${userId}/toggle-superuser`);
     } catch (error) {
       console.error("Error updating superuser status:", error);
-    } finally {
-      setLoading(false);
+      // Revert on error
+      fetchUsers();
     }
   };
 
@@ -118,13 +109,11 @@ const UsersPage: React.FC = () => {
       const {
         total,
         data: _users,
-        page: _page,
         size: _size,
       } = await api.get(apiURL);
 
       setUsers(_users);
       setTotalCount(total);
-      setPage(_page);
       setPageSize(_size);
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -133,15 +122,36 @@ const UsersPage: React.FC = () => {
     }
   }, [selectedTab, page, pageSize, searchTerm]);
 
-  // Fetch users when dependencies change
-  useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+  // Single effect to handle all fetching logic
+  const prevTabRef = useRef(selectedTab);
+  const prevSearchRef = useRef(searchTerm);
+  const prevPageRef = useRef(page);
 
-  // Reset to page 1 when tab or search term changes
   useEffect(() => {
-    setPage(1);
-  }, [selectedTab, searchTerm]);
+    const tabChanged = prevTabRef.current !== selectedTab;
+    const searchChanged = prevSearchRef.current !== searchTerm;
+    const pageChanged = prevPageRef.current !== page;
+
+    // Update refs
+    prevTabRef.current = selectedTab;
+    prevSearchRef.current = searchTerm;
+    prevPageRef.current = page;
+
+    // If tab or search changed, reset to page 1 and fetch
+    if (tabChanged || searchChanged) {
+      if (page !== 1) {
+        setPage(1);
+        // Don't fetch here - let the page change trigger it
+      } else {
+        // Already on page 1, so fetch immediately
+        fetchUsers();
+      }
+    }
+    // If only page changed (not tab/search), fetch
+    else if (pageChanged) {
+      fetchUsers();
+    }
+  }, [selectedTab, searchTerm, page, fetchUsers]);
 
   useEffect(() => {
     // Redirect non-superusers to dashboard home
@@ -152,7 +162,12 @@ const UsersPage: React.FC = () => {
 
   // Handle search with debounce
   const handleSearch = (value: string) => {
-    setSearchTerm(value);
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    searchTimeoutRef.current = setTimeout(() => {
+      setSearchTerm(value);
+    }, 300);
   };
 
   if (!authUser || !authUser.is_superuser) {
@@ -194,12 +209,7 @@ const UsersPage: React.FC = () => {
                 type="text"
                 placeholder="Search by email or username"
                 className="border border-gray-300 rounded px-4 py-2 w-64"
-                onChange={(e) => {
-                  const value = e.target.value;
-                  // Debounce the search
-                  const timeoutId = setTimeout(() => handleSearch(value), 300);
-                  return () => clearTimeout(timeoutId);
-                }}
+                onChange={(e) => handleSearch(e.target.value)}
               />
             </div>
             {/* Table for displaying users */}
