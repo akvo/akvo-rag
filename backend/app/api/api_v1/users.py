@@ -43,8 +43,8 @@ def read_users(
         query = query.filter(User.is_active == is_active)
     if search:
         query = query.filter(
-            User.email.ilike(f"%{search}%") |
-            User.username.ilike(f"%{search}%")
+            User.email.ilike(f"%{search}%")
+            | User.username.ilike(f"%{search}%")
         )
 
     total = query.count()
@@ -52,12 +52,7 @@ def read_users(
     skip = (page - 1) * size
     users = query.offset(skip).limit(size).all()
 
-    return UserPagination(
-        total=total,
-        page=page,
-        size=size,
-        data=users
-    )
+    return UserPagination(total=total, page=page, size=size, data=users)
 
 
 @router.patch("/{user_id}/toggle-active", response_model=UserDataResponse)
@@ -109,17 +104,14 @@ def toggle_user_superuser_status(
             status_code=400, detail="Cannot change own superuser status"
         )
 
-    user = db.query(User).filter(
-        User.id == user_id
-    ).first()
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     if not user.is_active:
         raise HTTPException(
-            status_code=400, detail=(
-                "Cannot change superuser status of inactive user"
-            )
+            status_code=400,
+            detail=("Cannot change superuser status of inactive user"),
         )
 
     user.is_superuser = not user.is_superuser
