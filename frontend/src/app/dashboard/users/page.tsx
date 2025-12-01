@@ -43,7 +43,7 @@ const UsersPage: React.FC = () => {
   const [users, setUsers] = useState<Array<any>>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [selectedTab, setSelectedTab] = useState<string>("pending");
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
