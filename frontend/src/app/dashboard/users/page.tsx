@@ -126,6 +126,7 @@ const UsersPage: React.FC = () => {
   const prevTabRef = useRef(selectedTab);
   const prevSearchRef = useRef(searchTerm);
   const prevPageRef = useRef(page);
+  const isInitialMount = useRef(true);
 
   useEffect(() => {
     const tabChanged = prevTabRef.current !== selectedTab;
@@ -136,6 +137,13 @@ const UsersPage: React.FC = () => {
     prevTabRef.current = selectedTab;
     prevSearchRef.current = searchTerm;
     prevPageRef.current = page;
+
+    // On initial mount, always fetch
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      fetchUsers();
+      return;
+    }
 
     // If tab or search changed, reset to page 1 and fetch
     if (tabChanged || searchChanged) {
