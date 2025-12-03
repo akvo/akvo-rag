@@ -35,9 +35,10 @@ export default function KnowledgeBasePage() {
       <div className="flex justify-between items-start mb-8">
         <div className="space-y-5">
           <h1 className="text-3xl font-bold">Knowledge Base</h1>
+          {/* TODO:: Enable this once view document validated
           <p className="text-sm text-gray-700 bg-gray-50 border-l-4 border-gray-400 p-2 rounded">
             Select a document name or view button to preview or download the file.
-          </p>
+          </p> */}
         </div>
         {
           kbOwner ? (

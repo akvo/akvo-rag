@@ -164,13 +164,15 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
                     />
                   )}
                 </div>
+                {/* TODO:: Enable link once view document validated
                 <Link
                   href={doc.file_url}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   {doc.file_name}
-                </Link>
+                </Link> */}
+                {doc.file_name}
               </div>
             </TableCell>
             <TableCell>{(doc.file_size / 1024 / 1024).toFixed(2)} MB</TableCell>
@@ -196,6 +198,7 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
             </TableCell>
             <TableCell>
               <div className="space-x-2">
+                {/* TODO:: Enable link once view document validated
                 <Link
                   href={doc.file_url}
                   target="_blank"
@@ -206,7 +209,7 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
                   >
                     <Eye className="h-4 w-4 text-blue-700" />
                   </button>
-                </Link>
+                </Link> */}
                 {
                     // allow delete only for same user / kb owner
                     // currently allow delete for all user
