@@ -580,8 +580,7 @@ class TestListDocumentsWithKbId:
         """Should proxy to MCP list_documents when kb_id is provided."""
 
         response = client.get(
-            "/api/apps/documents"
-            "?kb_id=1&skip=0&limit=100&include_total=true&search=CDIP",
+            "/api/apps/documents?kb_id=1&skip=0&limit=100&search=CDIP",
             headers=auth_header,
         )
 
@@ -600,7 +599,6 @@ class TestListDocumentsWithKbId:
             kb_id=1,
             skip=0,
             limit=100,
-            include_total=True,
             search="CDIP",
         )
 
@@ -609,8 +607,7 @@ class TestListDocumentsWithKbId:
     ):
         """Should forward custom skip/limit/search/flags to MCP."""
         response = client.get(
-            "/api/apps/documents"
-            "?kb_id=5&skip=20&limit=5&include_total=false&search=test",
+            "/api/apps/documents?kb_id=5&skip=20&limit=5&search=test",
             headers=auth_header,
         )
 
@@ -620,7 +617,6 @@ class TestListDocumentsWithKbId:
             kb_id=5,
             skip=20,
             limit=5,
-            include_total=False,
             search="test",
         )
 
