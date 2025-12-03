@@ -159,7 +159,7 @@ class KnowledgeBaseMCPEndpointService:
         kb_id: int,
         skip: Optional[int] = 0,
         limit: Optional[int] = 100,
-        include_total: Optional[bool] = False,
+        include_total: Optional[bool] = True,
         search: Optional[str] = None,
     ) -> Dict[str, Any]:
         params = {

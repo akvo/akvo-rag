@@ -296,7 +296,6 @@ async def get_documents(
     kb_id: Optional[int] = None,
     skip: Optional[int] = 0,
     limit: Optional[int] = 100,
-    include_total: Optional[bool] = True,
     search: Optional[str] = None,
 ):
     """
@@ -312,7 +311,6 @@ async def get_documents(
             kb_id=kb_id,
             skip=skip,
             limit=limit,
-            include_total=include_total,
             search=search,
         )
 
