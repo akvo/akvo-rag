@@ -32,8 +32,13 @@ export default function KnowledgeBasePage() {
 
   return (
     <DashboardLayout>
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Knowledge Base</h1>
+      <div className="flex justify-between items-start mb-8">
+        <div className="space-y-5">
+          <h1 className="text-3xl font-bold">Knowledge Base</h1>
+          <p class="text-sm text-gray-700 bg-gray-50 border-l-4 border-gray-400 p-2 rounded">
+            Select a document name or view button to preview or download the file.
+          </p>
+        </div>
         {
           kbOwner ? (
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
