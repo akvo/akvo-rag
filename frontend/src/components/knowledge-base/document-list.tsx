@@ -22,6 +22,7 @@ interface Document {
   file_name: string;
   file_path: string;
   file_size: number;
+  file_url: string;
   content_type: string;
   created_at: string;
   processing_tasks: Array<{
