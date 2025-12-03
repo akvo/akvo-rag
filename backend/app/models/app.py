@@ -1,4 +1,13 @@
-from sqlalchemy import Column, Integer, String, Text, Enum as SQLEnum
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Text,
+    Boolean,
+    ForeignKey,
+    Enum as SQLEnum,
+)
+from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.mysql import JSON
 import enum
 
@@ -29,7 +38,28 @@ class App(Base, TimestampMixin):
 
     # Authorization
     scopes = Column(JSON, nullable=False)  # Store as JSON array
-    status = Column(SQLEnum(AppStatus), default=AppStatus.active, nullable=False)
+    status = Column(
+        SQLEnum(AppStatus), default=AppStatus.active, nullable=False
+    )
 
-    # list of KB IDs
-    knowledge_base_id = Column(Integer, nullable=True)
+    # Relationships
+    knowledge_bases = relationship(
+        "AppKnowledgeBase",
+        back_populates="app",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class AppKnowledgeBase(Base, TimestampMixin):
+    __tablename__ = "app_knowledge_bases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    app_id = Column(
+        Integer, ForeignKey("apps.id", ondelete="CASCADE"), nullable=False
+    )
+    knowledge_base_id = Column(Integer, nullable=False)  # External MCP KB ID
+    is_default = Column(Boolean, default=False, nullable=False)
+
+    # Relationship back to App
+    app = relationship("App", back_populates="knowledge_bases")
