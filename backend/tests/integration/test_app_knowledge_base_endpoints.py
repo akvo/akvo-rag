@@ -586,7 +586,7 @@ class TestListDocumentsWithKbId:
 
         kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
         response = client.get(
-            f"/api/apps/documents?kb_id={kb_id}&skip=0&limit=100&include_total=true&search=CDIP",  # noqa
+            f"/api/apps/documents?kb_id={kb_id}&skip=0&limit=100&search=CDIP",  # noqa
             headers=auth_header,
         )
 
@@ -605,7 +605,6 @@ class TestListDocumentsWithKbId:
             kb_id=kb_id,
             skip=0,
             limit=100,
-            include_total=True,
             search="CDIP",
         )
 
@@ -617,7 +616,7 @@ class TestListDocumentsWithKbId:
 
         response = client.get(
             "/api/apps/documents"
-            f"?kb_id={kb_id}&skip=20&limit=5&include_total=false&search=test",
+            f"?kb_id={kb_id}&skip=20&limit=5&search=test",
             headers=auth_header,
         )
 
@@ -627,7 +626,6 @@ class TestListDocumentsWithKbId:
             kb_id=kb_id,
             skip=20,
             limit=5,
-            include_total=False,
             search="test",
         )
 

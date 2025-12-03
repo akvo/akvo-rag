@@ -11,7 +11,7 @@
  * Only superusers can access this page; others are redirected.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
@@ -48,25 +48,20 @@ const UsersPage: React.FC = () => {
   const [selectedTab, setSelectedTab] = useState<string>("pending");
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const onToggleUserActiveStatus = async (
     userId: string,
     isActive: boolean,
   ) => {
-    setLoading(true);
     try {
-      // Update UI optimistically
-      setUsers((prevUsers) =>
-        prevUsers.map((user) =>
-          user.id === userId ? { ...user, is_active: isActive } : user,
-        ),
-      );
-      // Make API call to deactivate user
+      // Make API call to toggle active status
       await api.patch(`/api/users/${userId}/toggle-active`);
+      // Refresh the users list
+      fetchUsers();
     } catch (error) {
-      console.error("Error deactivating user:", error);
-    } finally {
-      setLoading(false);
+      console.error("Error toggling user active status:", error);
     }
   };
 
@@ -74,7 +69,6 @@ const UsersPage: React.FC = () => {
     userId: string,
     isSuperuser: boolean,
   ) => {
-    setLoading(true);
     try {
       // Update UI optimistically
       setUsers((prevUsers) =>
@@ -86,63 +80,86 @@ const UsersPage: React.FC = () => {
       await api.patch(`/api/users/${userId}/toggle-superuser`);
     } catch (error) {
       console.error("Error updating superuser status:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onSearch = (searchTerm: string) => {
-    // Implement search functionality with timeout/debounce as needed
-    console.log("Search term:", searchTerm);
-    setLoading(true);
-    try {
-      const apiURL =
-        selectedTab === "pending"
-          ? `/api/users?is_active=false&search=${searchTerm}`
-          : `/api/users?search=${searchTerm}`;
-      // Fetch users based on search term
-      api
-        .get(apiURL)
-        .then(({ total, data: _users, page: _page, size: _size }) => {
-          setUsers(_users);
-          setTotalCount(total);
-          setPage(_page);
-          setPageSize(_size);
-        });
-    } catch (error) {
-      console.error("Error searching users:", error);
-    } finally {
-      setLoading(false);
+      // Revert on error
+      fetchUsers();
     }
   };
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const apiURL =
-        selectedTab === "pending"
-          ? "/api/users?is_active=false"
-          : "/api/users?is_active=true";
+      // Build the API URL with pagination and search parameters
+      const params = new URLSearchParams();
+
+      if (selectedTab === "pending") {
+        params.append("is_active", "false");
+      } else {
+        params.append("is_active", "true");
+      }
+
+      params.append("page", page.toString());
+      params.append("size", pageSize.toString());
+
+      if (searchTerm) {
+        params.append("search", searchTerm);
+      }
+
+      const apiURL = `/api/users?${params.toString()}`;
+
       const {
         total,
         data: _users,
-        page: _page,
         size: _size,
       } = await api.get(apiURL);
+
       setUsers(_users);
       setTotalCount(total);
-      setPage(_page);
       setPageSize(_size);
     } catch (error) {
       console.error("Error fetching users:", error);
     } finally {
       setLoading(false);
     }
-  }, [selectedTab]);
+  }, [selectedTab, page, pageSize, searchTerm]);
+
+  // Single effect to handle all fetching logic
+  const prevTabRef = useRef(selectedTab);
+  const prevSearchRef = useRef(searchTerm);
+  const prevPageRef = useRef(page);
+  const isInitialMount = useRef(true);
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    const tabChanged = prevTabRef.current !== selectedTab;
+    const searchChanged = prevSearchRef.current !== searchTerm;
+    const pageChanged = prevPageRef.current !== page;
+
+    // Update refs
+    prevTabRef.current = selectedTab;
+    prevSearchRef.current = searchTerm;
+    prevPageRef.current = page;
+
+    // On initial mount, always fetch
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      fetchUsers();
+      return;
+    }
+
+    // If tab or search changed, reset to page 1 and fetch
+    if (tabChanged || searchChanged) {
+      if (page !== 1) {
+        setPage(1);
+        // Don't fetch here - let the page change trigger it
+      } else {
+        // Already on page 1, so fetch immediately
+        fetchUsers();
+      }
+    }
+    // If only page changed (not tab/search), fetch
+    else if (pageChanged) {
+      fetchUsers();
+    }
+  }, [selectedTab, searchTerm, page, fetchUsers]);
 
   useEffect(() => {
     // Redirect non-superusers to dashboard home
@@ -150,6 +167,16 @@ const UsersPage: React.FC = () => {
       router.push("/dashboard");
     }
   }, [authUser, router]);
+
+  // Handle search with debounce
+  const handleSearch = (value: string) => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    searchTimeoutRef.current = setTimeout(() => {
+      setSearchTerm(value);
+    }, 300);
+  };
 
   if (!authUser || !authUser.is_superuser) {
     return null; // Or a loading spinner
@@ -190,9 +217,7 @@ const UsersPage: React.FC = () => {
                 type="text"
                 placeholder="Search by email or username"
                 className="border border-gray-300 rounded px-4 py-2 w-64"
-                onChange={(e) => {
-                  setTimeout(() => onSearch(e.target.value), 300);
-                }}
+                onChange={(e) => handleSearch(e.target.value)}
               />
             </div>
             {/* Table for displaying users */}
@@ -208,13 +233,20 @@ const UsersPage: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users
-                    .filter((user) =>
-                      selectedTab === "pending"
-                        ? !user.is_active
-                        : user.is_active,
-                    )
-                    .map((user) => (
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8">
+                        Loading...
+                      </TableCell>
+                    </TableRow>
+                  ) : users.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                        No users found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    users.map((user) => (
                       <TableRow key={user.id}>
                         <TableCell>
                           {user.created_at}
@@ -275,7 +307,8 @@ const UsersPage: React.FC = () => {
                           )}
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ))
+                  )}
                 </TableBody>
               </Table>
               <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -339,11 +372,6 @@ const UsersPage: React.FC = () => {
                   </div>
                 </DialogContent>
               </Dialog>
-              {users.length === 0 && !loading && (
-                <div className="p-4 text-center text-gray-500">
-                  No users found.
-                </div>
-              )}
             </div>
             <div className="flex justify-end mt-4">
               <Pagination

@@ -159,7 +159,7 @@ class KnowledgeBaseMCPEndpointService:
         kb_id: int,
         skip: Optional[int] = 0,
         limit: Optional[int] = 100,
-        include_total: Optional[bool] = False,
+        include_total: Optional[bool] = True,
         search: Optional[str] = None,
     ) -> Dict[str, Any]:
         params = {
@@ -213,18 +213,50 @@ class KnowledgeBaseMCPEndpointService:
 
         for f in files:
             if isinstance(f, UploadFile):
-                # 🧩 Handle FastAPI upload object
+                # 🧩 Handle FastAPI upload object (no changes)
                 content = await f.read()
                 file_payload.append(
                     ("files", (f.filename, content, f.content_type))
                 )
                 await f.seek(0)
+
             elif isinstance(f, str) and os.path.exists(f):
-                # 🧠 Handle local file path
+                # 🧠 Handle local file path from Celery
+
+                # ✅ NEW: Validate file exists and is readable
+                if not os.path.isfile(f):
+                    raise ValueError(f"Not a valid file: {f}")
+
+                file_size = os.path.getsize(f)
+                if file_size == 0:
+                    raise ValueError(f"Empty file: {f}")
+
+                # ✅ NEW: Read file content properly
                 async with aiofiles.open(f, "rb") as af:
                     content = await af.read()
+
+                # ✅ NEW: Verify content was read
+                if not content:
+                    raise ValueError(f"Could not read file content: {f}")
+
                 filename = os.path.basename(f)
                 content_type, _ = mimetypes.guess_type(filename)
+
+                # ✅ NEW: Validate supported file type
+                supported_extensions = {".pdf", ".docx", ".md", ".txt"}
+                _, ext = os.path.splitext(filename)
+                if ext.lower() not in supported_extensions:
+                    raise ValueError(
+                        f"Unsupported file type: {ext}. "
+                        f"Supported types: {supported_extensions}"
+                    )
+
+                # ✅ NEW: Log for debugging
+                logger.info(
+                    f"Processing Celery file: {filename}, "
+                    f"size: {len(content)} bytes, type: {content_type}"
+                )
+
                 file_payload.append(
                     (
                         "files",
@@ -236,7 +268,14 @@ class KnowledgeBaseMCPEndpointService:
                     )
                 )
             else:
-                raise ValueError(f"Invalid file input: {f!r}")
+                raise ValueError(
+                    f"Invalid file input: {f!r}. "
+                    f"Must be UploadFile or valid file path"
+                )
+
+        # ✅ NEW: Validate we have files to upload
+        if not file_payload:
+            raise ValueError("No valid files to upload")
 
         return await self._request(
             "POST", f"/{kb_id}/documents/full-process", files=file_payload

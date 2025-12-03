@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import List, Optional, Annotated
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form, File
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -60,7 +60,7 @@ async def create_job(
             ),
         ),
     ],
-    files: Optional[List[UploadFile]] = [],
+    files: Optional[List[UploadFile]] = File(None),
     db: Session = Depends(get_db),
     current_app: App = Depends(get_current_app),
 ):
