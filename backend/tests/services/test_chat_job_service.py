@@ -407,5 +407,5 @@ class TestChatJobService:
             state_arg = mock_workflow.ainvoke.call_args[0][0]
             assert (
                 state_arg["qa_prompt_str"]
-                == "QA_PROMPT\n\n**IMPORTANT: Follow these additional rules strictly:**\n\nCustom job prompt"
+                == "QA_PROMPT\n\n**IMPORTANT: Follow these additional rules strictly:**\n\nCustom job prompt\n### Provided Context:\n{context}"  # noqa
             )
