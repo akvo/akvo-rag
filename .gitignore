@@ -65,3 +65,19 @@ streamlit-override.yml
 backend/RAG_evaluation/output
 backend/mcp_discovery.json
 backend/.pip
+
+# Celery Beat schedule files
+celerybeat-schedule
+celerybeat-schedule.*
+celerybeat.pid
+
+# Celery PID files
+*.pid
+
+# Celery logs
+*.log
+
+# Celery worker + beat logs
+worker.log
+beat.log
+celery.log
