@@ -181,8 +181,8 @@ export default function NewChatPage() {
                         ) : (
                           <Tag label="Private" />
                         )}
-                        <span>{kb.name}</span>
                       </div>
+                      <div className="top-2">{kb.name}</div>
                       <p className="text-sm text-muted-foreground line-clamp-2">
                         {kb.description || "No description provided"}
                       </p>

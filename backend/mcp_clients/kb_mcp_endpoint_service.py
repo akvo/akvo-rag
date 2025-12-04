@@ -284,6 +284,9 @@ class KnowledgeBaseMCPEndpointService:
     async def get_documents_upload(self, kb_id: int) -> List[dict]:
         return await self._request("GET", f"/{kb_id}/documents/upload")
 
+    async def delete_document(self, kb_id: int, doc_id: int) -> List[dict]:
+        return await self._request("DELETE", f"/{kb_id}/documents/{doc_id}")
+
     # ---- Processing tasks ----
     async def get_processing_tasks(
         self, kb_id: int, task_ids: List[int]

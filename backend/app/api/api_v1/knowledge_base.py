@@ -1,10 +1,5 @@
 from typing import List, Any
-from fastapi import (
-    APIRouter,
-    Depends,
-    UploadFile,
-    Query
-)
+from fastapi import APIRouter, Depends, UploadFile, Query
 from sqlalchemy.orm import Session
 import logging
 from pydantic import BaseModel
@@ -71,7 +66,7 @@ async def get_knowledge_base(
     *,
     db: Session = Depends(get_db),
     kb_id: int,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> Any:
     """
     Get knowledge base by ID.
@@ -191,7 +186,7 @@ async def get_document(
     db: Session = Depends(get_db),
     kb_id: int,
     doc_id: int,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> Any:
     """
     Get document details by ID.
@@ -199,6 +194,24 @@ async def get_document(
     """
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     result = await kb_mcp_endpoint_service.get_document(
+        kb_id=kb_id, doc_id=doc_id
+    )
+    return result
+
+
+@router.delete("/{kb_id}/documents/{doc_id}")
+async def delete_document(
+    *,
+    db: Session = Depends(get_db),
+    kb_id: int,
+    doc_id: int,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """
+    Delete a document by ID.
+    """
+    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+    result = await kb_mcp_endpoint_service.delete_document(
         kb_id=kb_id, doc_id=doc_id
     )
     return result
