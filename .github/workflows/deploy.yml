@@ -61,6 +61,14 @@ jobs:
           dockerfile-location: "backend/Dockerfile.celery"
           cluster-name: "test"
 
+      - name: Docker Build Celery Beat
+        uses: ./composite-actions/.github/actions/docker-build
+        with:
+          app-name: "akvo-rag"
+          service-name: "celery-beat"
+          dockerfile-location: "backend/Dockerfile.celery"
+          cluster-name: "test"
+
       - name: Docker Build Script
         uses: ./composite-actions/.github/actions/docker-build
         with:
@@ -90,6 +98,14 @@ jobs:
         with:
           app-name: "akvo-rag"
           service-name: "celery-worker"
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
+          cluster-name: "test"
+
+      - name: Docker Push Celery Beat
+        uses: ./composite-actions/.github/actions/docker-push
+        with:
+          app-name: "akvo-rag"
+          service-name: "celery-beat"
           gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
           cluster-name: "test"
 
@@ -168,6 +184,16 @@ jobs:
           namespace-name: "akvo-rag-namespace"
           gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
 
+      - name: Rollout Celery Beat
+        uses: ./composite-actions/.github/actions/k8s-rollout
+        with:
+          app-name: "akvo-rag"
+          deployment-name: "celery-beat-deployment"
+          container-name: "celery-beat"
+          cluster-name: "test"
+          namespace-name: "akvo-rag-namespace"
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+
       - name: Rollout Script
         uses: ./composite-actions/.github/actions/k8s-rollout
         with:
@@ -233,6 +259,16 @@ jobs:
           app-name: "akvo-rag"
           deployment-name: "celery-worker-deployment"
           container-name: "celery-worker"
+          cluster-name: "test"
+          namespace-name: "agriconnect-rag-namespace"
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+
+      - name: Rollout Celery Beat
+        uses: ./composite-actions/.github/actions/k8s-rollout
+        with:
+          app-name: "akvo-rag"
+          deployment-name: "celery-beat-deployment"
+          container-name: "celery-beat"
           cluster-name: "test"
           namespace-name: "agriconnect-rag-namespace"
           gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}

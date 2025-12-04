@@ -65,6 +65,7 @@ services:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
       - ENVIRONMENT=development
+      - CELERY_MODE=worker
     working_dir: /app
     volumes:
       - ./backend:/app:delegated
@@ -73,6 +74,35 @@ services:
     depends_on:
       - rabbitmq
       - backend
+    command: ["./entrypoint-celery.sh"]
+    networks:
+      - app_network
+    restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  celery_beat:
+    image: python:3.11-slim
+    env_file:
+      - .env
+    environment:
+      - DEBUG=1
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - ENVIRONMENT=development
+      - CELERY_MODE=beat
+    working_dir: /app
+    volumes:
+      - ./backend:/app:delegated
+      - upload_data:/mnt/uploads
+      - pip_cache:/app/.pip
+    depends_on:
+      - rabbitmq
+      - backend
+      - celery_worker
     command: ["./entrypoint-celery.sh"]
     networks:
       - app_network
