@@ -64,6 +64,13 @@ async def execute_chat_job(
 
         # combined prompt
         final_prompt = qa_prompt + "\n\n" + app_final_prompt
+
+        if (
+            "context" not in final_prompt.lower()
+            or "{context}" not in final_prompt.lower()
+        ):
+            final_prompt += "\n### Provided Context:\n{context}"
+
         logger.info("[Chat job] BEGIN final prompt: ==============")
         logger.info(f"[Chat job] final prompt: {final_prompt}")
         logger.info("[Chat job] EOL final prompt: ==============")
