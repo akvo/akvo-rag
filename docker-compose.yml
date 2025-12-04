@@ -25,12 +25,38 @@ services:
       dockerfile: Dockerfile.celery
     env_file:
       - .env
+    environment:
+      - CELERY_MODE=worker
     volumes:
       - ./backend:/app
       - upload_data:/mnt/uploads
     depends_on:
       - rabbitmq
       - backend
+    networks:
+      - app_network
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.celery
+    env_file:
+      - .env
+    environment:
+      - CELERY_MODE=beat
+    volumes:
+      - ./backend:/app
+      - upload_data:/mnt/uploads
+    depends_on:
+      - rabbitmq
+      - backend
+      - celery_worker
     networks:
       - app_network
     restart: on-failure
