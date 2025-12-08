@@ -1,4 +1,4 @@
-# Akvo RAG (Retrieval-Augmented Generation)
+# Akvo RAG
 
 <p>
   <a href="https://github.com/rag-web-ui/rag-web-ui/blob/main/LICENSE"><img src="https://img.shields.io/github/license/rag-web-ui/rag-web-ui" alt="License"></a>
@@ -11,16 +11,25 @@
 
 ## 📖 Introduction
 
-The Akvo RAG is a software that allows users to chat with Knowledge Bases. This type of product already exists, but we want to enable the following capabilities:
+**Akvo RAG** is an intelligent question-answering system that enables users to chat with their own knowledge bases using Retrieval-Augmented Generation (RAG) technology.
 
-1. Make it easy to add a “RAG feature” to any web application
-2. Make it easy to add Knowledge Bases (and data pipelines)
-3. Make it possible to automatically select the Knowledge Bases that are queried
-4. Make it possible to self-host the entire system (data pipeline, RAG, LLM)
+### Why Akvo RAG?
 
-One of the key features (3.) that we want to make available is called Agent-Scoped Query Mode (ASQ Mode). It’s the ability to automatically determine what are the most appropriate Knowledge Bases to query in order to create the best possible response to the user.
+While similar products exist, Akvo RAG focuses on **flexibility and self-hosting**. We built this to solve key challenges:
 
-The default and simpler approach is User-Scoped Query Mode (USQ Mode), in which the user can manually select the Knowledge Bases they want to query.
+1. **Easy Integration** - Add RAG capabilities to any web application with minimal effort
+2. **Simplified Data Management** - Easily add and manage knowledge bases with built-in data pipelines
+3. **Intelligent KB Selection** - Automatically determine which knowledge bases to query for optimal responses
+4. **Full Self-Hosting** - Deploy the entire stack (data pipeline, RAG, and LLM) on your own infrastructure
+
+### Query Modes
+
+Akvo RAG supports two approaches for querying knowledge bases:
+
+- **Agent-Scoped Query (ASQ) Mode** - The system automatically determines the most appropriate knowledge bases to query based on the user's question, ensuring the best possible response
+- **User-Scoped Query (USQ) Mode** - Users manually select which knowledge bases to query, giving them direct control
+
+The system defaults to USQ mode for simplicity, with ASQ mode available for more advanced, autonomous querying.
 
 ### 🏗️ Architecture Overview
 
