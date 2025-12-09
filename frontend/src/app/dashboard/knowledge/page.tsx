@@ -24,6 +24,7 @@ interface Document {
   file_name: string;
   file_path: string;
   file_size: number;
+  file_url: string;
   content_type: string;
   knowledge_base_id: number;
   created_at: string;
