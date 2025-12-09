@@ -13,13 +13,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { FileText } from "lucide-react";
+import { FileText, Trash2, Eye } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import Link from "next/link";
 
 interface Document {
   id: number;
   file_name: string;
   file_path: string;
   file_size: number;
+  file_url: string;
   content_type: string;
   created_at: string;
   processing_tasks: Array<{
@@ -44,6 +47,9 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  const allow_delete = true;
 
   useEffect(() => {
     const fetchDocuments = async () => {
@@ -63,6 +69,28 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
 
     fetchDocuments();
   }, [knowledgeBaseId]);
+
+  const handleDelete = async (doc_id: number) => {
+    if (!confirm("Are you sure you want to delete this document?"))
+      return;
+    try {
+      await api.delete(`/api/knowledge-base/${knowledgeBaseId}/documents/${doc_id}`);
+      setDocuments((prev) => prev.filter((doc) => doc.id !== doc_id));
+      toast({
+        title: "Success",
+        description: "Document deleted successfully",
+      });
+    } catch (error) {
+      console.error("Failed to delete document:", error);
+      if (error instanceof ApiError) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    }
+  };
 
   if (loading) {
     return (
@@ -111,6 +139,7 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
           <TableHead>Size</TableHead>
           <TableHead>Created</TableHead>
           <TableHead>Status</TableHead>
+          <TableHead>Action</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -135,6 +164,14 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
                     />
                   )}
                 </div>
+                {/* TODO:: Enable link once view document validated
+                <Link
+                  href={doc.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {doc.file_name}
+                </Link> */}
                 {doc.file_name}
               </div>
             </TableCell>
@@ -155,9 +192,37 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
                       : "default" // Default for pending/processing
                   }
                 >
-                  {doc.processing_tasks[0].status}
+                  {doc.processing_tasks[0].status || "pending"}
                 </Badge>
               )}
+            </TableCell>
+            <TableCell>
+              <div className="space-x-2">
+                {/* TODO:: Enable link once view document validated
+                <Link
+                  href={doc.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <button
+                    className="inline-flex items-center justify-center rounded-md bg-blue-100 hover:bg-blue-200 w-8 h-8"
+                  >
+                    <Eye className="h-4 w-4 text-blue-700" />
+                  </button>
+                </Link> */}
+                {
+                    // allow delete only for same user / kb owner
+                    // currently allow delete for all user
+                    allow_delete ? (
+                      <button
+                        onClick={() => handleDelete(doc.id)}
+                        className="inline-flex items-center justify-center rounded-md bg-destructive/10 hover:bg-destructive/20 w-8 h-8"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </button>
+                    ) : ""
+                }
+              </div>
             </TableCell>
           </TableRow>
         ))}
