@@ -24,8 +24,19 @@ class TestQueryAnsweringWorkflow:
     # ---------------- classify_intent_node ----------------
 
     @pytest.mark.asyncio
-    async def test_classify_intent_node_fast_result(self):
-        """classify_intent_node should skip LLM when fast intent is certain."""
+    async def test_classify_intent_node_fast_result(self, monkeypatch):
+        """classify_intent_node should use LLM to classify small talk."""
+
+        async def fake_ainvoke(msgs):
+            return SimpleNamespace(content='{"intent": "small_talk"}')
+
+        fake_llm = MagicMock()
+        fake_llm.ainvoke = fake_ainvoke
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow.LLMFactory.create",
+            lambda: fake_llm,
+        )
+
         state = {"query": "Hi there!"}
         new_state = await classify_intent_node(state)
         assert new_state["intent"] == "small_talk"
@@ -50,7 +61,9 @@ class TestQueryAnsweringWorkflow:
 
     @pytest.mark.asyncio
     async def test_classify_intent_node_llm_error(self, monkeypatch):
-        """classify_intent_node should fall back to general_query on LLM failure."""
+        """
+        classify_intent_node should fall back to general_query on LLM failure.
+        """
         fake_llm = MagicMock()
         fake_llm.ainvoke = AsyncMock(side_effect=Exception("llm down"))
         monkeypatch.setattr(
@@ -96,7 +109,7 @@ class TestQueryAnsweringWorkflow:
         fake_chain.ainvoke = fake_ainvoke
 
         monkeypatch.setattr(
-            "app.services.query_answering_workflow.ChatPromptTemplate.from_messages",
+            "app.services.query_answering_workflow.ChatPromptTemplate.from_messages",  # noqa
             lambda msgs: MagicMock(__or__=lambda self, other: fake_chain),
         )
         monkeypatch.setattr(
@@ -145,7 +158,9 @@ class TestQueryAnsweringWorkflow:
 
     @pytest.mark.asyncio
     async def test_run_mcp_tool_node_success(self, monkeypatch):
-        """run_mcp_tool_node() calls MCPClientManager.run_tool and stores result."""
+        """
+        run_mcp_tool_node() calls MCPClientManager.run_tool and stores result.
+        """
         fake_manager = MagicMock()
         fake_manager.run_tool = AsyncMock(return_value={"res": 123})
         monkeypatch.setattr(
@@ -211,7 +226,7 @@ class TestQueryAnsweringWorkflow:
         fake_chain.astream = fake_astream
 
         monkeypatch.setattr(
-            "app.services.query_answering_workflow.create_stuff_documents_chain",
+            "app.services.query_answering_workflow.create_stuff_documents_chain",  # noqa
             lambda **_: fake_chain,
         )
 
