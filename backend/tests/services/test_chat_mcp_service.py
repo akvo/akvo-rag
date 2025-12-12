@@ -19,7 +19,12 @@ class TestChatMCPServiceStubbed:
         )
 
     def _stub_common_services(
-        self, monkeypatch, tokens=None, context=True, intent="knowledge_query"
+        self,
+        monkeypatch,
+        tokens=None,
+        context=True,
+        intent="knowledge_query",
+        mcp_error=False,
     ):
         """Stub all dependencies for stream_mcp_response."""
 
@@ -58,10 +63,18 @@ class TestChatMCPServiceStubbed:
             return state
 
         async def fake_run_mcp_tool_node(state):
+            # Simulate MCP failure if requested
+            if mcp_error:
+                state["error"] = "MCP tool connection failed"
+                return state
+
             # Different behavior depending on intent
             if intent == "weather_query":
                 state["context"] = [
-                    SimpleNamespace(page_content="It’s 30°C in Bali.", metadata={"tool": "weather"})
+                    SimpleNamespace(
+                        page_content="It's 30°C in Bali.",
+                        metadata={"tool": "weather"},
+                    )
                 ]
             elif context:
                 state["context"] = [
@@ -69,6 +82,18 @@ class TestChatMCPServiceStubbed:
                 ]
             else:
                 state["context"] = []
+            return state
+
+        async def fake_error_handler_node(state):
+            # Simulate error handler behavior
+            if state.get("intent") == "weather_query":
+                state["answer"] = (
+                    "I cannot access real-time weather data right now. Please check weather.com for current conditions."
+                )
+            else:
+                state["answer"] = (
+                    "I'm having trouble finding that information right now. Could you please try again in a moment?"
+                )
             return state
 
         async def fake_post_processing_node(state):
@@ -88,6 +113,9 @@ class TestChatMCPServiceStubbed:
         )
         monkeypatch.setattr(
             chat_mcp_service, "run_mcp_tool_node", fake_run_mcp_tool_node
+        )
+        monkeypatch.setattr(
+            chat_mcp_service, "error_handler_node", fake_error_handler_node
         )
         monkeypatch.setattr(
             chat_mcp_service, "post_processing_node", fake_post_processing_node
@@ -168,7 +196,7 @@ class TestChatMCPServiceStubbed:
         ):
             chunks.append(chunk)
 
-        assert chunks[-1].startswith('d:')
+        assert chunks[-1].startswith("d:")
         assert '"finishReason":"stop"' in chunks[-1]
 
     @pytest.mark.asyncio
@@ -225,7 +253,7 @@ class TestChatMCPServiceStubbed:
         assert any("chunk" in c for c in chunks)
         assert any(c.startswith("d:") for c in chunks)
 
-    # ============= NEW TESTS =============
+    # ============= INTENT-BASED TESTS =============
 
     @pytest.mark.asyncio
     async def test_stream_small_talk_intent(self, monkeypatch):
@@ -249,7 +277,10 @@ class TestChatMCPServiceStubbed:
     async def test_stream_weather_intent(self, monkeypatch):
         """Should trigger Weather MCP flow and stream weather info tokens."""
         self._stub_common_services(
-            monkeypatch, tokens=["Weather", " info"], context=True, intent="weather_query"
+            monkeypatch,
+            tokens=["Weather", " info"],
+            context=True,
+            intent="weather_query",
         )
 
         chunks = []
@@ -272,7 +303,10 @@ class TestChatMCPServiceStubbed:
     async def test_stream_kb_intent(self, monkeypatch):
         """Should trigger KB MCP flow for general knowledge base query."""
         self._stub_common_services(
-            monkeypatch, tokens=["KB", " answer"], context=True, intent="kb_query"
+            monkeypatch,
+            tokens=["KB", " answer"],
+            context=True,
+            intent="kb_query",
         )
 
         chunks = []
@@ -289,6 +323,115 @@ class TestChatMCPServiceStubbed:
         assert any("answer" in c for c in chunks)
         assert any(c.startswith("d:") for c in chunks)
 
+    # ============= ERROR HANDLER TESTS =============
+
+    @pytest.mark.asyncio
+    async def test_stream_mcp_error_weather_query(self, monkeypatch):
+        """Should use error handler for weather query when MCP fails."""
+        self._stub_common_services(
+            monkeypatch, intent="weather_query", mcp_error=True
+        )
+
+        chunks = []
+        async for chunk in chat_mcp_service.stream_mcp_response(
+            query="What's the weather like?",
+            messages={"messages": []},
+            knowledge_base_ids=[1],
+            chat_id=501,
+            db=self.fake_db,
+        ):
+            chunks.append(chunk)
+
+        # Should contain error handler's weather response
+        assert any("weather data" in c or "weather.com" in c for c in chunks)
+        assert any(c.startswith('d:{"finishReason":"stop"}') for c in chunks)
+        # Should NOT contain base64 context (since MCP failed)
+        assert not any("__LLM_RESPONSE__" in c for c in chunks)
+
+    @pytest.mark.asyncio
+    async def test_stream_mcp_error_knowledge_query(self, monkeypatch):
+        """Should use error handler for knowledge query when MCP fails."""
+        self._stub_common_services(
+            monkeypatch, intent="knowledge_query", mcp_error=True
+        )
+
+        chunks = []
+        async for chunk in chat_mcp_service.stream_mcp_response(
+            query="What is fertilizer A?",
+            messages={"messages": []},
+            knowledge_base_ids=[1],
+            chat_id=502,
+            db=self.fake_db,
+        ):
+            chunks.append(chunk)
+
+        # Should contain friendly "try again" message
+        full_response = "".join(chunks)
+        assert (
+            "try again" in full_response.lower()
+            or "moment" in full_response.lower()
+        )
+        assert any(c.startswith('d:{"finishReason":"stop"}') for c in chunks)
+        # Should NOT mention technical errors
+        assert (
+            "error" not in full_response.lower()
+            or "Error generating" in full_response
+        )
+        assert "technical" not in full_response.lower()
+
+    @pytest.mark.asyncio
+    async def test_stream_mcp_error_saves_to_db(self, monkeypatch):
+        """Should persist error handler response to database."""
+        self._stub_common_services(
+            monkeypatch, intent="knowledge_query", mcp_error=True
+        )
+
+        chunks = []
+        async for chunk in chat_mcp_service.stream_mcp_response(
+            query="Test query",
+            messages={"messages": []},
+            knowledge_base_ids=[1],
+            chat_id=503,
+            db=self.fake_db,
+        ):
+            chunks.append(chunk)
+
+        # Verify DB commit was called (bot_message should be saved)
+        assert self.fake_db.commit.called
+        assert self.fake_db.add.called
+
+    @pytest.mark.asyncio
+    async def test_stream_mcp_error_returns_early(self, monkeypatch):
+        """Should return early and skip post_processing when MCP fails."""
+        post_processing_called = {"called": False}
+
+        async def fake_post_processing_node(state):
+            post_processing_called["called"] = True
+            return state
+
+        self._stub_common_services(
+            monkeypatch, intent="weather_query", mcp_error=True
+        )
+
+        monkeypatch.setattr(
+            chat_mcp_service, "post_processing_node", fake_post_processing_node
+        )
+
+        chunks = []
+        async for chunk in chat_mcp_service.stream_mcp_response(
+            query="What's the weather?",
+            messages={"messages": []},
+            knowledge_base_ids=[1],
+            chat_id=504,
+            db=self.fake_db,
+        ):
+            chunks.append(chunk)
+
+        # post_processing should NOT be called when error occurs
+        assert not post_processing_called["called"]
+
+    # ============= EDGE CASE TESTS =============
+
     @pytest.mark.asyncio
     async def test_stream_no_kb_ids_raises(self, monkeypatch):
         """Should raise ValueError when no knowledge base IDs provided."""
@@ -303,3 +446,38 @@ class TestChatMCPServiceStubbed:
                 db=self.fake_db,
             ):
                 pass
+
+    @pytest.mark.asyncio
+    async def test_stream_mcp_success_then_generation_error(self, monkeypatch):
+        """Should handle errors during generation phase even after successful MCP."""
+        self._stub_common_services(
+            monkeypatch, tokens=None, context=True  # No tokens
+        )
+
+        # Make the chain throw an error
+        async def fake_astream_error(inputs):
+            raise Exception("Generation failed")
+            yield  # Unreachable but satisfies async generator
+
+        fake_chain = SimpleNamespace(astream=fake_astream_error)
+        monkeypatch.setattr(
+            chat_mcp_service,
+            "create_stuff_documents_chain",
+            lambda **kwargs: fake_chain,
+        )
+
+        chunks = []
+        async for chunk in chat_mcp_service.stream_mcp_response(
+            query="Test",
+            messages={"messages": []},
+            knowledge_base_ids=[1],
+            chat_id=505,
+            db=self.fake_db,
+        ):
+            chunks.append(chunk)
+
+        # Should yield error
+        assert any(c.startswith("3:") for c in chunks)
+        assert any(
+            "Generation failed" in c or "Error generating" in c for c in chunks
+        )

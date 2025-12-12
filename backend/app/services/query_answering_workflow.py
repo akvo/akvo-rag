@@ -282,6 +282,80 @@ async def run_mcp_tool_node(state: GraphState) -> GraphState:
         return {**state, "error": str(e)}
 
 
+async def error_handler_node(state: GraphState) -> GraphState:
+    """
+    Handle errors based on intent:
+    - For weather queries: LLM answers using general knowledge
+    - For other queries: Provide friendly message to try again later
+    """
+    try:
+        intent = state.get("intent", "general_query")
+        query = state.get("query", "")
+        contextual_query = state.get("contextual_query", query)
+
+        llm = LLMFactory.create()
+
+        if intent == "weather_query":
+            # Let LLM answer weather questions with general knowledge
+            system_prompt = """
+            You are a helpful weather assistant.
+
+            The real-time weather data service is currently unavailable, but you can still help the user
+            with general weather information based on your knowledge.
+
+            Answer the user's weather question to the best of your ability:
+            - Provide general information about typical weather patterns if relevant
+            - Suggest they check reliable weather services like weather.com or weather apps
+            - Be honest that you cannot access real-time data right now
+            - Keep your response helpful and friendly
+            """
+        else:
+            # For other intents, provide a friendly message to try again
+            system_prompt = """
+            You are a helpful assistant.
+
+            The information system is temporarily unavailable.
+
+            Provide a brief, friendly response that:
+            - Acknowledges their question
+            - Asks them to try again in a moment
+            - Keeps a warm, apologetic tone
+            - Does NOT mention technical details, errors, or system issues
+            - Maximum 2 sentences
+
+            Example: "I'm having trouble finding that information right now. Could you please try again in a moment?"
+            """
+
+        response = await llm.ainvoke(
+            [("system", system_prompt), ("user", contextual_query)]
+        )
+
+        answer = getattr(
+            response,
+            "content",
+            "I'm having trouble with that right now. Please try again in a moment.",
+        )
+        logger.info(
+            f"[error_handler_node] Generated fallback response for intent={intent}"
+        )
+
+        return {**state, "answer": answer}
+
+    except Exception as e:
+        logger.exception(f"error_handler_node failed: {e}")
+        # Ultimate fallback
+        if state.get("intent") == "weather_query":
+            return {
+                **state,
+                "answer": "I'm unable to access weather data right now. Please check a weather service like weather.com for current conditions.",
+            }
+        else:
+            return {
+                **state,
+                "answer": "I'm having trouble with that right now. Please try again in a moment.",
+            }
+
+
 async def post_processing_node(state):
     """Extract and normalize MCP tool result into Document list format."""
     logger.info(
@@ -408,6 +482,16 @@ async def response_generation_node(state: GraphState):
 
 
 # ---------------------------------------------------------------------
+# Conditional routing function
+# ---------------------------------------------------------------------
+def check_mcp_success(state: GraphState) -> str:
+    """Route to error handler if there's an error, otherwise continue."""
+    if state.get("error"):
+        return "error"
+    return "success"
+
+
+# ---------------------------------------------------------------------
 # Build Workflow Graph
 # ---------------------------------------------------------------------
 workflow = StateGraph(GraphState)
@@ -416,6 +500,7 @@ workflow.add_node("small_talk", small_talk_node)
 workflow.add_node("contextualize", contextualize_node)
 workflow.add_node("scope", scoping_node)
 workflow.add_node("run_mcp", run_mcp_tool_node)
+workflow.add_node("error_handler", error_handler_node)
 workflow.add_node("post_process", post_processing_node)
 workflow.add_node("generate", response_generation_node)
 
@@ -433,7 +518,14 @@ workflow.add_conditional_edges(
 
 workflow.add_edge("contextualize", "scope")
 workflow.add_edge("scope", "run_mcp")
-workflow.add_edge("run_mcp", "post_process")
+
+# Add conditional routing after run_mcp to handle errors
+workflow.add_conditional_edges(
+    "run_mcp",
+    check_mcp_success,
+    {"success": "post_process", "error": "error_handler"},
+)
+
 workflow.add_edge("post_process", "generate")
 
 query_answering_workflow = workflow.compile()
