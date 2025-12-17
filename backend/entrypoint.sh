@@ -10,27 +10,26 @@ chmod 777 $UPLOAD_DIR
 # FOR DEV ONLY: Install dependencies once
 # -------------------------------------------
 PIP_CACHE_DIR="/app/.pip"
-
 if [ "$ENVIRONMENT" = "development" ]; then
     echo "Installing system dependencies..."
     apt-get update -qq && apt-get install -y -qq \
-        build-essential \
-        default-libmysqlclient-dev \
-        pkg-config \
-        netcat-traditional
-
+    build-essential \
+    default-libmysqlclient-dev \
+    pkg-config \
+    netcat-traditional
+    
     echo "⏳ Installing Python dependencies..."
     mkdir -p "$PIP_CACHE_DIR"
     pip install -q --upgrade pip
     pip install -q --cache-dir="$PIP_CACHE_DIR" -r requirements.txt || \
-        (echo "Retrying in 5s..." && sleep 5 && pip install -q --cache-dir="$PIP_CACHE_DIR" -r requirements.txt) || \
-        (echo "Retrying in 10s..." && sleep 10 && pip install -q --cache-dir="$PIP_CACHE_DIR" -r requirements.txt)
-
+    (echo "Retrying in 5s..." && sleep 5 && pip install -q --cache-dir="$PIP_CACHE_DIR" -r requirements.txt) || \
+    (echo "Retrying in 10s..." && sleep 10 && pip install -q --cache-dir="$PIP_CACHE_DIR" -r requirements.txt)
+    
     # Ensure uploads folder exists
     mkdir -p /app/uploads
 fi
-# -------------------------------------------
 
+# -------------------------------------------
 echo "Waiting for MySQL..."
 DB_HOST=${MYSQL_SERVER:-db}
 DB_PORT=${MYSQL_PORT:-3306}
@@ -48,62 +47,126 @@ else
 fi
 
 # -------------------------------------------
-# Function to safely run Seed Prompt
+# Function to run Initial Prompt Seeder
 # -------------------------------------------
 run_initial_prompt_seeder() {
-    echo "🚀 Running MCP discovery manager..."
+    echo "🚀 Running initial prompt seeder..."
     if ! python -m app.seeder.seed_prompts; then
         echo "⚠️ Initial prompt seeder failed, continuing startup..."
+        return 1
     else
         echo "✅ Initial prompt seeder finished successfully"
+        return 0
     fi
 }
 
 # -------------------------------------------
-# Function to safely run MCP discovery
+# Function to run MCP discovery with retries
+# CRITICAL: This MUST succeed before app starts
 # -------------------------------------------
 run_mcp_discovery_manager() {
     echo "🚀 Running MCP discovery manager..."
-    if ! python -m mcp_clients.mcp_discovery_manager; then
-        echo "⚠️ MCP discovery manager failed, continuing startup..."
+    echo "⏳ This may take a few moments..."
+    
+    # Run discovery with increased verbosity
+    if python -m mcp_clients.mcp_discovery_manager; then
+        echo "✅ MCP discovery manager completed successfully"
+        
+        # Verify the discovery file exists and is valid
+        if [ -f "mcp_discovery.json" ]; then
+            echo "✅ Discovery file created: mcp_discovery.json"
+            
+            # Check file size
+            FILE_SIZE=$(stat -f%z "mcp_discovery.json" 2>/dev/null || stat -c%s "mcp_discovery.json" 2>/dev/null || echo "0")
+            if [ "$FILE_SIZE" -gt 100 ]; then
+                echo "✅ Discovery file size: ${FILE_SIZE} bytes"
+                return 0
+            else
+                echo "⚠️ Discovery file is too small (${FILE_SIZE} bytes), may be invalid"
+                return 1
+            fi
+        else
+            echo "❌ Discovery file not found after successful run"
+            return 1
+        fi
     else
-        echo "✅ MCP discovery manager finished successfully"
+        echo "❌ MCP discovery manager failed"
+        return 1
     fi
 }
 
 # -------------------------------------------
-# Start FastAPI and MCP discovery
+# Wait for MCP discovery to complete with retries
 # -------------------------------------------
-echo "Starting application..."
+wait_for_mcp_discovery() {
+    MAX_ATTEMPTS=3
+    ATTEMPT=1
+    
+    while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+        echo "📋 MCP Discovery attempt $ATTEMPT of $MAX_ATTEMPTS"
+        
+        if run_mcp_discovery_manager; then
+            echo "✅ MCP discovery ready"
+            return 0
+        fi
+        
+        if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+            WAIT_TIME=$((ATTEMPT * 10))
+            echo "⏳ Waiting ${WAIT_TIME} seconds before retry..."
+            sleep $WAIT_TIME
+        fi
+        
+        ATTEMPT=$((ATTEMPT + 1))
+    done
+    
+    echo "❌ MCP discovery failed after $MAX_ATTEMPTS attempts"
+    echo "❌ Cannot start application without valid MCP discovery data"
+    exit 1
+}
 
-if [ "$ENVIRONMENT" = "development" ]; then
-    echo "Starting application in development mode..."
-    uvicorn app.main:app \
+# -------------------------------------------
+# Start FastAPI with proper dependency checks
+# -------------------------------------------
+start_application() {
+    echo "🚀 Starting application..."
+    
+    if [ "$ENVIRONMENT" = "development" ]; then
+        echo "🔧 Development mode"
+        uvicorn app.main:app \
         --host 0.0.0.0 \
         --port 8000 \
         --proxy-headers \
         --forwarded-allow-ips="*" \
-        --reload &
-
-    # Run initial prompt seeder once at startup
-    run_initial_prompt_seeder &
-
-    # Run MCP discovery after API is up
-    run_mcp_discovery_manager &
-
-    # Keep both processes running
-    wait
-else
-    echo "Starting application in production mode..."
-    uvicorn app.main:app \
+        --reload
+    else
+        echo "🚀 Production mode"
+        uvicorn app.main:app \
         --host 0.0.0.0 \
         --port 8000 \
         --proxy-headers \
-        --forwarded-allow-ips="*" &
+        --forwarded-allow-ips="*"
+    fi
+}
 
-    # Run MCP discovery after API is up
-    run_mcp_discovery_manager &
+# -------------------------------------------
+# Main execution flow
+# -------------------------------------------
+echo "=========================================="
+echo "🚀 Application Startup Sequence"
+echo "=========================================="
 
-    # Wait for both background processes
-    wait
-fi
+# Step 1: Run initial prompt seeder (non-blocking)
+echo ""
+echo "Step 1: Initial Prompt Seeder"
+run_initial_prompt_seeder || echo "⚠️ Continuing without prompt seeder"
+
+# Step 2: Wait for MCP discovery (BLOCKING - must succeed)
+echo ""
+echo "Step 2: MCP Discovery (REQUIRED)"
+wait_for_mcp_discovery
+
+# Step 3: Start the application
+echo ""
+echo "Step 3: Starting Application"
+echo "=========================================="
+start_application
