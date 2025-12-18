@@ -31,7 +31,8 @@ def to_serializable(obj: Any) -> Any:
 class MCPDiscoveryManager:
     """
     Handles discovery of MCP tools and resources with robust retry logic.
-    Ensures discovery file is always created successfully before application starts.
+    Ensures discovery file is always created successfully
+    before application starts.
     """
 
     def __init__(
@@ -66,7 +67,7 @@ class MCPDiscoveryManager:
                 lock_age = time.time() - self.lock_path.stat().st_mtime
                 if lock_age > 300:  # 5 minutes
                     logger.warning(
-                        f"[MCP] Stale lock detected ({lock_age:.0f}s old), removing"
+                        f"[MCP] Stale lock detected ({lock_age:.0f}s old), removing"  # noqa
                     )
                     self.lock_path.unlink()
                 else:
@@ -128,7 +129,7 @@ class MCPDiscoveryManager:
                     if key not in tool:
                         return (
                             False,
-                            f"Tool missing required key '{key}' in '{server_name}'",
+                            f"Tool missing required key '{key}' in '{server_name}'",  # noqa
                         )
 
         # Validate structure of resources
@@ -145,7 +146,7 @@ class MCPDiscoveryManager:
                     if key not in resource:
                         return (
                             False,
-                            f"Resource missing required key '{key}' in '{server_name}'",
+                            f"Resource missing required key '{key}' in '{server_name}'",  # noqa
                         )
 
         return True, "Valid"
@@ -206,7 +207,7 @@ class MCPDiscoveryManager:
                     ]
                     tools_count += len(tool_list)
                     logger.info(
-                        f"[MCP] Discovered {len(tool_list)} tools for '{server_name}'"
+                        f"[MCP] Discovered {len(tool_list)} tools for '{server_name}'"  # noqa
                     )
 
             # Format resources
@@ -223,11 +224,11 @@ class MCPDiscoveryManager:
                     ]
                     resources_count += len(resource_list)
                     logger.info(
-                        f"[MCP] Discovered {resources_count} resources for '{server_name}'"
+                        f"[MCP] Discovered {resources_count} resources for '{server_name}'"  # noqa
                     )
 
             logger.info(
-                f"[MCP] Total: {tools_count} tools, {resources_count} resources"
+                f"[MCP] Total: {tools_count} tools, {resources_count} resources"  # noqa
             )
             return discovery_data
 
@@ -264,7 +265,7 @@ class MCPDiscoveryManager:
                 return True
 
             logger.warning(
-                "[MCP] Other discovery process failed or timed out, taking over"
+                "[MCP] Other discovery process failed or timed out, taking over"  # noqa
             )
             # Force create lock
             self._remove_lock()
@@ -285,7 +286,7 @@ class MCPDiscoveryManager:
 
                 if discovery_data is None:
                     logger.error(
-                        f"[MCP] Discovery attempt {attempt + 1} returned no data"
+                        f"[MCP] Discovery attempt {attempt + 1} returned no data"  # noqa
                     )
                 else:
                     # Validate discovered data
@@ -295,7 +296,7 @@ class MCPDiscoveryManager:
 
                     if not is_valid:
                         logger.error(
-                            f"[MCP] Discovery data validation failed: {error_msg}"
+                            f"[MCP] Discovery data validation failed: {error_msg}"  # noqa
                         )
                     else:
                         # Write to file
@@ -304,13 +305,13 @@ class MCPDiscoveryManager:
                                 json.dump(discovery_data, f, indent=2)
 
                             logger.info(
-                                f"[MCP] ✅ Discovery data written to {self.discovery_file}"
+                                f"[MCP] ✅ Discovery data written to {self.discovery_file}"  # noqa
                             )
                             logger.info(
-                                f"[MCP] ✅ Discovered {len(discovery_data['tools'])} tool servers"
+                                f"[MCP] ✅ Discovered {len(discovery_data['tools'])} tool servers"  # noqa
                             )
                             logger.info(
-                                f"[MCP] ✅ Discovered {len(discovery_data['resources'])} resource servers"
+                                f"[MCP] ✅ Discovered {len(discovery_data['resources'])} resource servers"  # noqa
                             )
 
                             # Verify written file
