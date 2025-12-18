@@ -108,7 +108,7 @@ class TestMCPIntegrationEndpoint:
 
     async def test_success(self, client, override_current_user, stub_chat_db):
         payload = CreateMessagePayload(
-            id="test123", messages=[{"role": "user", "content": "Query KB"}]
+            messages=[{"role": "user", "content": "Query KB"}]
         )
 
         async def fake_stream(*args, **kwargs):
@@ -136,7 +136,7 @@ class TestMCPIntegrationEndpoint:
         self, client, override_current_user, stub_chat_db
     ):
         payload = CreateMessagePayload(
-            id="test123", messages=[{"role": "assistant", "content": "Hello"}]
+            messages=[{"role": "assistant", "content": "Hello"}]
         )
         response = await client.post(
             "/api/chat/1/messages", json=payload.model_dump()
@@ -165,7 +165,7 @@ class TestMCPIntegrationEndpoint:
         client._transport.app.dependency_overrides[get_db] = fake_get_db
 
         payload = CreateMessagePayload(
-            id="test123", messages=[{"role": "user", "content": "Hello"}]
+            messages=[{"role": "user", "content": "Hello"}]
         )
         response = await client.post(
             "/api/chat/1/messages", json=payload.model_dump()
@@ -177,7 +177,7 @@ class TestMCPIntegrationEndpoint:
         self, client, override_current_user, stub_chat_db
     ):
         payload = CreateMessagePayload(
-            id="test123", messages=[{"role": "user", "content": "Bad query"}]
+            messages=[{"role": "user", "content": "Bad query"}]
         )
 
         async def fail_stream(*args, **kwargs):
