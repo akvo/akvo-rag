@@ -2,6 +2,8 @@ import json
 import asyncio
 import logging
 import time
+import argparse
+
 from typing import Dict, Any, Optional
 from pathlib import Path
 
@@ -236,9 +238,51 @@ class MCPDiscoveryManager:
             logger.exception(f"[MCP] Discovery failed: {e}")
             return None
 
+    def _create_fallback_discovery(self) -> Dict[str, Any]:
+        logger.warning("[MCP] ⚠️ Creating fallback discovery data")
+        return {
+            "tools": {
+                "knowledge_bases_mcp": [
+                    {
+                        "name": "query_knowledge_base",
+                        "description": "Query a specific knowledge base return answer with context. (FALLBACK MODE)",
+                        "inputSchema": {
+                            "properties": {
+                                "query": {
+                                    "title": "Query",
+                                    "type": "string",
+                                },
+                                "knowledge_base_ids": {
+                                    "items": {"type": "integer"},
+                                    "title": "Knowledge Base Ids",
+                                    "type": "array",
+                                },
+                                "top_k": {
+                                    "default": "10",
+                                    "title": "Top K",
+                                    "type": "integer",
+                                },
+                            },
+                            "required": ["query", "knowledge_base_ids"],
+                            "type": "object",
+                        },
+                    }
+                ]
+            },
+            "resources": {
+                "knowledge_bases_mcp": [
+                    {
+                        "uri": "resource://server_info",
+                        "name": "Vector Knowledge Base MCP Server",
+                        "description": "A secure MCP server that provides access to vector-based knowledge bases. It exposes tools and resources for querying, retrieving, and managing knowledge base documents using similarity search. This server allows LLM-powered agents to discover relevant context across multiple knowledge bases and return grounded responses with supporting evidence. (FALLBACK MODE)",
+                    }
+                ]
+            },
+        }
+
     async def discover_and_save(
         self,
-        max_retries: int = 5,
+        max_retries: int = 3,
         retry_delay: int = 10,
         exponential_backoff: bool = True,
     ) -> bool:
@@ -381,7 +425,10 @@ class MCPDiscoveryManager:
             return False, f"Error verifying discovery file: {e}"
 
     async def ensure_discovery_ready(
-        self, max_wait: int = 120, force_rediscovery: bool = False
+        self,
+        max_wait: int = 120,
+        force_rediscovery: bool = False,
+        allow_fallback: bool = False,
     ) -> bool:
         """
         Ensure discovery file is ready and valid.
@@ -391,6 +438,7 @@ class MCPDiscoveryManager:
         Args:
             max_wait: Maximum time to wait for discovery (seconds)
             force_rediscovery: Force rediscovery even if file exists
+            allow_fallback: Allowing to write minimal mcp_discovery.json file
 
         Returns:
             bool: True if discovery file is ready, False otherwise
@@ -416,29 +464,46 @@ class MCPDiscoveryManager:
 
         # Run discovery
         logger.info("[MCP] Starting discovery process...")
-        return await self.discover_and_save()
+        success = await self.discover_and_save()
+        if success:
+            return True
+
+        if allow_fallback:
+            logger.warning("[MCP] ❌ Discovery failed — using FALLBACK MODE")
+            fallback = self._create_fallback_discovery()
+            with open(self.discovery_file, "w") as f:
+                json.dump(fallback, f, indent=2)
+
+            is_valid, error = self.verify_discovery_file()
+            if is_valid:
+                logger.warning("[MCP] ⚠️ Fallback discovery activated")
+                return True
+            logger.error(f"[MCP] Fallback validation failed: {error}")
+
+        return False
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--allow-fallback", action="store_true")
+    parser.add_argument("--force", action="store_true")
+    args = parser.parse_args()
+
+    async def run():
+        manager = MCPDiscoveryManager()
+        success = await manager.ensure_discovery_ready(
+            allow_fallback=args.allow_fallback,
+            force_rediscovery=args.force,
+        )
+
+        if not success:
+            logger.error("[MCP] ❌ Discovery failed")
+            raise SystemExit(1)
+
+        logger.info("[MCP] ✅ Discovery ready")
+
+    asyncio.run(run())
 
 
 if __name__ == "__main__":
-
-    async def main():
-        manager = MCPDiscoveryManager()
-
-        # Ensure discovery is ready (will wait or run as needed)
-        success = await manager.ensure_discovery_ready()
-
-        if success:
-            logger.info("[MCP] ✅ Discovery completed successfully")
-
-            # Verify one more time
-            is_valid, error = manager.verify_discovery_file()
-            if is_valid:
-                logger.info("[MCP] ✅ Final verification passed")
-            else:
-                logger.error(f"[MCP] ❌ Final verification failed: {error}")
-                exit(1)
-        else:
-            logger.error("[MCP] ❌ Discovery failed after all retries")
-            exit(1)
-
-    asyncio.run(main())
+    main()

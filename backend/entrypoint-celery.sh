@@ -31,11 +31,12 @@ if [ "$ENVIRONMENT" = "development" ]; then
 fi
 
 # ===========================================
-# Wait for MySQL (required for tasks)
+# Wait for MySQL (tasks depend on DB)
 # ===========================================
 echo "Waiting for MySQL..."
 DB_HOST=${MYSQL_SERVER:-db}
 DB_PORT=${MYSQL_PORT:-3306}
+
 while ! nc -z "$DB_HOST" "$DB_PORT"; do
     sleep 1
 done
@@ -57,137 +58,19 @@ until timeout 5 bash -c "cat < /dev/null > /dev/tcp/${RABBITMQ_HOST}/${RABBITMQ_
     echo "   RabbitMQ not ready yet (attempt $RETRY_COUNT/$MAX_RETRIES)..."
     sleep 2
 done
-echo "✅ RabbitMQ is ready!"
+echo "✅ RabbitMQ is ready"
 
 # ===========================================
-# MCP Discovery (same guarantees as API entrypoint)
+# MCP Discovery (BLOCKING, authoritative)
 # ===========================================
-run_mcp_discovery_manager() {
-    echo "🚀 Running MCP discovery manager..."
-    echo "⏳ This may take a few moments..."
-    
-    if python -m mcp_clients.mcp_discovery_manager; then
-        echo "✅ MCP discovery manager completed successfully"
-        
-        if [ -f "mcp_discovery.json" ]; then
-            FILE_SIZE=$(stat -f%z "mcp_discovery.json" 2>/dev/null || stat -c%s "mcp_discovery.json" 2>/dev/null || echo "0")
-            if [ "$FILE_SIZE" -gt 100 ]; then
-                echo "✅ MCP discovery file valid (${FILE_SIZE} bytes)"
-                return 0
-            else
-                echo "⚠️ MCP discovery file too small (${FILE_SIZE} bytes)"
-                return 1
-            fi
-        else
-            echo "❌ MCP discovery file not found"
-            return 1
-        fi
-    else
-        echo "❌ MCP discovery manager failed"
-        return 1
-    fi
-}
+ALLOW_FALLBACK=${MCP_DISCOVERY_ALLOW_FALLBACK:-true}
 
-# -------------------------------------------
-# Function to create minimal fallback discovery file
-# -------------------------------------------
-create_fallback_discovery() {
-    echo "⚠️ Creating minimal fallback discovery file..."
-    cat > mcp_discovery.json <<EOF
-{
-  "tools": {
-    "knowledge_bases_mcp": [
-      {
-        "name": "query_knowledge_base",
-        "description": "Query a specific knowledge base return answer with context. (FALLBACK MODE)",
-        "inputSchema": {
-          "properties": {
-            "query": {
-              "title": "Query",
-              "type": "string"
-            },
-            "knowledge_base_ids": {
-              "items": {
-                "type": "integer"
-              },
-              "title": "Knowledge Base Ids",
-              "type": "array"
-            },
-            "top_k": {
-              "default": "10",
-              "title": "Top K",
-              "type": "integer"
-            }
-          },
-          "required": ["query", "knowledge_base_ids"],
-          "type": "object"
-        }
-      }
-    ]
-  },
-  "resources": {
-    "knowledge_bases_mcp": [
-      {
-        "uri": "resource://server_info",
-        "name": "Vector Knowledge Base MCP Server",
-        "description": "A secure MCP server that provides access to vector-based knowledge bases. It exposes tools and resources for querying, retrieving, and managing knowledge base documents using similarity search. This server allows LLM-powered agents to discover relevant context across multiple knowledge bases and return grounded responses with supporting evidence. (FALLBACK MODE)"
-      }
-    ]
-  }
-}
-EOF
-    echo "⚠️ Fallback discovery file created"
-}
+echo "Running MCP discovery (allow_fallback=$ALLOW_FALLBACK)..."
 
-# -------------------------------------------
-# Wait for MCP discovery with optional fallback
-# -------------------------------------------
-wait_for_mcp_discovery() {
-    MAX_ATTEMPTS=3
-    ATTEMPT=1
-    ALLOW_FALLBACK=${MCP_DISCOVERY_ALLOW_FALLBACK:-true}
-    
-    while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-        echo "📋 MCP Discovery attempt $ATTEMPT of $MAX_ATTEMPTS"
-        
-        if run_mcp_discovery_manager; then
-            echo "✅ MCP discovery ready"
-            return 0
-        fi
-        
-        if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-            WAIT_TIME=$((ATTEMPT * 10))
-            echo "⏳ Waiting ${WAIT_TIME} seconds before retry..."
-            sleep $WAIT_TIME
-        fi
-        
-        ATTEMPT=$((ATTEMPT + 1))
-    done
-    
-    echo "❌ MCP discovery failed after $MAX_ATTEMPTS attempts"
-    
-    # Check if fallback is allowed
-    if [ "$ALLOW_FALLBACK" = "true" ]; then
-        echo "⚠️ MCP_DISCOVERY_ALLOW_FALLBACK=true, using fallback mode"
-        create_fallback_discovery
-        echo "⚠️ Application will start with LIMITED FUNCTIONALITY"
-        return 0
-    else
-        echo "❌ Cannot start application without valid MCP discovery data"
-        echo "💡 Set MCP_DISCOVERY_ALLOW_FALLBACK=true to allow degraded mode"
-        exit 1
-    fi
-}
+python -m mcp_clients.mcp_discovery_manager \
+$( [ "$ALLOW_FALLBACK" = "true" ] && echo "--allow-fallback" )
 
-# ===========================================
-# Startup sequence
-# ===========================================
-echo "=========================================="
-echo "🚀 Celery Startup Sequence ($MODE)"
-echo "=========================================="
-
-# MCP discovery is BLOCKING for Celery (same as API)
-wait_for_mcp_discovery
+echo "✅ MCP discovery ready"
 
 # ===========================================
 # Start Celery
