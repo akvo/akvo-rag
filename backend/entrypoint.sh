@@ -96,11 +96,63 @@ run_mcp_discovery_manager() {
 }
 
 # -------------------------------------------
-# Wait for MCP discovery to complete with retries
+# Function to create minimal fallback discovery file
+# -------------------------------------------
+create_fallback_discovery() {
+    echo "⚠️ Creating minimal fallback discovery file..."
+    cat > mcp_discovery.json <<EOF
+{
+  "tools": {
+    "knowledge_bases_mcp": [
+      {
+        "name": "query_knowledge_base",
+        "description": "Query a specific knowledge base return answer with context. (FALLBACK MODE)",
+        "inputSchema": {
+          "properties": {
+            "query": {
+              "title": "Query",
+              "type": "string"
+            },
+            "knowledge_base_ids": {
+              "items": {
+                "type": "integer"
+              },
+              "title": "Knowledge Base Ids",
+              "type": "array"
+            },
+            "top_k": {
+              "default": "10",
+              "title": "Top K",
+              "type": "integer"
+            }
+          },
+          "required": ["query", "knowledge_base_ids"],
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "resources": {
+    "knowledge_bases_mcp": [
+      {
+        "uri": "resource://server_info",
+        "name": "Vector Knowledge Base MCP Server",
+        "description": "A secure MCP server that provides access to vector-based knowledge bases. It exposes tools and resources for querying, retrieving, and managing knowledge base documents using similarity search. This server allows LLM-powered agents to discover relevant context across multiple knowledge bases and return grounded responses with supporting evidence. (FALLBACK MODE)"
+      }
+    ]
+  }
+}
+EOF
+    echo "⚠️ Fallback discovery file created"
+}
+
+# -------------------------------------------
+# Wait for MCP discovery with optional fallback
 # -------------------------------------------
 wait_for_mcp_discovery() {
     MAX_ATTEMPTS=3
     ATTEMPT=1
+    ALLOW_FALLBACK=${MCP_DISCOVERY_ALLOW_FALLBACK:-true}
     
     while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
         echo "📋 MCP Discovery attempt $ATTEMPT of $MAX_ATTEMPTS"
@@ -120,8 +172,18 @@ wait_for_mcp_discovery() {
     done
     
     echo "❌ MCP discovery failed after $MAX_ATTEMPTS attempts"
-    echo "❌ Cannot start application without valid MCP discovery data"
-    exit 1
+    
+    # Check if fallback is allowed
+    if [ "$ALLOW_FALLBACK" = "true" ]; then
+        echo "⚠️ MCP_DISCOVERY_ALLOW_FALLBACK=true, using fallback mode"
+        create_fallback_discovery
+        echo "⚠️ Application will start with LIMITED FUNCTIONALITY"
+        return 0
+    else
+        echo "❌ Cannot start application without valid MCP discovery data"
+        echo "💡 Set MCP_DISCOVERY_ALLOW_FALLBACK=true to allow degraded mode"
+        exit 1
+    fi
 }
 
 # -------------------------------------------
