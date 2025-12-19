@@ -251,9 +251,7 @@ async def scoping_node(state: GraphState) -> GraphState:
     try:
         agent = ScopingAgent()
         scope = await agent.scope_query(
-            query=state["contextual_query"],
-            scope=state.get("scope", {}),
-            intent=state.get("intent", None),
+            query=state["contextual_query"], scope=state.get("scope", {})
         )
         logger.info(f"Scope determined: {scope}")
         return {**state, "scope": scope}
