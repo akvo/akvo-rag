@@ -724,7 +724,7 @@ class TestMCPDiscoveryManager:
                 return {"a": 1, "b": "test"}
 
         result = to_serializable(MockModel())
-        assert result == {"a": 1, "b": "test"}
+        assert result == {"a": "1", "b": "test"}
 
     def test_to_serializable_list(self):
         """

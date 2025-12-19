@@ -9,10 +9,13 @@ from app.services.prompt_service import PromptService
 from app.services.system_settings_service import SystemSettingsService
 
 from app.services.query_answering_workflow import (
+    classify_intent_node,
+    small_talk_node,
     contextualize_node,
     scoping_node,
     run_mcp_tool_node,
     post_processing_node,
+    error_handler_node,
 )
 
 from app.services.llm.llm_factory import LLMFactory
@@ -38,11 +41,11 @@ async def stream_mcp_response(
 ):
     """
     Best-practice streaming:
-      - Run MCP for scoping/retrieval (context)
-      - Stream context prefix first (base64 + __LLM_RESPONSE__)
-      - Stream tokens directly from qa_chain.astream
-      - Persist user + assistant at the end
-      - Use Vercel protocol lines: 0:"...", d:{...}, 3:{...}
+        - Run MCP for scoping/retrieval (context)
+        - Stream context prefix first (base64 + __LLM_RESPONSE__)
+        - Stream tokens directly from qa_chain.astream
+        - Persist user + assistant at the end
+        - Use Vercel protocol lines: 0:"...", d:{...}, 3:{...}
     """
     if not knowledge_base_ids:
         raise ValueError("No knowledge_base_ids provided for this chat.")
@@ -93,16 +96,53 @@ async def stream_mcp_response(
             },
         }
 
-        # 4) Run MCP nodes up to post-processing to
+        # 4) Classify intent
+        state = await classify_intent_node(state)
+        intent = state.get("intent", "knowledge_query")
+        logger.info(f"[stream_mcp_response] Detected intent: {intent}")
+
+        # 5) Handle small talk directly
+        if intent == "small_talk":
+            state = await small_talk_node(state)
+            reply = state.get("answer", "Hello! How can I help you today?")
+            bot_message.content = reply
+            db.commit()
+
+            yield f'0:"{reply}"\n'
+            yield 'd:{"finishReason":"stop"}\n'
+            return
+
+        # =============== normal MCP process ============================
+        # 6) Run MCP nodes up to post-processing to
         # get `state["context"]` and `state["contextual_query"]`
-        # note: contextualize_node and post_processing_node are sync,
-        # scoping and run_mcp_tool_node are async
         state = await contextualize_node(state)
         state = await scoping_node(state)
         state = await run_mcp_tool_node(state)
+
+        # 7) Check if MCP tool failed - use error handler
+        if state.get("error"):
+            logger.warning(
+                f"[stream_mcp_response] MCP tool failed, using error handler. Error: {state['error']}"
+            )
+            state = await error_handler_node(state)
+            reply = state.get(
+                "answer",
+                "I'm having trouble with that right now. Please try again in a moment.",
+            )
+
+            bot_message.content = reply
+            db.commit()
+
+            # Stream the error handler's response
+            escaped = reply.replace('"', '\\"').replace("\n", "\\n")
+            yield f'0:"{escaped}"\n'
+            yield 'd:{"finishReason":"stop"}\n'
+            return
+
+        # Continue with normal flow if no error
         state = await post_processing_node(state)
 
-        # 5) If context exists, stream it first (base64 + separator)
+        # 8) If context exists, stream it first (base64 + separator)
         context_prefix = ""
         if (
             state.get("context")
@@ -125,7 +165,7 @@ async def stream_mcp_response(
             # Vercel protocol: send context marker first
             yield f'0:"{context_prefix}"\n'
 
-        # 6) Build the QA chain and stream tokens directly from the LLM chain
+        # 9) Build the QA chain and stream tokens directly from the LLM chain
         llm = LLMFactory.create()
 
         qa_prompt_template = ChatPromptTemplate.from_messages(
@@ -184,12 +224,12 @@ async def stream_mcp_response(
             escaped = token.replace('"', '\\"').replace("\n", "\\n")
             yield f'0:"{escaped}"\n'
 
-        # 7) Persist final assistant message
+        # 10) Persist final assistant message
         # (context prefix + accumulated tokens)
         bot_message.content = context_prefix + full_response
         db.commit()
 
-        # 8) Send final metadata / finish signal
+        # 11) Send final metadata / finish signal
         yield 'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
 
     except Exception as e:
