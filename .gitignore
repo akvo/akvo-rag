@@ -64,6 +64,8 @@ backend/RAG_evaluation/.env.test
 streamlit-override.yml
 backend/RAG_evaluation/output
 backend/mcp_discovery.json
+backend/mcp_discovery.lock
+backend/mcp_discovery.json*
 backend/.pip
 
 # Celery Beat schedule files
