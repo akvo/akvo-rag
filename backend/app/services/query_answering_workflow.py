@@ -253,6 +253,7 @@ async def scoping_node(state: GraphState) -> GraphState:
         scope = await agent.scope_query(
             query=state["contextual_query"],
             scope=state.get("scope", {}),
+            intent=state.get("intent", None),
         )
         logger.info(f"Scope determined: {scope}")
         return {**state, "scope": scope}
@@ -305,10 +306,18 @@ async def error_handler_node(state: GraphState) -> GraphState:
 
             Answer the user's weather question to the best of your ability:
             - Provide general information about typical weather patterns if relevant
-            - Suggest they check reliable weather services like weather.com or weather apps
-            - Be honest that you cannot access real-time data right now
-            - Keep your response helpful and friendly
+            - If a location is mentioned, describe typical seasonal conditions for that region
+            - Be honest that you cannot access real-time weather data
+            - Suggest checking reliable weather services (e.g., weather apps or official meteorological sites)
+            - Keep the response helpful, friendly, and concise (2-4 sentences)
+
+            Restrictions:
+            - Do NOT provide exact temperatures, rain amounts, or forecasts for specific dates
+            - Do NOT use phrases like "today", "right now", or "tomorrow"
+            - Speak in general patterns (e.g., "typically", "often", "during this season")
+            - If the user asks for exact current conditions, explicitly state you cannot access live data
             """
+
         else:
             # For other intents, provide a friendly message to try again
             system_prompt = """

@@ -7,8 +7,9 @@ from .mcp_servers_config import DEFAULT_MCP_SERVERS
 from mcp_clients.utils.filter_tool_config import (
     get_free_tools,
     get_all_tools,
-    get_tools_summary
+    get_tools_summary,
 )
+
 
 class MCPClientManager:
     """Manager for multiple MCP servers (FastMCP and REST MCPs)."""
@@ -18,14 +19,17 @@ class MCPClientManager:
         Initialize MCP Client Manager.
 
         Args:
-            use_only_free_weather_tools: If True, only register weather tools that don't
-                                        require API keys. If None, uses the setting from
-                                        settings.USE_ONLY_FREE_WEATHER_MCP_TOOLS
+            use_only_free_weather_tools: If True, only register weather tools
+                                        that don't require API keys. If None,
+                                        uses the setting from settings.
+                                        USE_ONLY_FREE_WEATHER_MCP_TOOLS
         """
         self.services = {}
         # Use provided argument or fall back to settings
         if use_only_free_weather_tools is None:
-            use_only_free_weather_tools = settings.USE_ONLY_FREE_WEATHER_MCP_TOOLS
+            use_only_free_weather_tools = (
+                settings.USE_ONLY_FREE_WEATHER_MCP_TOOLS
+            )
 
         self.use_only_free_weather_tools = use_only_free_weather_tools
 
@@ -38,9 +42,11 @@ class MCPClientManager:
                 raise ValueError(f"MCP server URL not defined for {name}")
 
             if mcp_type == "fastmcp":
-                self.services[name] = FastMCPClientService(url, api_key=api_key)
+                self.services[name] = FastMCPClientService(
+                    url, api_key=api_key
+                )
             elif mcp_type == "rest":
-                # For weather_mcp, choose which tools to register based on setting
+                # For weather_mcp, choose which tools to register
                 if name == "weather_mcp" and use_only_free_weather_tools:
                     tools = get_free_tools(name)
                 else:
@@ -79,7 +85,8 @@ class MCPClientManager:
     def get_tools_info(self) -> Dict[str, Any]:
         """
         Get information about registered tools for each server.
-        This shows what tools are available in the manager based on configuration.
+        This shows what tools are available in the manager based on
+        configuration.
         """
         info = {}
         for name in DEFAULT_MCP_SERVERS.keys():
@@ -88,7 +95,9 @@ class MCPClientManager:
                 summary = get_tools_summary(name)
                 if name == "weather_mcp":
                     summary["registered_mode"] = (
-                        "free_only" if self.use_only_free_weather_tools else "all"
+                        "free_only"
+                        if self.use_only_free_weather_tools
+                        else "all"
                     )
                     summary["setting"] = "USE_ONLY_FREE_WEATHER_MCP_TOOLS"
                     summary["setting_value"] = self.use_only_free_weather_tools
@@ -98,12 +107,14 @@ class MCPClientManager:
             else:
                 info[name] = {
                     "type": server_type,
-                    "note": "Tool registration handled by FastMCP protocol"
+                    "note": "Tool registration handled by FastMCP protocol",
                 }
         return info
 
     async def get_all_resources(self) -> Dict[str, Any]:
-        """Retrieve resources from all MCP servers (FastMCP only, REST optional)."""
+        """
+        Retrieve resources from all MCP servers (FastMCP only, REST optional).
+        """
         all_resources = {}
         for name, service in self.services.items():
             try:
