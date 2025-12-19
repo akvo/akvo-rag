@@ -47,15 +47,15 @@ else
 fi
 
 # Check if backend is accessible
-echo "Checking if API is accessible..."
-for i in {1..10}; do
+echo "Checking if API is accessible in http://localhost:${BACKEND_PORT}/api/health"
+for i in {1..60}; do
   if curl -s http://localhost:${BACKEND_PORT}/api/health > /dev/null; then
     echo "API is accessible at http://localhost:${BACKEND_PORT}/api"
     break
   fi
-  echo "Waiting for API to become available... ($i/10)"
+  echo "Waiting for API to become available... ($i/60)"
   sleep 5
-  if [ $i -eq 10 ]; then
+  if [ $i -eq 60 ]; then
     echo "Warning: API not responding. You may need to check your Docker configuration."
   fi
 done
