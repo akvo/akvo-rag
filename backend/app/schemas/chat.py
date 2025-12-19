@@ -51,5 +51,5 @@ class MessagesPayload(MessageBase):
 
 
 class CreateMessagePayload(BaseModel):
-    id: str
+    # id: str
     messages: List[MessagesPayload]
