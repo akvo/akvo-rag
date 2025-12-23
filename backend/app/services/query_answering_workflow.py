@@ -135,12 +135,11 @@ async def classify_intent_node(state: GraphState) -> GraphState:
         - "small_talk"
         - "weather_query"
         - "knowledge_query"
-        - "general_query"
     Uses only the LLM (no regex-based fast intent).
     """
     query = state.get("query", "").strip()
     if not query:
-        state["intent"] = "general_query"
+        state["intent"] = "knowledge_query"
         return state
 
     try:
@@ -153,7 +152,6 @@ async def classify_intent_node(state: GraphState) -> GraphState:
         - "small_talk": greetings, casual or social conversation, polite chit-chat (e.g., "hi", "how are you", "good morning", "thanks").
         - "weather_query": questions or comments about weather or climate (e.g., "is it raining", "how hot is it", "what's the forecast").
         - "knowledge_query": factual or instructional questions that require a knowledge base or reasoning (e.g., "how to plant corn", "what is fertilizer A", "explain soil acidity").
-        - "general_query": other messages that don't fit the above categories.
 
         Return ONLY a valid JSON object, for example:
         {"intent": "small_talk"}
@@ -170,11 +168,11 @@ async def classify_intent_node(state: GraphState) -> GraphState:
             logger.warning(
                 f"[classify_intent_node] Invalid response: {raw_output}"
             )
-            state["intent"] = "general_query"
+            state["intent"] = "knowledge_query"
             return state
 
         parsed = json.loads(match.group(0))
-        state["intent"] = parsed.get("intent", "general_query")
+        state["intent"] = parsed.get("intent", "knowledge_query")
 
         logger.info(
             f"[classify_intent_node] LLM classified as: {state['intent']}"
@@ -185,7 +183,7 @@ async def classify_intent_node(state: GraphState) -> GraphState:
         logger.exception(
             f"[classify_intent_node] LLM classification failed: {e}"
         )
-        state["intent"] = "general_query"
+        state["intent"] = "knowledge_query"
         return state
 
 
@@ -288,7 +286,7 @@ async def error_handler_node(state: GraphState) -> GraphState:
     - For other queries: Provide friendly message to try again later
     """
     try:
-        intent = state.get("intent", "general_query")
+        intent = state.get("intent", "knowledge_query")
         query = state.get("query", "")
         contextual_query = state.get("contextual_query", query)
 

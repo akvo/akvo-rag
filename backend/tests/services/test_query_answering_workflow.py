@@ -83,7 +83,8 @@ class TestQueryAnsweringWorkflow:
     @pytest.mark.asyncio
     async def test_classify_intent_node_llm_error(self, monkeypatch):
         """
-        classify_intent_node should fall back to general_query on LLM failure.
+        classify_intent_node should fall back to knowledge_query
+        on LLM failure.
         """
         fake_llm = MagicMock()
         fake_llm.ainvoke = AsyncMock(side_effect=Exception("llm down"))
@@ -94,14 +95,16 @@ class TestQueryAnsweringWorkflow:
 
         state = {"query": "something uncertain"}
         new_state = await classify_intent_node(state)
-        assert new_state["intent"] == "general_query"
+        assert new_state["intent"] == "knowledge_query"
 
     @pytest.mark.asyncio
     async def test_classify_intent_node_empty_query(self):
-        """classify_intent_node should return general_query for empty query."""
+        """
+        classify_intent_node should return knowledge_query for empty query.
+        """
         state = {"query": ""}
         new_state = await classify_intent_node(state)
-        assert new_state["intent"] == "general_query"
+        assert new_state["intent"] == "knowledge_query"
 
     @pytest.mark.asyncio
     async def test_classify_intent_node_invalid_json_response(
@@ -121,7 +124,7 @@ class TestQueryAnsweringWorkflow:
 
         state = {"query": "test query"}
         new_state = await classify_intent_node(state)
-        assert new_state["intent"] == "general_query"
+        assert new_state["intent"] == "knowledge_query"
 
     # ---------------- small_talk_node ----------------
 
@@ -464,8 +467,11 @@ class TestQueryAnsweringWorkflow:
         assert "try again" in answer_lower or "moment" in answer_lower
 
     @pytest.mark.asyncio
-    async def test_error_handler_general_query(self, monkeypatch):
-        """error_handler_node should handle general query errors with friendly message."""
+    async def test_error_handler_knowledge_query(self, monkeypatch):
+        """
+        error_handler_node should handle general query errors
+        with friendly message.
+        """
 
         async def fake_ainvoke(msgs):
             return SimpleNamespace(
@@ -482,7 +488,7 @@ class TestQueryAnsweringWorkflow:
         state: GraphState = {
             "query": "random query",
             "contextual_query": "random query",
-            "intent": "general_query",
+            "intent": "knowledge_query",
             "error": "Unknown error occurred",
         }
 
