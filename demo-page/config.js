@@ -26,11 +26,11 @@ window.config_unep = {
 };
 
 // TEST USING ~ Living Income Bechmark docs
-// window.config_living_income = {
-//   title: "Living Income Assistant",
-//   kb_id: 38,
-//   wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
-// };
+window.config_living_income = {
+  title: "Living Income Knowledge Base",
+  kb_id: 746,
+  wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
+};
 
 // TEST USING Kefaas docs
 window.config_kefaas = {
