@@ -19,19 +19,33 @@ description: Scrum Master agent (Bob). Use when creating user stories, sprint pl
 Generate complete user stories from PRD + Architecture:
 
 ```markdown
-## Story: [Title]
+# STORY-XXX: [Title]
+
+- **Status**: [Draft/Approved/COMPLETED]
+- **Sprint**: [N]
+- **Developer**: [Name] 💻
+
+## ⏱️ Effort Tracking
+- **Estimated Time**: [X] hours
+- **Actual Time**: [Y] hours
+
+## 🎯 Goal
 **As a** [user type]
 **I want** [functionality]
 **So that** [business value]
 
-### Acceptance Criteria
-- [ ] Given [context], when [action], then [result]
-- [ ] Given [context], when [action], then [result]
+## 📝 Acceptance Criteria
+
+### UAC (User Acceptance Criteria)
+- [ ] [Criterion 1]
+- [ ] [Criterion 2]
+
+### TAC (Technical Acceptance Criteria)
+- [ ] [Criterion 1]
+- [ ] [Criterion 2]
 
 ### Technical Notes
-- API endpoints involved
-- Data model changes
-- Dependencies on other stories
+- [Implementation details]
 
 ### Definition of Done
 - [ ] Unit tests passing

@@ -103,12 +103,12 @@ For every phase, if a corresponding artifact already exists in `agent_docs/`, yo
 1. Load the bmad-sm skill
 2. Review PRD, Architecture, and UX Spec
 3. Decompose epics into user stories
-4. Add acceptance criteria and technical notes
+4. Add **UAC**, **TAC**, and **Estimated Time** to each story
 5. Plan initial sprint(s)
 **Artifacts Produced**:
-- `agent_docs/stories/`
+- `agent_docs/stories/` (including mandatory Est. Time, UAC, TAC)
 - `agent_docs/sprint-plan.md`
-**Gate**: Stories meet INVEST criteria and are approved
+**Gate**: Stories meet INVEST criteria, have Est/UAC/TAC, and are approved
 
 ---
 
@@ -119,11 +119,12 @@ For every phase, if a corresponding artifact already exists in `agent_docs/`, yo
 1. Load the bmad-dev skill
 2. Pick approved stories from sprint plan
 3. For each story, run TDD cycle (Red → Green → Refactor)
-4. Delegate to stack-specific `/2-implement` workflow
-5. Mark stories as Implemented
+4. **Record Actual Time** spent on each story
+5. Delegate to stack-specific `/2-implement` workflow
+6. Mark stories as COMPLETED
 **Artifacts Produced**:
 - Working code with tests
-- Updated story statuses
+- Updated story statuses (including Actual Time)
 **Gate**: All acceptance criteria met, tests passing
 
 ---

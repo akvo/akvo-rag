@@ -32,9 +32,12 @@ Ideate → Analyze → Architect → Design → Plan → Implement → Test → 
 1. Each phase produces **artifacts** consumed by the next phase
 2. Agents must **not skip phases** — output quality depends on upstream artifacts
 3. The **PM** owns the product vision; the **Architect** owns technical decisions
-4. The **Scrum Master** translates PRD + Architecture into developer-ready stories
-5. The **Developer** never starts without an approved story
-6. Cross-references: each agent skill is at `bmad-{role}/SKILL.md`
+4. The **Scrum Master** translates PRD + Architecture into developer-ready stories. Every story MUST include:
+    - **Estimated Time** (Phase 5)
+    - **UAC (User Acceptance Criteria)** — customer-facing value.
+    - **TAC (Technical Acceptance Criteria)** — engineering/test requirements.
+5. The **Developer** never starts without an approved story and must record **Actual Time** spent during Phase 6.
+6. The **Developer** never starts without an approved story
 7. **Documentation Maintenance**: When modifying a feature, check for existing artifacts in `agent_docs/`.
     - **Living Documents** (`prd.md`, `architecture.md`, `user-guide.md`, `README.md`): Always **update** these to reflect the current state.
     - **Chronological Records** (`ADRs`, `stories`, `sprint-plans`, `research-findings`): Always **create new** versioned files (e.g., `ADR-002.md`) to maintain history.
