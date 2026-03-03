@@ -81,7 +81,12 @@ async def stream_mcp_response(
         else:
             chat_history = messages.get("messages", [])[-max_history_length:]
 
-        # 3) Prepare initial state for MCP nodes
+        # 3) Sanitize chat history by removing internal context prefixes.
+        from app.services.utils.history_utils import strip_context_prefixes
+
+        chat_history = strip_context_prefixes(chat_history)
+
+        # 4) Prepare initial state for MCP nodes
         contextualize_prompt = prompt_service.get_full_contextualize_prompt()
         qa_prompt = prompt_service.get_full_qa_strict_prompt()
 
@@ -122,12 +127,14 @@ async def stream_mcp_response(
         # 7) Check if MCP tool failed - use error handler
         if state.get("error"):
             logger.warning(
-                f"[stream_mcp_response] MCP tool failed, using error handler. Error: {state['error']}"
+                "[stream_mcp_response] MCP tool failed, using error handler. "
+                f"Error: {state['error']}"
             )
             state = await error_handler_node(state)
             reply = state.get(
                 "answer",
-                "I'm having trouble with that right now. Please try again in a moment.",
+                "I'm having trouble with that right now. "
+                "Please try again in a moment.",
             )
 
             bot_message.content = reply
@@ -192,11 +199,7 @@ async def stream_mcp_response(
             if m["role"] == "user":
                 chain_chat_history.append(HumanMessage(content=m["content"]))
             elif m["role"] == "assistant":
-                # If stored with context prefix, strip it for chain input
-                content = m["content"]
-                if "__LLM_RESPONSE__" in content:
-                    content = content.split("__LLM_RESPONSE__")[-1]
-                chain_chat_history.append(AIMessage(content=content))
+                chain_chat_history.append(AIMessage(content=m["content"]))
 
         # Input to generation: prefer contextual_query if available
         generation_input = state.get("contextual_query", query)
@@ -230,7 +233,8 @@ async def stream_mcp_response(
         db.commit()
 
         # 11) Send final metadata / finish signal
-        yield 'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
+        usage = '{"promptTokens":0,"completionTokens":0}'
+        yield f'd:{{"finishReason":"stop","usage":{usage}}}\n'
 
     except Exception as e:
         # log full traceback
