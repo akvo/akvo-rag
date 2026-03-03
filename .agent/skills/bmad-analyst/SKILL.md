@@ -68,10 +68,11 @@ Compare current state vs. desired state:
 3. Ask clarifying questions methodically — never assume
 4. Present findings with evidence and data points
 5. Flag assumptions explicitly and request validation
-6. Detect the current stack by checking the directory name and its `.agent/rules/`. Respect stack-specific constraints (e.g., `./dev.sh` commands, specific frameworks).
+6. Detect the current stack by checking the directory name and its `.agent/rules/`. Respect stack-specific constraints (e.g., Docker commands, specific frameworks).
 7. Check `agent_docs/` for existing artifacts.
-    - **Living Documents** (`prd.md`): Always **update** these to reflect hardened requirements.
-    - **Chronological Records** (`research-findings.md`): Always **create new** versioned files (e.g., `research-findings-v2.md`) to preserve the history of research.
+    - **Living Documents** (`prd.md`, `index.md`): Always **update** these to reflect hardened requirements. Read `index.md` first.
+    - **Feature Documents** (`agent_docs/features/`): Refine specific feature docs with research findings.
+    - **Chronological Records** (`research-findings.md`): Always **create new** records for each analysis cycle to maintain an audit trail.
 
 8. Produce structured, traceable documentation
 

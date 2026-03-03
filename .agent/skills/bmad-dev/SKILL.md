@@ -26,7 +26,7 @@ Implement features based on approved user stories:
    - Green: Write minimal code to pass the test
    - Refactor: Clean up while keeping tests green
 5. **Integration** — Verify the feature works end-to-end
-6. **Update Story** — Mark story status as Implemented
+6. **Update Story** — Mark story status as Implemented and **Update Actual Time**.
 
 ### 2. Code Quality Enforcement
 
@@ -52,7 +52,9 @@ Before marking a story complete, verify:
 2. **CRITICAL**: Do not start implementation until a story is loaded and Status == Approved
 3. When a story is loaded, read the ENTIRE story markdown
 4. Detect the current stack by checking the directory name and its `.agent/rules/`. ALWAYS use the stack's Docker commands (e.g., `./dev.sh exec`) as specified in the rules. Ensure all tests run inside Docker.
-5. Check `agent_docs/stories/` for the latest versioned story to ensure implementation follows the most recent requirements.
+5. Check `agent_docs/` for context but focus on `agent_docs/stories/`.
+    - **Living Documents** (`index.md`): Read `index.md` for architectural context if needed.
+    - **Chronological Records** (`agent_docs/stories/`): Always implement from the latest versioned story. Update story status to "In Progress" when starting and "Implemented" when finished, and **Update Actual Time**.
 
 6. Plan implementation tasks from acceptance criteria before coding
 7. Report progress against acceptance criteria checklist

@@ -19,9 +19,10 @@ Before starting:
 1. Confirm the project name and scope with the user
 2. **Detect the current stack** (e.g., FastAPI/Next.js, Laravel, Streamlit) by checking the directory name and its `.agent/rules/`.
 3. Create an `agent_docs/` directory for artifacts
-4. **Check for existing artifacts** in `agent_docs/`. Explain the distinction between **Living Documents** (updated to maintain current state) and **Chronological Records** (newly created to preserve history).
+4. **Check for existing artifacts** in `agent_docs/`. Explain the distinction between **Living Documents** (`index.md`, `prd.md`, etc., updated to maintain current state), **Feature Documents** (specific to a feature), and **Chronological Records** (newly created to preserve history). Always consult `agent_docs/index.md` as the master map.
 
-5. Ask if the user wants to run all phases or start from a specific phase
+5. Ask the user: "**Is this a new feature, refinement, refactor, or a general task?**"
+6. Ask if the user wants to run all phases or start from a specific phase
 
 
 ## Lifecycle Phases
@@ -30,22 +31,24 @@ Before starting:
 For every phase, if a corresponding artifact already exists in `agent_docs/`, you MUST:
 1. Read the existing artifact first.
 2. Determine if the current task is a revision/enhancement of an existing feature or a completely new one.
-3. If it's a revision or enhancement to the project's current state, **update** the corresponding **Living Document** (`prd.md`, `architecture.md`, `user-guide.md`, `README.md`).
-4. If it's a point-in-time record or a significant update to a historical trail, **create a new** **Chronological Record** (`ADRs`, `stories`, `sprint-plans`, `research-findings`) with a new version number or ID.
+3. If it's a revision or enhancement to the project's current state, **update** the corresponding **Living Document** (`index.md`, `prd.md`, `architecture.md`, `user-guide.md`, `README.md`).
+4. For features or refinements, create or update a **Feature Document** in `agent_docs/features/`.
+5. If it's a point-in-time record or a significant update to a historical trail, **create a new** **Chronological Record** (`ADRs`, `stories`, `sprint-plans`, `research-findings`) with a new version number or ID.
 
 
 
 ### Phase 1: Ideate 📋
 **Agent**: bmad-pm (John, Product Manager)
-**Goal**: Define product vision and initial requirements
+**Goal**: Define project vision (Skeleton) or feature requirements
 **Steps**:
 1. Load the bmad-pm skill
-2. Run the Stakeholder Workshop or Create Product Brief
-3. Generate initial PRD
+2. Update **Living Documents** (`product-brief.md`, `prd.md`, `index.md`) ONLY if the task is a "General Task" or "Vision Change" that affects the project skeleton.
+3. For "Feature" or "Refinement" tasks, create a **Feature Document** in `agent_docs/features/`.
 **Artifacts Produced**:
-- `agent_docs/product-brief.md`
-- `agent_docs/prd.md`
-**Gate**: User approves the PRD before proceeding
+- `agent_docs/product-brief.md` (Update only)
+- `agent_docs/prd.md` (Update only)
+- `agent_docs/features/[issue-id]-[slug].md` (New/Update)
+**Gate**: User approves the updated Skeleton or the new Feature Document before proceeding
 
 ---
 
@@ -54,12 +57,12 @@ For every phase, if a corresponding artifact already exists in `agent_docs/`, yo
 **Goal**: Deepen and validate requirements
 **Steps**:
 1. Load the bmad-analyst skill
-2. Review PRD from Phase 1
+2. Review Feature Document from Phase 1
 3. Conduct deep research on key areas
-4. Refine PRD with hardened requirements
+4. Refine Feature Document with hardened requirements
 **Artifacts Produced**:
 - `agent_docs/research-findings.md`
-- `agent_docs/prd.md` (refined)
+- `agent_docs/features/[issue-id]-[slug].md` (refined)
 **Gate**: All requirements are testable and traceable
 
 ---
@@ -103,12 +106,12 @@ For every phase, if a corresponding artifact already exists in `agent_docs/`, yo
 1. Load the bmad-sm skill
 2. Review PRD, Architecture, and UX Spec
 3. Decompose epics into user stories
-4. Add **UAC**, **TAC**, and **Estimated Time** to each story
+4. Add acceptance criteria and technical notes
 5. Plan initial sprint(s)
 **Artifacts Produced**:
-- `agent_docs/stories/` (including mandatory Est. Time, UAC, TAC)
+- `agent_docs/stories/`
 - `agent_docs/sprint-plan.md`
-**Gate**: Stories meet INVEST criteria, have Est/UAC/TAC, and are approved
+**Gate**: Stories meet INVEST criteria and are approved
 
 ---
 
@@ -119,13 +122,12 @@ For every phase, if a corresponding artifact already exists in `agent_docs/`, yo
 1. Load the bmad-dev skill
 2. Pick approved stories from sprint plan
 3. For each story, run TDD cycle (Red → Green → Refactor)
-4. **Record Actual Time** spent on each story
-5. Delegate to stack-specific `/2-implement` workflow
-6. Mark stories as COMPLETED
+4. Delegate to stack-specific `/2-implement` workflow
+5. Mark stories as Implemented and **Update Actual Time** in the story document.
 **Artifacts Produced**:
 - Working code with tests
-- Updated story statuses (including Actual Time)
-**Gate**: All acceptance criteria met, tests passing
+- Updated story statuses
+**Gate**: All acceptance criteria (UAC + TAC) met, tests passing
 
 ---
 
