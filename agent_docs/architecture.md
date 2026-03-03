@@ -46,6 +46,8 @@ graph TD
 ### 3.2 Celery Worker & RAG Optimization
 - **`upload_task`**: Handles file parsing, chunking, and sending embeddings to the MCP server.
 - **`chat_task`**: Coordinates multi-step workflows. **Performance critical**: Limits context window size using strict token counting before hitting the LLM.
+- **History Sanitization**: Automatically strips internal base64 context and `__LLM_RESPONSE__` markers from chat history to prevent token limit blow-up.
+- **Error-Aware Workflow**: Implements fail-fast logic in the LangGraph coordinator to prevent cascading failures during API or service interruptions.
 - **Semantic Router (Cache)**: Intercepts queries to check the **Redis Cache** for semantically identical past queries, returning instant results and avoiding LLM costs entirely.
 - **Cache Invalidation Component**: Since `akvo-rag` has exclusive access to the MCP Server, it surgically purges cached semantic answers in Redis exactly at the moment it successfully calls an MCP endpoint to add or delete documents from a Knowledge Base.
 - **Re-ranking**: Post-retrieval filtering that sorts the top 20 VDB results down to the most relevant 3-5 results, severely cutting down on LLM token consumption while boosting accuracy.
