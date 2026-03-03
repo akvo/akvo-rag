@@ -17,8 +17,6 @@ The Knowledge Base (KB) is the core of the RAG system. It contains the documents
     *   **Privacy**: Set to **Public** for team-wide access or **Private** for restricted projects.
 4.  **Save**: Click **"Create"** to initialize the vector storage and database entries.
 
-![Create KB Modal](images/kb-create-modal.png)
-
 ### 1.2 Data Ingestion (Uploading Documents)
 Adding documents is a multi-step process that ensures your data is correctly parsed and indexed.
 
@@ -29,12 +27,10 @@ Adding documents is a multi-step process that ensures your data is correctly par
     *   *Supported formats:* PDF, DOCX, TXT, and Markdown (MD).
 4.  **Process**: Click **"Upload Files"**. You can follow the progress through the **Upload**, **Preview**, and **Process** stages.
 
-![Upload Modal](images/kb-upload-modal.png)
+![KB Detail View](images/kb-detail-docs.png)
 
 ### 1.3 Managing Documents & Status
 After uploading, you can monitor and manage individual files within the Knowledge Base detail view.
-
-![KB Detail View](images/kb-detail-docs.png)
 
 *   **Verification (Ingestion Status)**:
     *   `completed` (Green): The file is successfully indexed and ready for AI queries.
