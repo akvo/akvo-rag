@@ -6,7 +6,7 @@ This guide is intended for administrators who manage the Knowledge Bases and use
 
 The Knowledge Base (KB) is the core of the RAG system. It contains the documents that the AI uses to answer questions.
 
-![Knowledge Base List](images/kb-main-list.png)
+![Knowledge Base List](images/kb-list-detailed.png)
 
 ### 1.1 Creating a Knowledge Base
 1.  **Access Knowledge Base Page**: Ensure you are on the **Knowledge Base** management page (accessible via the sidebar).
