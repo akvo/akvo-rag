@@ -51,7 +51,3 @@ Administrators can manage who has access to the system and their roles.
 - **Active Status**: You can enable or disable user accounts.
 - **Role Assignment**: Assign users as regular users or superusers (administrators).
 - **Approval Flow**: If self-registration is enabled, admins can approve new sign-ups here.
-
-## 3. Maintenance Protocols
-- **Purging Cache**: If you update documents in a KB, the semantic cache is automatically invalidated to ensure users receive the most up-to-date information.
-- **Self-Healing**: The system handles large context automatically by stripping unnecessary metadata, ensuring long conversations remains stable.
