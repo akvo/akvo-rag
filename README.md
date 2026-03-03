@@ -79,6 +79,7 @@ The system defaults to USQ mode for simplicity, with ASQ mode available for more
 - **Multiple LLM Support**: OpenAI, DeepSeek, and local Ollama deployment
 - **Monitoring Dashboard**: Flower UI for real-time job tracking
 - **OpenAPI Integration**: RESTful APIs for programmatic access
+- **Self-Healing & Context Resiliency**: Automatically strips redundant history metadata and implements robust, error-aware workflow nodes to prevent crashes.
 
 ---
 
