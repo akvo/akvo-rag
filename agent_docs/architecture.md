@@ -46,7 +46,8 @@ graph TD
 ### 3.2 Celery Worker & RAG Optimization
 - **`upload_task`**: Handles file parsing, chunking, and sending embeddings to the MCP server.
 - **`chat_task`**: Coordinates multi-step workflows. **Performance critical**: Limits context window size using strict token counting before hitting the LLM.
-- **Semantic Router**: Intercepts queries to check the **Redis Cache** for semantically identical past queries, returning instant results and avoiding LLM costs entirely.
+- **Semantic Router (Cache)**: Intercepts queries to check the **Redis Cache** for semantically identical past queries, returning instant results and avoiding LLM costs entirely.
+- **Cache Invalidation Component**: Since `akvo-rag` has exclusive access to the MCP Server, it surgically purges cached semantic answers in Redis exactly at the moment it successfully calls an MCP endpoint to add or delete documents from a Knowledge Base.
 - **Re-ranking**: Post-retrieval filtering that sorts the top 20 VDB results down to the most relevant 3-5 results, severely cutting down on LLM token consumption while boosting accuracy.
 
 ### 3.3 MCP Server (External Dependency)
@@ -56,12 +57,13 @@ graph TD
 
 ## 4. Data Flow
 
-### 4.1 Document Ingestion Flow
+### 4.1 Document Ingestion & Cache Invalidation Flow
 1. **API**: Receives file upload -> saves to disk -> creates metadata in MySQL.
 2. **API**: Dispatches `upload_task` to RabbitMQ.
 3. **Worker**: Picks up task -> parses file -> generates chunks.
 4. **Worker**: Sends chunks to **MCP Server** for indexing.
-5. **Worker**: Updates status in MySQL -> notifies Frontend via WebSocket/Polling.
+5. **Worker**: **CRITICAL**: Upon successful indexing, the worker sends a purge command to **Redis** to clear all cached semantic answers tagged with this KB ID.
+6. **Worker**: Updates status in MySQL -> notifies Frontend via WebSocket/Polling.
 
 ### 4.2 Optimized RAG Query Flow (High Performance)
 1. **API**: Receives question.

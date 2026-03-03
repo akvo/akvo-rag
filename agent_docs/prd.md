@@ -44,6 +44,7 @@
 ### 4.2 Query Interface & Optimization
 - **[MUST]** Real-time streaming chat interface using Server-Sent Events (SSE).
 - **[MUST]** Semantic Query Caching to return repeated or highly similar questions instantly, bypassing the LLM.
+- **[MUST]** **Strict Cache Invalidation**: The system must automatically purge all associated semantic cache entries whenever a Knowledge Base is modified (documents added or removed) to prevent serving stale answers.
 - **[MUST]** Source citations (showing which part of which doc was used).
 - **[MUST]** Context Re-ranking pipeline to filter raw vector search results to only the top, most relevant chunks before sending to the LLM (minimizes prompt size).
 - **[SHOULD]** History management (saving and naming conversations).
