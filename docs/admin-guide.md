@@ -9,8 +9,8 @@ The Knowledge Base (KB) is the core of the RAG system. It contains the documents
 ![Knowledge Base List](images/kb-list-detailed.png)
 
 ### 1.1 Creating a Knowledge Base
-1.  **Navigate to Knowledge Base**: From the main dashboard, click **Knowledge Base** in the left sidebar.
-2.  **Initialize New KB**: Click the **"New Knowledge Base"** button at the top right.
+1.  **Access Knowledge Base Page**: Ensure you are on the **Knowledge Base** management page (accessible via the sidebar).
+2.  **Initialize New KB**: Click the **"New Knowledge Base"** button at the top right of the list.
 3.  **Configure Settings**:
     *   **Name**: Provide a clear, descriptive title.
     *   **Description**: Briefly explain the content. This helps the AI understand the context of the documents.
