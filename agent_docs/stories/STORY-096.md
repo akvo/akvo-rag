@@ -5,8 +5,8 @@
 - **Developer**: Amelia 💻
 
 ### Timeline & Effort
-- **Estimated Time**: 2.0 hours
-- **Actual Time**: 2.0 hours
+- **Estimated Time**: 1.5 hours
+- **Actual Time**: 1.5 hours
 - **Effort Points**: 2
 
 ### Goal
