@@ -60,12 +60,58 @@ def seed_prompts():
                     activation_reason=prompt_data["activation_reason"],
                 )
                 db.add(version)
-                logger.info("Seeded prompt: %s", prompt_name)
+                logger.info("Seeded new prompt: %s", prompt_name)
             else:
-                logger.warning("Prompt already exists: %s", prompt_name)
+                # Check if the latest active version matches the current content
+                active_version = (
+                    db.query(PromptVersion)
+                    .filter_by(
+                        prompt_definition_id=definition.id, is_active=True
+                    )
+                    .first()
+                )
+
+                if (
+                    not active_version
+                    or active_version.content != prompt_data["content"]
+                ):
+                    # Deactivate existing active versions
+                    db.query(PromptVersion).filter_by(
+                        prompt_definition_id=definition.id
+                    ).update({"is_active": False})
+
+                    # Get the highest version number
+                    from sqlalchemy import func
+
+                    max_version = (
+                        db.query(func.max(PromptVersion.version_number))
+                        .filter_by(prompt_definition_id=definition.id)
+                        .scalar()
+                        or 0
+                    )
+
+                    new_version = PromptVersion(
+                        prompt_definition_id=definition.id,
+                        content=prompt_data["content"],
+                        version_number=max_version + 1,
+                        is_active=True,
+                        activation_reason=(
+                            "Added new active version via seeder sync"
+                        ),
+                    )
+                    db.add(new_version)
+                    logger.info(
+                        "Added new active version %d for: %s",
+                        max_version + 1,
+                        prompt_name,
+                    )
+                else:
+                    logger.info(
+                        "Prompt version is up to date: %s", prompt_name
+                    )
 
         db.commit()
-        logger.info("✅ Prompt seeding completed.")
+        logger.info("✅ Prompt seeding/sync completed.")
 
     except SQLAlchemyError as e:
         db.rollback()

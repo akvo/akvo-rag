@@ -26,11 +26,11 @@ window.config_unep = {
 };
 
 // TEST USING ~ Living Income Bechmark docs
-// window.config_living_income = {
-//   title: "Living Income Assistant",
-//   kb_id: 38,
-//   wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
-// };
+window.config_living_income = {
+  title: "Living Income Knowledge Base",
+  kb_id: 746,
+  wsURL: "wss://akvo-rag.akvotest.org/ws/chat",
+};
 
 // TEST USING Kefaas docs
 window.config_kefaas = {
@@ -41,7 +41,7 @@ window.config_kefaas = {
 
 // LOCAL
 window.config_local = {
-  title: "Test Integration with MCP server",
-  kb_id: 8,
+  title: "Test Local Living Income",
+  kb_id: 116,
   wsURL: "ws://localhost:81/ws/chat",
 };

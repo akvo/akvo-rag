@@ -45,7 +45,9 @@ class GraphState(TypedDict, total=False):
 # Helper: Decode Base64 MCP Context
 # ---------------------------------------------------------------------
 def decode_mcp_context(base64_context: str) -> List[Document]:
-    """Decode Base64-encoded MCP context safely."""
+    """Sanitize chat history by removing internal context prefixes.
+    The prefix is base64-encoded metadata followed by '__LLM_RESPONSE__'.
+    """
     if not base64_context:
         return []
     try:
@@ -107,7 +109,10 @@ def ensure_documents(context_data):
                 docs.append(
                     Document(
                         page_content=text,
-                        metadata={"source": "mcp_rest_result", "index": idx},
+                        metadata={
+                            "source": "mcp_rest_result",
+                            "index": idx,
+                        },
                     )
                 )
             except Exception as e:
@@ -142,6 +147,9 @@ async def classify_intent_node(state: GraphState) -> GraphState:
         state["intent"] = "knowledge_query"
         return state
 
+    if state.get("error"):
+        return state
+
     try:
         llm = LLMFactory.create()
 
@@ -149,9 +157,16 @@ async def classify_intent_node(state: GraphState) -> GraphState:
         You are a classification model for a conversational AI assistant.
 
         Classify the user's latest message into ONE of these intents:
-        - "small_talk": greetings, casual or social conversation, polite chit-chat (e.g., "hi", "how are you", "good morning", "thanks").
-        - "weather_query": questions or comments about weather or climate (e.g., "is it raining", "how hot is it", "what's the forecast").
-        - "knowledge_query": factual or instructional questions that require a knowledge base or reasoning (e.g., "how to plant corn", "what is fertilizer A", "explain soil acidity").
+        - \"small_talk\": greetings, casual or social conversation, polite
+          chit-chat (e.g., \"hi\", \"how are you\", \"thanks\").
+        - \"weather_query\": questions or comments about weather or climate
+          (e.g., \"is it raining\", \"how hot is it\", \"what's the forecast\").
+        - \"memory_query\": questions about the current conversation,
+          previous messages, or what the AI remembers (e.g., \"do you
+          remember?\", \"what did we talk about?\").
+        - "knowledge_query": factual or instructional questions that require a
+          knowledge base or reasoning (e.g., "how to plant corn",
+          "what is fertilizer A", "explain soil acidity").
 
         Return ONLY a valid JSON object, for example:
         {"intent": "small_talk"}
@@ -198,6 +213,9 @@ llm_instance = LLMFactory.create()
 # ---------------------------------------------------------------------
 async def small_talk_node(state: GraphState) -> GraphState:
     """Handle small talk with a short, friendly reply."""
+    if state.get("error"):
+        return state
+
     try:
         llm = LLMFactory.create()
         system_prompt = """
@@ -221,6 +239,9 @@ async def small_talk_node(state: GraphState) -> GraphState:
 
 async def contextualize_node(state: GraphState) -> GraphState:
     """Contextualize user query using LLM."""
+    if state.get("error"):
+        return state
+
     try:
         contextualize_prompt = ChatPromptTemplate.from_messages(
             [
@@ -237,6 +258,17 @@ async def contextualize_node(state: GraphState) -> GraphState:
 
         contextual_query = result.content.strip()
         logger.info(f"Contextualized query: {contextual_query}")
+
+        # If it's a memory query, use a more permissive prompt for generation
+        intent = state.get("intent")
+        if intent == "memory_query":
+            state["qa_prompt_str"] = (
+                "You are a helpful assistant. Use the provided Chat History "
+                "to answer the user's question about your conversation. "
+                "Be friendly, concise, and helpful.\n\n"
+                "Context: {context}"
+            )
+
         return {**state, "contextual_query": contextual_query}
 
     except Exception as e:
@@ -246,10 +278,17 @@ async def contextualize_node(state: GraphState) -> GraphState:
 
 async def scoping_node(state: GraphState) -> GraphState:
     """Determine the MCP tool scope using ScopingAgent."""
+    if state.get("error"):
+        return state
+
     try:
+        query = state.get("contextual_query")
+        if not query:
+            raise KeyError("contextual_query missing in state")
+
         agent = ScopingAgent()
         scope = await agent.scope_query(
-            query=state["contextual_query"], scope=state.get("scope", {})
+            query=query, scope=state.get("scope", {})
         )
         logger.info(f"Scope determined: {scope}")
         return {**state, "scope": scope}
@@ -261,13 +300,24 @@ async def scoping_node(state: GraphState) -> GraphState:
 
 async def run_mcp_tool_node(state: GraphState) -> GraphState:
     """Run the MCP tool using the determined scope."""
+    if state.get("error"):
+        return state
+
     try:
         manager = MCPClientManager()
         scope = state.get("scope", {})
+        server_name = scope.get("server_name")
+        tool_name = scope.get("tool_name")
+
+        if not server_name or not tool_name:
+            raise ValueError(
+                f"Invalid scope: server_name={server_name}, "
+                f"tool_name={tool_name}"
+            )
 
         result = await manager.run_tool(
-            server_name=scope.get("server_name"),
-            tool_name=scope.get("tool_name"),
+            server_name=server_name,
+            tool_name=tool_name,
             param=scope.get("input", {}),
         )
 
@@ -297,21 +347,28 @@ async def error_handler_node(state: GraphState) -> GraphState:
             system_prompt = """
             You are a helpful weather assistant.
 
-            The real-time weather data service is currently unavailable, but you can still help the user
-            with general weather information based on your knowledge.
+            The real-time weather data service is currently unavailable,
+            but you can still help the user with general weather
+            information based on your knowledge.
 
             Answer the user's weather question to the best of your ability:
-            - Provide general information about typical weather patterns if relevant
-            - If a location is mentioned, describe typical seasonal conditions for that region
+            - Provide general information about typical weather patterns if
+              relevant
+            - If a location is mentioned, describe typical seasonal conditions
+              for that region
             - Be honest that you cannot access real-time weather data
-            - Suggest checking reliable weather services (e.g., weather apps or official meteorological sites)
+            - Suggest checking reliable weather services (e.g., weather apps or
+              official meteorological sites)
             - Keep the response helpful, friendly, and concise (2-4 sentences)
 
             Restrictions:
-            - Do NOT provide exact temperatures, rain amounts, or forecasts for specific dates
+            - Do NOT provide exact temperatures, rain amounts, or forecasts for
+              specific dates
             - Do NOT use phrases like "today", "right now", or "tomorrow"
-            - Speak in general patterns (e.g., "typically", "often", "during this season")
-            - If the user asks for exact current conditions, explicitly state you cannot access live data
+            - Speak in general patterns (e.g., "typically", "often", "during
+              this season")
+            - If the user asks for exact current conditions, explicitly state
+              you cannot access live data
             """
 
         else:
@@ -328,7 +385,8 @@ async def error_handler_node(state: GraphState) -> GraphState:
             - Does NOT mention technical details, errors, or system issues
             - Maximum 2 sentences
 
-            Example: "I'm having trouble finding that information right now. Could you please try again in a moment?"
+            Example: "I'm having trouble finding that information right now.
+            Could you please try again in a moment?"
             """
 
         response = await llm.ainvoke(
@@ -338,10 +396,12 @@ async def error_handler_node(state: GraphState) -> GraphState:
         answer = getattr(
             response,
             "content",
-            "I'm having trouble with that right now. Please try again in a moment.",
+            "I'm having trouble with that right now. "
+            "Please try again in a moment.",
         )
         logger.info(
-            f"[error_handler_node] Generated fallback response for intent={intent}"
+            f"[error_handler_node] Generated fallback response for "
+            f"intent={intent}"
         )
 
         return {**state, "answer": answer}
@@ -352,17 +412,23 @@ async def error_handler_node(state: GraphState) -> GraphState:
         if state.get("intent") == "weather_query":
             return {
                 **state,
-                "answer": "I'm unable to access weather data right now. Please check a weather service like weather.com for current conditions.",
+                "answer": "I'm unable to access weather data right now. "
+                "Please check a weather service like weather.com for "
+                "current conditions.",
             }
         else:
             return {
                 **state,
-                "answer": "I'm having trouble with that right now. Please try again in a moment.",
+                "answer": "I'm having trouble with that right now. "
+                "Please try again in a moment.",
             }
 
 
 async def post_processing_node(state):
     """Extract and normalize MCP tool result into Document list format."""
+    if state.get("error"):
+        return state
+
     logger.info(
         "[post_processing_node] Starting post-processing of MCP result..."
     )
@@ -381,7 +447,8 @@ async def post_processing_node(state):
             b64_text = mcp_result.content[0].text
             b64 = json.loads(b64_text)
             logger.debug(
-                "[post_processing_node] Detected KB/Chroma-style base64 context."
+                "[post_processing_node] Detected KB/Chroma-style "
+                "base64 context."
             )
             contexts = decode_mcp_context(
                 base64_context=b64.get("context", "")
@@ -410,21 +477,25 @@ async def post_processing_node(state):
             try:
                 text = getattr(mcp_result.content[0], "text", "")
                 logger.debug(
-                    f"[post_processing_node] Parsing .content text: {text[:200]}..."
+                    f"[post_processing_node] Parsing .content text: "
+                    f"{text[:200]}..."
                 )
                 json_result = json.loads(text)
                 logger.info(
-                    "[post_processing_node] Parsed REST MCP JSON result successfully."
+                    "[post_processing_node] Parsed REST MCP JSON result "
+                    "successfully."
                 )
             except Exception as e:
                 logger.warning(
-                    f"[post_processing_node] Failed to parse REST MCP result as JSON: {e}"
+                    f"[post_processing_node] Failed to parse REST MCP "
+                    f"result as JSON: {e}"
                 )
                 json_result = {"raw_text": str(mcp_result)}
 
         else:
             logger.warning(
-                "[post_processing_node] Unknown MCP result type, wrapping as string."
+                "[post_processing_node] Unknown MCP result type, wrapping as "
+                "string."
             )
             json_result = {"raw_text": str(mcp_result)}
 
@@ -432,7 +503,8 @@ async def post_processing_node(state):
         docs = ensure_documents(json_result)
         state["context"] = docs
         logger.info(
-            f"[post_processing_node] Generated {len(docs)} Document(s) from MCP result."
+            f"[post_processing_node] Generated {len(docs)} "
+            f"Document(s) from MCP result."
         )
 
     except Exception as e:
@@ -517,11 +589,24 @@ workflow.add_conditional_edges(
     {
         "small_talk": "small_talk",
         "weather_query": "contextualize",
+        "memory_query": "contextualize",
         "knowledge_query": "contextualize",
     },
 )
 
-workflow.add_edge("contextualize", "scope")
+
+def route_after_contextualize(state: GraphState) -> str:
+    """Route to scope if retrieval is needed, otherwise to generate."""
+    if state.get("intent") == "memory_query":
+        return "memory"
+    return "retrieval"
+
+
+workflow.add_conditional_edges(
+    "contextualize",
+    route_after_contextualize,
+    {"memory": "generate", "retrieval": "scope"},
+)
 workflow.add_edge("scope", "run_mcp")
 
 # Add conditional routing after run_mcp to handle errors
