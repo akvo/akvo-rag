@@ -37,13 +37,20 @@ Implement a **Re-ranker** step between retrieval and generation.
 | **LLM Filtering** | Use GPT-3.5 to filter the chunks. | **Expensive & Slow**: Calling an LLM twice for one question is much more expensive than a re-ranker. |
 | **Hybrid Search** | Combine keyword (BM25) + vector search. | **Halfway Measure**: Helps with specific terms but doesn't solve the "noise" problem as effectively as a re-ranker. |
 
-## 4. Goals & Requirements
+## 4. Industry Context & Best Practices
+How others solve this:
+- **Cohere Rerank**: The gold standard API for this. It allows you to send a query and a list of documents and returns them sorted by relevance. It's used by major enterprises to fix "retrieval bloat."
+- **LlamaIndex/LangChain**: These frameworks implement "Node Postprocessors" that act as a filter after the initial vector search.
+- **BGE-Reranker**: A top-performing open-source model (from BAAI) that can be run locally. It’s a "Cross-Encoder," which means it looks at the query and document *together* to find deep semantic relationships that standard search misses.
+- **Best Practice: "Recall-Heavy Retrieval"**: Best practices suggest retrieving 50-100 documents initially (optimizing for high recall) and then using the Re-ranker to pick the top 5 (optimizing for high precision).
+
+## 5. Goals & Requirements
 - **[MUST]** Integrate a Re-ranking node in the `query_answering_workflow`.
 - **[MUST]** Support for both local (BGE/FlashRank) and remote (Cohere) re-rankers.
 - **[MUST]** Configurable "Top-K" for both initial retrieval and final re-ranked subset.
 - **[SHOULD]** Measurement markers to track the accuracy boost (e.g., using RAGAS scores).
 
-## 5. User Impact
+## 6. User Impact
 - **End Users**: Answers will feel much more "on point" and intelligent.
 - **Developers**: Better control over which parts of the documentation are being prioritized.
 

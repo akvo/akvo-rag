@@ -36,7 +36,14 @@ Implement a Redis-based **Semantic Cache** that intercepts queries before they h
 | **LLM-Based Router** | Use a cheap model (GPT-3.5) to check if we should use cache. | **Higher Latency**: Still requires one LLM call before the answer. |
 | **Client-Side Cache** | Cache locally in the user's browser. | **Siloed**: Doesn't benefit from other users' queries; no shared "company knowledge" speedup. |
 
-## 4. Goals & Requirements
+## 4. Industry Context & Best Practices
+How others solve this:
+- **GPTCache (Zilliz)**: The most popular open-source library for this. It uses a separate vector store (like Milvus or FAISS) just for the cache to enable lightning-fast similarity lookups.
+- **LangChain/LlamaIndex**: Both frameworks offer built-in `RedisSemanticCache` modules that standardize how embeddings are stored and compared.
+- **Best Practice: "The 0.95 Rule"**: Industry leaders typically set a very high similarity threshold (0.95+) for direct cache returns. If the similarity is between 0.85 and 0.95, the system might use the cache as a "hint" but still run a cheap LLM check.
+- **Best Practice: Explicit Invalidation**: Unlike web caching (Time-to-Live), RAG caching is "Event-Driven." The cache MUST be purged immediately when the source Knowledge Base changes.
+
+## 5. Goals & Requirements
 - **[MUST]** Integrate Redis as the semantic storage layer.
 - **[MUST]** Implement a `SemanticCacheService` with `get` and `set` methods.
 - **[MUST]** Define a configurable similarity threshold.
