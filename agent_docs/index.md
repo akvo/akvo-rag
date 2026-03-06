@@ -17,6 +17,7 @@ This index serves as the master map for all BMAD-generated artifacts.
 ## Chronological Records
 - [Stories](stories/)
   - [STORY-001-STORY-002](stories/STORY-001-STORY-002.md)
+  - [STORY-096-Conversational-Recall](stories/STORY-096-conversational-recall.md)
 - [Sprint Plan](sprint-plan.md)
 - [ADRs](adrs/)
   - [ADR-001: History and Workflow Robustness](adrs/ADR-001-history-and-workflow-robustness.md)

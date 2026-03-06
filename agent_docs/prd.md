@@ -29,10 +29,12 @@
 5. User monitors progress via a status bar or dashboard.
 
 ### 3.2 High-Performance Autonomous Querying (ASQ)
-1. User asks a broad question: "How do we handle vacation requests?"
-2. **System Fast-Path (Cache Hit)**: The semantic router detects a similar past question and streams the cached answer instantly (0 LLM tokens used).
-3. **System Slow-Path (Cache Miss)**: System analyzes intent to identify KBs, retrieves broad context, re-ranks it to just the most critical sentences to save tokens, and streams the LLM response.
-4. User receives the answer with citations with an initial response time under 1 second.
+1. User asks a question.
+2. **Intent Classification**: System determines if the query is a "Knowledge Query" (needs RAG), "Small Talk", or a "Memory Query" (needs chat history).
+3. **Memory/Small Talk Path**: For non-knowledge queries, the system skips vector retrieval and uses internal logic/history to respond instantly.
+4. **Knowledge Path (Cache Hit)**: Semantic router detects past similarity and streams cached answer.
+5. **Knowledge Path (Cache Miss)**: System scopes KBs, retrieves chunks, re-ranks, and generates response.
+6. User receives answer with citations; TTFT < 1s.
 
 ## 4. Feature Requirements
 
@@ -47,6 +49,7 @@
 - **[MUST]** **Strict Cache Invalidation**: The system must automatically purge all associated semantic cache entries whenever a Knowledge Base is modified (documents added or removed) to prevent serving stale answers.
 - **[MUST]** Source citations (showing which part of which doc was used).
 - **[MUST]** Context Re-ranking pipeline to filter raw vector search results to only the top, most relevant chunks before sending to the LLM (minimizes prompt size).
+- **[MUST]** Conversational Recall: The system must identify queries about the chat history (e.g., "do you remember?") and prioritize memory over vector retrieval for these cases.
 - **[SHOULD]** History management (saving and naming conversations).
 
 ### 4.3 System Administration
