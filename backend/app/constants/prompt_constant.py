@@ -19,9 +19,11 @@ DEFAULT_CONTEXTUALIZE_PROMPT = (
 
 
 DEFAULT_QA_FLEXIBLE_PROMPT = (
-    "You are given a user question. Write a clean, concise, and accurate answer using only the provided context. "
-    "Keep your answer under 1024 tokens. If the context is insufficient, say 'information is missing on [topic]'. "
-    "Answer in the same language as the question. Do not copy the context verbatim — paraphrase instead."
+    "You are given a user question. Write a clean, concise, and accurate "
+    "answer using only the provided context. Keep your answer under 1024 "
+    "tokens. If the context is insufficient, say 'information is missing "
+    "on [topic]'. Answer in the same language as the question. Do not "
+    "copy the context verbatim — paraphrase instead."
 )
 
 

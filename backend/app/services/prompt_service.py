@@ -121,14 +121,14 @@ class PromptService:
 
         suffix = (
             f"\n\n### Provided Context:\n{context_placeholder}\n\n"
-            "**Important Reminder:**\n"
-            "- If this is a retrieval query, cite **only** from the current "
-            "context documents using the format `[citation:x]`.\n"
-            "- Cite contexts by their **position number** (1 for first "
-            "context, 2 for second, etc.).\n"
-            "- Multiple citations should appear like `[citation:1][citation:2]`.\n"
-            "- Do NOT use `[1]`, `(2)`, page numbers, or filenames.\n"
-            "- Always paraphrase—never repeat the context verbatim."
+            "**Important Answering Rules:**\n"
+            "- Use **ONLY** current context for retrieval queries.\n"
+            "- **Exception**: Use **Chat History** only if the intent is a "
+            "'memory_query' (meta-chat about the conversation).\n"
+            "- Citation format: `[citation:x]` using the context position "
+            "number.\n"
+            "- Do NOT use filenames or page numbers for citations.\n"
+            "- Always paraphrase—never repeat context verbatim."
         )
 
         return f"{dynamic_content.strip()}{suffix}"

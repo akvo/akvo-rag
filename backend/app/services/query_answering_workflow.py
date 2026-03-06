@@ -158,12 +158,12 @@ async def classify_intent_node(state: GraphState) -> GraphState:
 
         Classify the user's latest message into ONE of these intents:
         - \"small_talk\": greetings, casual or social conversation, polite
-          chit-chat (e.g., \"hi\", \"how are you\", \"good morning\", \"thanks\").
+          chit-chat (e.g., \"hi\", \"how are you\", \"thanks\").
         - \"weather_query\": questions or comments about weather or climate
           (e.g., \"is it raining\", \"how hot is it\", \"what's the forecast\").
-        - \"memory_query\": questions about the current conversation, previous
-          messages, or what the AI remembers (e.g., \"do you remember?\",
-          \"what did we talk about?\", \"summarize our last response\").
+        - \"memory_query\": questions about the current conversation,
+          previous messages, or what the AI remembers (e.g., \"do you
+          remember?\", \"what did we talk about?\").
         - "knowledge_query": factual or instructional questions that require a
           knowledge base or reasoning (e.g., "how to plant corn",
           "what is fertilizer A", "explain soil acidity").
@@ -258,6 +258,17 @@ async def contextualize_node(state: GraphState) -> GraphState:
 
         contextual_query = result.content.strip()
         logger.info(f"Contextualized query: {contextual_query}")
+
+        # If it's a memory query, use a more permissive prompt for generation
+        intent = state.get("intent")
+        if intent == "memory_query":
+            state["qa_prompt_str"] = (
+                "You are a helpful assistant. Use the provided Chat History "
+                "to answer the user's question about your conversation. "
+                "Be friendly, concise, and helpful.\n\n"
+                "Context: {context}"
+            )
+
         return {**state, "contextual_query": contextual_query}
 
     except Exception as e:
