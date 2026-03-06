@@ -42,6 +42,7 @@ graph TD
     - `chat`: Direct query coordination and history.
     - `prompt`: Dynamic Prompt Service for LLM instructions.
     - `websocket`: Real-time communication for streaming and status updates.
+- **Intent Classification Node**: Pre-processes queries to distinguish between `knowledge_query`, `small_talk`, and `memory_query`.
 
 ### 3.2 Celery Worker & RAG Optimization
 - **`upload_task`**: Handles file parsing, chunking, and sending embeddings to the MCP server.
@@ -75,7 +76,8 @@ graph TD
 5. **API**: Combines refined context + question + prompt (from Prompt Service).
 6. **API**: Sends to **LLM Provider**.
 7. **API**: Streams response back to **Frontend** via Server-Sent Events (SSE) for instant Time-to-First-Token (TTFT).
-8. **API**: Saves the semantic result asynchronously to Redis for future queries.
+8. **Memory Branch**: If the query is a `memory_query` (recall), the system bypasses document retrieval and generates a response based exclusively on Chat History.
+9. **API**: Saves the semantic result asynchronously to Redis for future queries.
 
 ## 5. Security Architecture
 - **JWT**: All protected endpoints require a valid Bearer token.

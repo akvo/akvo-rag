@@ -5,7 +5,15 @@ Welcome to the Akvo RAG User Guide. This document provides instructions on how t
 ## 1. Getting Started
 (Brief overview of logging in and starting a chat)
 
-## 2. Knowledge Base Management
+### 1.1 Conversational Context & Memory
+The system automatically remembers the context of your conversation.
+- **Follow-ups**: You can ask follow-up questions like "Explain that more simply" or "Can you summarize the result?" without repeating the original topic.
+- **Memory Queries**: You can ask the AI about the conversation itself (e.g., "What did we just talk about?" or "Do you remember the first topic?"), and it will respond based on the chat history.
+
+> [!TIP]
+> Use stylistic follow-ups to get information in the exact depth or format you need.
+
+### 1.2 Knowledge Base Selection
 (How to upload documents and manage KBs)
 
 ## 3. Advanced Features
