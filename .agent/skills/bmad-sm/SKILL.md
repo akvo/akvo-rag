@@ -53,8 +53,40 @@ Generate complete user stories from PRD + Architecture:
 **Output**: `agent_docs/stories/`
 
 ### 2. Sprint Planning
-...
-[Existing capabilities 2-5 remain largely the same, but I will ensure the interaction protocol is updated]
+
+Structure work into sprints:
+1. Review backlog of stories
+2. Estimate story points (relative sizing)
+3. Assess team velocity and capacity
+4. Assign stories to sprint based on priority and dependencies
+5. Identify risks and blockers
+
+### 3. Backlog Grooming
+
+Refine the backlog:
+- Break epics into implementable stories
+- Ensure all stories have acceptance criteria
+- Remove duplicates and resolve conflicts
+- Re-prioritize based on new information
+- Flag stories needing more research
+
+### 4. Epic Decomposition
+
+Break large features into manageable stories:
+1. Identify the epic from PRD/requirements
+2. Map the user journey within the epic
+3. Split into vertical slices (each deliverable independently)
+4. Ensure each story has clear start and end boundaries
+5. Order stories by dependency and value
+
+### 5. Story Validation
+
+Check stories for readiness:
+- INVEST criteria (Independent, Negotiable, Valuable, Estimable, Small, Testable)
+- All acceptance criteria are specific and measurable
+- Technical dependencies identified
+- No implicit requirements — everything explicit
+- Story fits within a single sprint
 
 ## Interaction Protocol
 

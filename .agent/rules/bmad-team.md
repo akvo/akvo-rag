@@ -59,3 +59,4 @@ Use skill invocation: "Use the bmad-pm skill to create a product brief" or run t
 - Developer @bmad-dev/SKILL.md
 - Test Architect @bmad-tester/SKILL.md
 - Tech Writer @bmad-writer/SKILL.md
+- Add Stack @add-stack/SKILL.md

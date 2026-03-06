@@ -39,7 +39,30 @@ Build a comprehensive PRD through stakeholder elicitation:
 
 **Output**: `agent_docs/prd.md`
 
-### 3. Competitive Analysis
+### 3. Create Feature Document
+
+For task-specific or feature-level requirements, create a Feature Document:
+
+```markdown
+# Feature: [Issue ID] - [Slug]
+
+## Overview
+[Brief description of the feature and its purpose]
+
+## User Stories Mapping
+[Reference stories in agent_docs/stories/]
+
+## Requirements
+- **Functional**: [Specific behavior]
+- **Non-Functional**: [Performance, Security, etc.]
+
+## Constraints
+[Specific technical or business constraints]
+```
+
+**Output**: `agent_docs/features/[issue-id]-[slug].md`
+
+### 4. Competitive Analysis
 
 Research and analyze competitors:
 - Identify 3-5 direct and indirect competitors
