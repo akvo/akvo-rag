@@ -118,36 +118,46 @@ async def stream_mcp_response(
             return
 
         # =============== normal MCP process ============================
-        # 6) Run MCP nodes up to post-processing to
-        # get `state["context"]` and `state["contextual_query"]`
+        # 6) Contextualize query
         state = await contextualize_node(state)
-        state = await scoping_node(state)
-        state = await run_mcp_tool_node(state)
 
-        # 7) Check if MCP tool failed - use error handler
-        if state.get("error"):
-            logger.warning(
-                "[stream_mcp_response] MCP tool failed, using error handler. "
-                f"Error: {state['error']}"
+        # 7) Route based on intent
+        if intent != "memory_query":
+            # Knowledge queries need scoping and retrieval
+            state = await scoping_node(state)
+            state = await run_mcp_tool_node(state)
+
+            # Check if MCP tool failed - use error handler
+            if state.get("error"):
+                logger.warning(
+                    "[stream_mcp_response] MCP tool failed, using error "
+                    f"handler. Error: {state['error']}"
+                )
+                state = await error_handler_node(state)
+                reply = state.get(
+                    "answer",
+                    "I'm having trouble with that right now. "
+                    "Please try again in a moment.",
+                )
+
+                bot_message.content = reply
+                db.commit()
+
+                # Stream the error handler's response
+                escaped = reply.replace('"', '\\"').replace("\n", "\\n")
+                yield f'0:"{escaped}"\n'
+                yield 'd:{"finishReason":"stop"}\n'
+                return
+
+            # Continue with normal flow if no error
+            state = await post_processing_node(state)
+        else:
+            # Memory queries skip retrieval and go straight to generation
+            logger.info(
+                "[stream_mcp_response] Memory query detected, skipping "
+                "retrieval."
             )
-            state = await error_handler_node(state)
-            reply = state.get(
-                "answer",
-                "I'm having trouble with that right now. "
-                "Please try again in a moment.",
-            )
-
-            bot_message.content = reply
-            db.commit()
-
-            # Stream the error handler's response
-            escaped = reply.replace('"', '\\"').replace("\n", "\\n")
-            yield f'0:"{escaped}"\n'
-            yield 'd:{"finishReason":"stop"}\n'
-            return
-
-        # Continue with normal flow if no error
-        state = await post_processing_node(state)
+            state["context"] = []
 
         # 8) If context exists, stream it first (base64 + separator)
         context_prefix = ""

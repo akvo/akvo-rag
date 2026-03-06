@@ -41,7 +41,7 @@ window.config_kefaas = {
 
 // LOCAL
 window.config_local = {
-  title: "Test Integration with MCP server",
-  kb_id: 8,
+  title: "Test Local Living Income",
+  kb_id: 116,
   wsURL: "ws://localhost:81/ws/chat",
 };

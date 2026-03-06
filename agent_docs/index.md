@@ -20,5 +20,7 @@ This index serves as the master map for all BMAD-generated artifacts.
 - [Sprint Plan](sprint-plan.md)
 - [ADRs](adrs/)
   - [ADR-001: History and Workflow Robustness](adrs/ADR-001-history-and-workflow-robustness.md)
+  - [ADR-002: Prompt Refinement for Stylistic Follow-ups](adrs/ADR-002-prompt-refinement-stylistic-followups.md)
+  - [ADR-003: Context-Only Branching Logic for Memory Queries](adrs/ADR-003-memory-query-intent.md)
 - [Research Findings](research-findings/)
   - [V1: Initial Discoveries](research-findings/research-findings-v1.md)

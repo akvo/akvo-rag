@@ -109,7 +109,10 @@ def ensure_documents(context_data):
                 docs.append(
                     Document(
                         page_content=text,
-                        metadata={"source": "mcp_rest_result", "index": idx},
+                        metadata={
+                            "source": "mcp_rest_result",
+                            "index": idx,
+                        },
                     )
                 )
             except Exception as e:
@@ -154,10 +157,13 @@ async def classify_intent_node(state: GraphState) -> GraphState:
         You are a classification model for a conversational AI assistant.
 
         Classify the user's latest message into ONE of these intents:
-        - "small_talk": greetings, casual or social conversation, polite chit-chat
-          (e.g., "hi", "how are you", "good morning", "thanks").
-        - "weather_query": questions or comments about weather or climate
-          (e.g., "is it raining", "how hot is it", "what's the forecast").
+        - \"small_talk\": greetings, casual or social conversation, polite
+          chit-chat (e.g., \"hi\", \"how are you\", \"good morning\", \"thanks\").
+        - \"weather_query\": questions or comments about weather or climate
+          (e.g., \"is it raining\", \"how hot is it\", \"what's the forecast\").
+        - \"memory_query\": questions about the current conversation, previous
+          messages, or what the AI remembers (e.g., \"do you remember?\",
+          \"what did we talk about?\", \"summarize our last response\").
         - "knowledge_query": factual or instructional questions that require a
           knowledge base or reasoning (e.g., "how to plant corn",
           "what is fertilizer A", "explain soil acidity").
@@ -572,11 +578,24 @@ workflow.add_conditional_edges(
     {
         "small_talk": "small_talk",
         "weather_query": "contextualize",
+        "memory_query": "contextualize",
         "knowledge_query": "contextualize",
     },
 )
 
-workflow.add_edge("contextualize", "scope")
+
+def route_after_contextualize(state: GraphState) -> str:
+    """Route to scope if retrieval is needed, otherwise to generate."""
+    if state.get("intent") == "memory_query":
+        return "memory"
+    return "retrieval"
+
+
+workflow.add_conditional_edges(
+    "contextualize",
+    route_after_contextualize,
+    {"memory": "generate", "retrieval": "scope"},
+)
 workflow.add_edge("scope", "run_mcp")
 
 # Add conditional routing after run_mcp to handle errors

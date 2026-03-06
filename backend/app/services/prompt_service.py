@@ -45,25 +45,36 @@ class PromptService:
             )
         except ValueError:
             logger.error(
-                "Warning: contextualize_q_system_prompt not found in DB, using fallback."
+                "Warning: contextualize_q_system_prompt not found in DB, "
+                "using fallback."
             )
             dynamic_content = DEFAULT_CONTEXTUALIZE_PROMPT
 
         static_context_rule = (
             "---\n"
             "**Static Rule for Context-Aware Inputs:**\n"
-            "If the user refers to previous conversation context — for example, phrases like:\n"
+            "If the user refers to previous conversation context or asks for "
+            "a stylistic change — for example:\n"
             '- "What did we talk about?"\n'
-            '- "Can you remind me what I said?"\n'
+            '- "Can you explain in easy way?"\n'
             '- "Summarize our chat"\n'
-            '- "What was your last response?"\n\n'
+            '- "Make it shorter"\n\n'
             "Then you must:\n"
-            "- Carefully review the chat history to extract the relevant information.\n"
-            "- Integrate that information into the reformulated question.\n"
-            "- Ensure the rewritten question captures all specific references or intent implied by the user's original message.\n"
+            "- Carefully review the chat history to extract the relevant "
+            "subject or concept.\n"
+            "- Integrate that subject into the reformulated question.\n"
+            "- If the request is stylistic, preserve the subject and append "
+            "the intent in parentheses.\n"
+            "  Example: 'What is living income? (Instruction: explain "
+            "simply)'\n"
+            "- Ensure the rewritten question captures all specific references "
+            "or intent implied by the user's latest message.\n"
         )
 
-        closing_instruction = "Focus on maintaining the user’s intent while making the question precise and independently interpretable."
+        closing_instruction = (
+            "Focus on maintaining the user’s intent while making the "
+            "question precise and independently interpretable."
+        )
 
         return self.build_full_prompt(
             dynamic_content, static_context_rule, closing_instruction
@@ -85,9 +96,12 @@ class PromptService:
         suffix = (
             f"\n\nContext: {context_placeholder}\n\n"
             "Remember:\n"
-            "- Cite contexts by their position number (1 for first context, 2 for second, etc.).\n"
-            "- Use citation format: [citation:x] at the end of each sentence where applicable.\n"
-            "- If a sentence is supported by multiple contexts, use [citation:1][citation:2].\n"
+            "- Cite contexts by their position number (1 for first context, 2 "
+            "for second, etc.).\n"
+            "- Use citation format: [citation:x] at the end of each sentence "
+            "where applicable.\n"
+            "- If a sentence is supported by multiple contexts, use "
+            "[citation:1][citation:2].\n"
             "- Do not blindly repeat the context — paraphrase instead."
         )
         return f"{dynamic_content.strip()}{suffix}"
@@ -108,10 +122,10 @@ class PromptService:
         suffix = (
             f"\n\n### Provided Context:\n{context_placeholder}\n\n"
             "**Important Reminder:**\n"
-            "- Do NOT use external knowledge, assumptions, or previous chat history.\n"
-            "- Cite **only** from the current context documents.\n"
-            "- Citation format: `[citation:x]`, where `x` is the context number (1, 2, 3, etc.).\n"
-            "- Cite contexts by their **position number** (1 for first context, 2 for second, etc.).\n"
+            "- If this is a retrieval query, cite **only** from the current "
+            "context documents using the format `[citation:x]`.\n"
+            "- Cite contexts by their **position number** (1 for first "
+            "context, 2 for second, etc.).\n"
             "- Multiple citations should appear like `[citation:1][citation:2]`.\n"
             "- Do NOT use `[1]`, `(2)`, page numbers, or filenames.\n"
             "- Always paraphrase—never repeat the context verbatim."
