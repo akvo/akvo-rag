@@ -16,9 +16,9 @@
 ### Orchestrator & UI: akvo-rag
 | ID | Title | Points | Status |
 | :--- | :--- | :--- | :--- |
-| [STORY-009](file:///Users/galihpratama/Sites/akvo-rag/agent_docs/stories/STORY-009-unified-setup-automation.md) | Unified Setup Automation | 2 | TO DO |
+| - | No active stories | - | - |
 
-**Total Points**: 23
+**Total Points**: 21
 
 ## 🏗️ Architecture Alignment
 - Follows [ADR-004](file:///Users/galihpratama/Sites/akvo-rag/agent_docs/adrs/ADR-004-unified-search-parallel-hybrid.md) for Search logic.

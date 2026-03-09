@@ -27,6 +27,8 @@
 - [ ] Verify that document metadata is still correctly associated with the extracted text.
 
 ### Technical Notes
+- Documentation: [Docling Official Site](https://www.docling.ai/)
+- Library: `docling` (IBM Research)
 - Fallback: Keep `PyPDFLoader` as a secondary fallback if Docling fails on specific files.
 
 ### Definition of Done

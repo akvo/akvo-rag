@@ -23,7 +23,7 @@ This index serves as the master map for all BMAD-generated artifacts.
   - [STORY-006: FlashRank Reranking](stories/STORY-006-mcp-flashrank-reranking.md)
   - [STORY-007: Semantic Cache (DEFERRED)](stories/STORY-007-rag-semantic-cache.md)
   - [STORY-008: Status Streaming (DEFERRED)](stories/STORY-008-unified-status-streaming.md)
-  - [STORY-009: Setup Automation](stories/STORY-009-unified-setup-automation.md)
+  - [STORY-009: Setup Automation (DEFERRED)](stories/STORY-009-unified-setup-automation.md)
   - [STORY-010: Advanced Extraction (Docling)](stories/STORY-010-advanced-extraction.md)
   - [STORY-011: Semantic Chunking](stories/STORY-011-semantic-chunking.md)
   - [STORY-096-Conversational-Recall](stories/STORY-096-conversational-recall.md)

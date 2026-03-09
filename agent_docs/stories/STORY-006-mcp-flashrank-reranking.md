@@ -27,7 +27,10 @@
 - [ ] Return only the top-K reranked results to the RAG orchestrator.
 
 ### Technical Notes
-- Library: `flashrank` (CPU optimized, fast for local execution).
+- Core Library: [FlashRank GitHub](https://github.com/PrithivirajDamodaran/FlashRank)
+- LangChain Integration: [FlashrankRerank Docs](https://python.langchain.com/docs/integrations/retrievers/flashrank-reranker)
+- Performance: Lightweight re-ranking on CPU.
+ optimized, fast for local execution).
 - Benefit: Reduces "noise" in the LLM prompt.
 
 ### Definition of Done
