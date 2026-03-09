@@ -1,7 +1,8 @@
 # Feature Document: Context Re-ranking Service
 
 **Agent**: John (Product Manager)
-**Status**: Ideation / Draft
+**Status**: Planning / Unified with Caching
+**Implementation Plan**: [Unified Plan](file:///Users/galihpratama/.gemini/antigravity/brain/ea5f58f7-47ec-4d2f-a19d-d60b3264b252/implementation_plan.md)
 
 ## 1. Problem Statement
 Vector databases (like Chroma or Pinecone) use "Semantic Search" to find similar chunks, but they are not always precise. Often, the top-k results (e.g., top 10) contain "noise"—chunks that are mathematically similar but contextually irrelevant to the specific user question.
@@ -11,11 +12,11 @@ Currently, we send these raw chunks directly to the LLM. This leads to:
 - **Token Waste**: We pay for tokens that don't help answer the question.
 - **Context Window Pressure**: If we retrieve 20 chunks, we hit the LLM's context limit faster without necessarily improving the answer.
 
-## 2. Proposed Solution: Two-Stage Retrieval
-Implement a **Re-ranker** step between retrieval and generation.
-1. **Stage 1 (Retrieval)**: Ask the Vector DB for a broad set of candidates (e.g., top 25).
-2. **Stage 2 (Re-ranking)**: Pass 25 chunks + query to a high-precision `Cross-Encoder` model (e.g., BGE-Reranker or Cohere).
-3. **Filtering**: Only the top 5 re-ranked chunks are sent to the LLM for the final answer.
+## 2. Proposed Solution: The "Precise Path" (Engine-Side)
+Treat the **Vector KB MCP Server** as the primary Knowledge Engine. Use a Two-Stage Retrieval model:
+1.  **Stage 1 (Parallel Retrieval)**: Query all Knowledge Bases concurrently using `asyncio.gather`. Retrieve a broad set of candidates (e.g., top 50).
+2.  **Stage 2 (Server-Side Reranking)**: Pass 50 chunks + query to a high-precision `Cross-Encoder` model (e.g., FlashRank) directly on the MCP server.
+3.  **Optimization**: Only the top 5 (re-weighted) chunks are sent back to Akvo RAG, significantly reducing base64 payload size and client-side processing.
 
 ## 3. Analysis for Management
 
@@ -42,12 +43,18 @@ How others solve this:
 - **Cohere Rerank**: The gold standard API for this. It allows you to send a query and a list of documents and returns them sorted by relevance. It's used by major enterprises to fix "retrieval bloat."
 - **LlamaIndex/LangChain**: These frameworks implement "Node Postprocessors" that act as a filter after the initial vector search.
 - **BGE-Reranker**: A top-performing open-source model (from BAAI) that can be run locally. It’s a "Cross-Encoder," which means it looks at the query and document *together* to find deep semantic relationships that standard search misses.
+- **FlashRank**: An ultra-fast, lightweight reranking model suitable for CPU-bound environments, offering a good balance between latency and precision.
+- **rerankers library**: A unified Python library that provides a common interface for Cohere, BGE, FlashRank, and others, simplifying the swapping of backends.
 - **Best Practice: "Recall-Heavy Retrieval"**: Best practices suggest retrieving 50-100 documents initially (optimizing for high recall) and then using the Re-ranker to pick the top 5 (optimizing for high precision).
+- **Evaluation via RAGAS**: Using metrics like "Hit Rate" and "MRR" for the retriever, and "Faithfulness" and "Answer Relevance" for the generator to validate the impact of re-ranking.
 
 ## 5. Goals & Requirements
-- **[MUST]** Integrate a Re-ranking node in the `query_answering_workflow`.
-- **[MUST]** Support for both local (BGE/FlashRank) and remote (Cohere) re-rankers.
-- **[MUST]** Configurable "Top-K" for both initial retrieval and final re-ranked subset.
+- **[MUST]** Implement concurrent retrieval in `kb_query_service.py` to eliminate sequential bottlenecks.
+- **[MUST]** Integrate `FlashRank` (or similar) as a server-side tool in the MCP server.
+- **[MUST]** Update Akvo RAG's `run_mcp_tool_node` to handle the new re-ranked tool response.
+- **[MUST]** Configurable "Top-K" for both initial retrieval (e.g., k=50) and final re-ranked subset (e.g., k=5).
+- **[MUST]** **Resilience**: Implement BM25 (keyword) fallback in the MCP server for when vector search fails.
+- **[MUST]** Implement automated evaluation using RAGAS to validate retrieval precision.
 - **[SHOULD]** Measurement markers to track the accuracy boost (e.g., using RAGAS scores).
 
 ## 6. User Impact

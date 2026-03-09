@@ -1,7 +1,8 @@
 # Feature Document: Semantic Query Caching
 
 **Agent**: John (Product Manager)
-**Status**: Ideation / Draft
+**Status**: Planning / Unified with Re-ranking
+**Implementation Plan**: [Unified Plan](file:///Users/galihpratama/.gemini/antigravity/brain/ea5f58f7-47ec-4d2f-a19d-d60b3264b252/implementation_plan.md)
 
 ## 1. Problem Statement
 As Akvo RAG scales, common questions (e.g., "What is a Living Income?", "Show me the project timeline") are asked repeatedly by different users. Currently, every single query triggers:
@@ -11,8 +12,8 @@ As Akvo RAG scales, common questions (e.g., "What is a Living Income?", "Show me
 
 This results in unnecessary latency (Time-to-First-Token > 1s), redundant token costs, and increased load on our vector database. We lack a "fast path" for semantically similar queries.
 
-## 2. Proposed Solution: Semantic Cache
-Implement a Redis-based **Semantic Cache** that intercepts queries before they hit the LLM or Vector DB.
+## 2. Proposed Solution: The "Fast Path" (Orchestrator-Side)
+Implement a Redis-based **Semantic Cache** in the Akvo RAG backend that intercepts queries before they hit the LLM or Knowledge Engine (MCP).
 - **Mechanism**: Store the embedding of a successful query-answer pair in Redis.
 - **Threshold**: When a new query arrives, calculate its similarity to cached queries. If the similarity score is above a strict threshold (e.g., 0.95), return the cached answer instantly.
 
