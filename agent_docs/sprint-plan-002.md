@@ -10,12 +10,12 @@
 | :--- | :--- | :--- | :--- |
 | [STORY-005](file:///Users/galihpratama/Sites/akvo-rag/agent_docs/stories/STORY-005-mcp-parallel-retrieval.md) | MCP Parallel Retrieval | 5 | TO DO |
 | [STORY-006](file:///Users/galihpratama/Sites/akvo-rag/agent_docs/stories/STORY-006-mcp-flashrank-reranking.md) | MCP FlashRank Reranking | 3 | TO DO |
+| [STORY-010](file:///Users/galihpratama/Sites/akvo-rag/agent_docs/stories/STORY-010-advanced-extraction.md) | Advanced PDF Extraction (Docling) | 5 | TO DO |
+| [STORY-011](file:///Users/galihpratama/Sites/akvo-rag/agent_docs/stories/STORY-011-semantic-chunking.md) | Semantic Chunking Strategy | 8 | TO DO |
 
 ### Orchestrator & UI: akvo-rag
 | ID | Title | Points | Status |
 | :--- | :--- | :--- | :--- |
-| [STORY-007](file:///Users/galihpratama/Sites/akvo-rag/agent_docs/stories/STORY-007-rag-semantic-cache.md) | RAG Redis Semantic Cache | 8 | TO DO |
-| [STORY-008](file:///Users/galihpratama/Sites/akvo-rag/agent_docs/stories/STORY-008-unified-status-streaming.md) | Unified Status Streaming | 5 | TO DO |
 | [STORY-009](file:///Users/galihpratama/Sites/akvo-rag/agent_docs/stories/STORY-009-unified-setup-automation.md) | Unified Setup Automation | 2 | TO DO |
 
 **Total Points**: 23

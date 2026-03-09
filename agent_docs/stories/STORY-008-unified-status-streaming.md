@@ -1,6 +1,6 @@
 ## Story: Unified Status Streaming
 
-- **Status**: TO DO 📝
+- **Status**: DEFERRED ⏸️
 - **Sprint**: 2
 - **Developer**: Amelia 💻
 - **Repository**: `~/Sites/akvo-rag` (Root)
