@@ -21,6 +21,7 @@
 - [ ] Citations in the UI show the most relevant documents at the top.
 
 #### Technical Acceptance Criteria (TAC)
+- [ ] **TDD Method**: Write failing tests for reranking logic and integration before implementation.
 - [ ] Integrate `flashrank` library into the MCP server.
 - [ ] Add a `rerank` step in the search service that processes the top-N retrieved chunks.
 - [ ] Ensure the reranker handles the `project_id` context if applicable.

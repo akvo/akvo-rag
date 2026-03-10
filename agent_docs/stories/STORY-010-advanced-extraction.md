@@ -21,6 +21,7 @@
 - [ ] Document structure (headers, lists) is preserved in the retrieved context.
 
 #### Technical Acceptance Criteria (TAC)
+- [ ] **TDD Method**: Write failing tests for Docling extraction on complex PDFs before implementation.
 - [ ] Add `docling` and its dependencies to `main/requirements.txt`.
 - [ ] Refactor `main/app/services/document_processor.py` to use `Docling` specifically for `.pdf` files.
 - [ ] Ensure the extraction output is clean Markdown.

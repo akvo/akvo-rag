@@ -21,6 +21,7 @@
 - [ ] Retrieval relevance is higher (measured by hit-rate on benchmark queries).
 
 #### Technical Acceptance Criteria (TAC)
+- [ ] **TDD Method**: Write failing tests for semantic boundary generation before implementation.
 - [ ] Implement `SemanticChunker` in `main/app/services/document_processor.py`.
 - [ ] Configure the chunker to use the project's default embedding model for break-point calculation.
 - [ ] Add a configuration setting to toggle between "Recursive" and "Semantic" chunking.

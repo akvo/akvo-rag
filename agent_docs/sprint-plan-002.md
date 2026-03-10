@@ -25,6 +25,7 @@
 - Follows [ADR-005](file:///Users/galihpratama/Sites/akvo-rag/agent_docs/adrs/ADR-005-orchestrator-performance-caching-streaming.md) for Performance logic.
 
 ## 🧪 Quality Gates
-- 80%+ Unit Test coverage for new logic.
+- **Development Methodology**: All features must be developed using **Test-Driven Development (TDD)**. Write failing tests first.
+- **Coverage**: 90%+ Unit and Integration Test coverage required for all new and refactored logic.
 - Performance benchmark showing <500ms for parallel retrieval (excluding LLM).
 - No regression for Agriconnect mobile/playground clients.

@@ -22,6 +22,7 @@
 - [ ] Search results are combined correctly from all sources.
 
 #### Technical Acceptance Criteria (TAC)
+- [ ] **TDD Method**: Write failing tests for concurrent execution and timeouts *before* refactoring.
 - [ ] Refactor `query_vector_kbs` in the MCP server to use `asyncio.gather`.
 - [ ] Implement a global timeout for the parallel gathering to prevent single-KB hangs from blocking the whole request.
 - [ ] Merge results into a single list while preserving metadata.
