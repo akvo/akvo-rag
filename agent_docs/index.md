@@ -2,10 +2,14 @@
 
 This index serves as the master map for all BMAD-generated artifacts.
 
+## 📚 Documentation
+- [Architecture](architecture.md)
+- [Hybrid Foundation Executive Summary (Sprint 2)](hybrid-foundation-executive-summary.md)
+- [Scale & Resilience Executive Summary (Sprint 3)](sprint-3-executive-summary.md)
+
 ## Living Documents (Project Skeleton)
 - [Product Brief](product-brief.md)
 - [PRD](prd.md)
-- [Architecture](architecture.md)
 - [UX Design Specification](ux-design-specification.md)
 - [Test Strategy](test-strategy.md)
 - [User Guide](user-guide.md)
