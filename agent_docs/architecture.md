@@ -7,16 +7,20 @@ Akvo RAG is built on a decoupled, asynchronous architecture designed for scalabi
 graph TD
     User([User]) <--> Frontend[Frontend - Next.js]
     Frontend <--> Backend[Backend API - FastAPI]
-    Backend <--> Cache[(Redis Cache)]
-    Backend <--> Router{Semantic Router}
+    Backend <--> Cache[(Redis Semantic Cache)]
+    Backend <--> Prompt[Prompt Service]
     Backend <--> DB[(MySQL)]
-    Router -- Cache Miss/New Query --> Broker[Message Broker - RabbitMQ]
-    Broker -- Execute --> Worker[Celery Worker]
-    Worker <--> MCP[MCP Server - Vector KB]
-    MCP -- Candidate Contexts --> Reranker[Re-ranker Service]
-    Reranker -- Top-K Contexts --> LLM[LLM Providers - OpenAI/DeepSeek/Ollama]
-    Backend <--> MCP
-    MCP <--> VectorDB[(Vector Store)]
+
+    Backend -- Search Query --> MCP[MCP Server - Vector KB Engine]
+
+    subgraph "Knowledge Engine (Unified Search)"
+        MCP <--> Chroma[(Chroma Vector DB)]
+        MCP <--> SQLDocs[(Document SQL - BM25)]
+        MCP -- Rough Retrieval --> Reranker[FlashRank Reranker]
+    end
+
+    Reranker -- Top-K Contexts --> Backend
+    Backend -- Augmented Prompt --> LLM[LLM Providers - OpenAI/DeepSeek/Ollama]
 ```
 
 ## 2. Tech Stack Selection
@@ -53,10 +57,11 @@ graph TD
 - **Cache Invalidation Component**: Since `akvo-rag` has exclusive access to the MCP Server, it surgically purges cached semantic answers in Redis exactly at the moment it successfully calls an MCP endpoint to add or delete documents from a Knowledge Base.
 - **Re-ranking**: Post-retrieval filtering that sorts the top 20 VDB results down to the most relevant 3-5 results, severely cutting down on LLM token consumption while boosting accuracy.
 
-### 3.3 MCP Server (External Dependency)
-- Provides a unified interface for vector operations.
-- Manages the underlying vector database (e.g., Chroma, Qdrant).
-- Performs initial rough similarity search before re-ranking.
+### 3.3 MCP Server (Unified Knowledge Engine)
+- **Parallel Retrieval**: Executes concurrent searches across all assigned Knowledge Bases using `asyncio.gather`.
+- **Hybrid Search**: Implements a dual-stream retrieval (Vector similarity + BM25 keyword) for maximum resilience and precision.
+- **Server-Side Reranking**: Filters and re-scores candidates using `FlashRank` before returning them to the orchestrator, significantly reducing network payload and client-side processing.
+- **Health & Monitoring**: Provides specialized endpoints to verify the connection status of ChromaDB and MinIO.
 
 ## 4. Data Flow
 
@@ -69,15 +74,13 @@ graph TD
 6. **Worker**: Updates status in MySQL -> notifies Frontend via WebSocket/Polling.
 
 ### 4.2 Optimized RAG Query Flow (High Performance)
-1. **API**: Receives question.
-2. **API (Semantic Router)**: Checks **Redis Cache** for a semantic match. If hit -> Return instantly.
-3. **API**: If miss, calls **MCP Server** to retrieve broad context (`top_k=20`).
-4. **Worker/API**: Passes context to **Re-ranker** to filter down to strict, high-value chunk limits (`top_k=5`).
-5. **API**: Combines refined context + question + prompt (from Prompt Service).
-6. **API**: Sends to **LLM Provider**.
-7. **API**: Streams response back to **Frontend** via Server-Sent Events (SSE) for instant Time-to-First-Token (TTFT).
-8. **Memory Branch**: If the query is a `memory_query` (recall), the system bypasses document retrieval and generates a response based exclusively on Chat History.
-9. **API**: Saves the semantic result asynchronously to Redis for future queries.
+1. **API (Semantic Cache)**: Intercepts query; checks **Redis** for 0.95+ semantic match. If hit -> Return instantly (`~300ms`).
+2.  **API (Status Streaming)**: If miss, initiates SSE stream with progress markers (e.g., `event: searching`).
+3.  **API/MCP (Parallel Hybrid Search)**: Calls MCP Engine to retrieve candidates from multiple KBs simultaneously using both Vector and BM25 streams.
+4. **MCP (Reranking)**: Filters candidates down to the global `TOP_K` (from System Settings) using local `FlashRank`.
+5. **API**: Combines refined context + history + current settings.
+6. **API**: Streams LLM tokens back to Frontend.
+7. **API**: Saves the final result asynchronously to **Redis** for future high-confidence hits.
 
 ## 5. Security Architecture
 - **JWT**: All protected endpoints require a valid Bearer token.
