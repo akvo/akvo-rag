@@ -48,6 +48,9 @@ class EmailService:
             protocol = "https" if settings.WEBDOMAIN != "127.0.0.1.nip.io" else "http"
             reset_url = f"{protocol}://{settings.WEBDOMAIN}/reset-password?token={reset_token}"
 
+            print(f"[EmailService] Preparing to send password reset email to: {email}")
+            print(f"[EmailService] Reset URL: {reset_url}")
+
             env = EmailService._get_template_env()
             template = env.get_template('reset_password.html')
 
@@ -73,10 +76,14 @@ class EmailService:
                 subtype="html"
             )
 
+            print(f"[EmailService] Sending email via SMTP: {settings.SMTP_HOST}:{settings.SMTP_PORT}")
             await fm.send_message(message)
+            print(f"[EmailService] ✓ Email sent successfully to {email}")
             return True
         except Exception as e:
-            print(f"Email sending failed: {e}")
+            print(f"[EmailService] ✗ Email sending failed: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     @staticmethod

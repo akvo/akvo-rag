@@ -6,6 +6,8 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useUser } from "@/contexts/userContext";
 
+export const dynamic = 'force-dynamic';
+
 interface LoginResponse {
   access_token: string;
   token_type: string;
@@ -17,7 +19,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { isNewUser, setIsNewUser } = useUser();
-  const [showResetSuccess, setShowResetSuccess] = useState(searchParams.get("reset") === "success");
+  const [showResetSuccess, setShowResetSuccess] = useState(searchParams?.get("reset") === "success");
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

@@ -9,7 +9,7 @@ const Breadcrumb = () => {
   const pathname = usePathname();
 
   const generateBreadcrumbs = () => {
-    const paths = pathname.split("/").filter(Boolean);
+    const paths = pathname?.split("/").filter(Boolean) || [];
     const breadcrumbs = paths.map((path, index) => {
       const href = "/" + paths.slice(0, index + 1).join("/");
       const label =
