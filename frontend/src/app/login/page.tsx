@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useUser } from "@/contexts/userContext";
@@ -13,9 +13,11 @@ interface LoginResponse {
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { isNewUser, setIsNewUser } = useUser();
+  const [showResetSuccess, setShowResetSuccess] = useState(searchParams.get("reset") === "success");
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -67,6 +69,18 @@ export default function LoginPage() {
               Your account has been created successfully. Please contact admin to activate it.
             </div>
           )}
+          {showResetSuccess && (
+            <div className="p-3 rounded-md bg-green-50 text-green-700 text-sm relative">
+              <button
+                type="button"
+                className="absolute top-2 right-2 text-green-700 hover:text-green-600"
+                onClick={() => setShowResetSuccess(false)}
+              >
+                &times;
+              </button>
+              Password reset successful! You can now login with your new password.
+            </div>
+          )}
           <div className="text-center">
             <h1 className="text-3xl font-bold text-gray-900">
               Welcome To RAG Web UI
@@ -113,6 +127,15 @@ export default function LoginPage() {
                   placeholder="Enter your password"
                 />
               </div>
+            </div>
+
+            <div className="flex items-center justify-end">
+              <Link
+                href="/forgot-password"
+                className="text-sm font-medium text-gray-600 hover:text-gray-500"
+              >
+                Forgot your password?
+              </Link>
             </div>
 
             {error && (

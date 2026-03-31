@@ -80,6 +80,21 @@ class Settings(BaseSettings):
         "WEATHER_MCP", "http://localhost:8200/mcp/"
     )
 
+    # Email settings (SMTP)
+    SMTP_HOST: str = os.getenv("SMTP_HOST", "akvomail.org")
+    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "465"))
+    SMTP_USER: str = os.getenv("SMTP_USER", "")
+    SMTP_PASS: str = os.getenv("SMTP_PASS", "")
+    SMTP_USE_TLS: bool = os.getenv("SMTP_USE_TLS", "True").lower() == "true"
+
+    # Web domain for email links
+    WEBDOMAIN: str = os.getenv("WEBDOMAIN", "127.0.0.1.nip.io")
+
+    # Password reset token expiration (in minutes)
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = int(
+        os.getenv("PASSWORD_RESET_TOKEN_EXPIRE_MINUTES", "60")
+    )
+
     class Config:
         env_file = ".env"
 
