@@ -39,11 +39,11 @@ ENV NEXT_TELEMETRY_DISABLED 1
 # Set correct permissions for nextjs user and don't run as root
 RUN addgroup nodejs
 RUN adduser -SDH nextjs
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
+RUN mkdir -p /app_standalone/.next && chown -R nextjs:nodejs /app_standalone
 
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
+WORKDIR /app_standalone
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public

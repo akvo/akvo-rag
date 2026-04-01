@@ -83,3 +83,5 @@ celerybeat.pid
 worker.log
 beat.log
 celery.log
+
+docs/research_logs
