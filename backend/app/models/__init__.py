@@ -1,3 +1,4 @@
+from .password_reset_token import PasswordResetToken
 from .user import User
 from .chat import Chat, Message
 from .api_key import APIKey
@@ -10,4 +11,5 @@ __all__ = [
     "APIKey",
     "App",
     "AppStatus",
+    "PasswordResetToken",
 ]

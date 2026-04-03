@@ -18,12 +18,12 @@ import DashboardLayout from "@/components/layout/dashboard-layout";
 
 export default function KnowledgeBasePage() {
   const params = useParams();
-  const knowledgeBaseId = parseInt(params.id as string);
+  const knowledgeBaseId = parseInt(params?.id as string);
   const [refreshKey, setRefreshKey] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const searchParams = useSearchParams();
-  const kbOwner = parseInt(searchParams.get("kb_owner") || "1");
+  const kbOwner = parseInt(searchParams?.get("kb_owner") || "1");
 
   const handleUploadComplete = useCallback(() => {
     setRefreshKey((prev) => prev + 1);
