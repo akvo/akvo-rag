@@ -1,6 +1,6 @@
 # Feature Document: Semantic Query Caching
 
-**Status**: Planning / Unified with Re-ranking
+**Status**: Ideation
 
 ## 1. Problem Statement
 As Akvo RAG scales, common questions (e.g., "What is a Living Income?", "Show me the project timeline") are asked repeatedly by different users. Currently, every single query triggers:
