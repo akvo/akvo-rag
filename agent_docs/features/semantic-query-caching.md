@@ -1,8 +1,6 @@
 # Feature Document: Semantic Query Caching
 
-**Agent**: John (Product Manager)
 **Status**: Planning / Unified with Re-ranking
-**Implementation Plan**: [Unified Plan](file:///Users/galihpratama/.gemini/antigravity/brain/ea5f58f7-47ec-4d2f-a19d-d60b3264b252/implementation_plan.md)
 
 ## 1. Problem Statement
 As Akvo RAG scales, common questions (e.g., "What is a Living Income?", "Show me the project timeline") are asked repeatedly by different users. Currently, every single query triggers:

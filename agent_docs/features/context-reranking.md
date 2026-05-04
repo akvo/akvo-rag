@@ -1,8 +1,6 @@
 # Feature Document: Context Re-ranking Service
 
-**Agent**: John (Product Manager)
 **Status**: Planning / Unified with Caching
-**Implementation Plan**: [Unified Plan](file:///Users/galihpratama/.gemini/antigravity/brain/ea5f58f7-47ec-4d2f-a19d-d60b3264b252/implementation_plan.md)
 
 ## 1. Problem Statement
 Vector databases (like Chroma or Pinecone) use "Semantic Search" to find similar chunks, but they are not always precise. Often, the top-k results (e.g., top 10) contain "noise"—chunks that are mathematically similar but contextually irrelevant to the specific user question.
