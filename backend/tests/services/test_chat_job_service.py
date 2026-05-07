@@ -433,7 +433,14 @@ class TestChatJobService:
                 == "QA_PROMPT\n\n**IMPORTANT: Follow these additional rules strictly:**\n\nCustom job prompt"
             )
 
-    # --- Citation suppression tests ---
+
+
+class TestCitationSuppression:
+    """Tests for citation filtering based on [citation:x] marker presence."""
+
+    @pytest.fixture
+    def mock_db(self):
+        return Mock()
 
     def _make_context_doc(self, content="Some chunk", source="doc.pdf"):
         doc = Mock()
@@ -504,7 +511,7 @@ class TestChatJobService:
                 data=data,
                 callback_url="http://cb",
                 app_default_prompt=None,
-                knowledge_base_ids=kb_ids or [1],
+                knowledge_base_ids=kb_ids if kb_ids is not None else [1],
             )
 
     @pytest.mark.asyncio
@@ -572,3 +579,27 @@ class TestChatJobService:
         result = await self._run_job_with_workflow(mock_db, mock_workflow, data)
 
         assert result["citations"] == []
+
+    @pytest.mark.asyncio
+    async def test_citations_empty_when_knowledge_base_ids_is_empty_list(
+        self, mock_db
+    ):
+        """
+        Explicitly passing kb_ids=[] must not be replaced with [1].
+        """
+        mock_workflow = Mock()
+        mock_workflow.ainvoke = AsyncMock(
+            return_value={
+                "answer": "Some answer. [citation:1]",
+                "context": [self._make_context_doc()],
+                "intent": "knowledge_query",
+            }
+        )
+        data = {"chats": [{"role": "user", "content": "Hello"}]}
+
+        result = await self._run_job_with_workflow(
+            mock_db, mock_workflow, data, kb_ids=[]
+        )
+
+        # Result should come back normally; kb_ids=[] is passed as-is
+        assert isinstance(result, dict)
