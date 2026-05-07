@@ -44,8 +44,7 @@ class PromptService:
             )
         except ValueError:
             logger.warning(
-                "Warning: contextualize_q_system_prompt not found in DB, "
-                "using fallback."
+                "contextualize_q_system_prompt not found in DB, using fallback."
             )
             dynamic_content = DEFAULT_CONTEXTUALIZE_PROMPT
 
@@ -87,7 +86,7 @@ class PromptService:
             )
         except ValueError:
             logger.warning(
-                "Warning: qa_flexible_prompt not found in DB, using fallback."
+                "qa_flexible_prompt not found in DB, using fallback."
             )
             dynamic_content = DEFAULT_QA_FLEXIBLE_PROMPT
 
@@ -112,7 +111,7 @@ class PromptService:
             )
         except ValueError:
             logger.warning(
-                "Warning: qa_strict_prompt not found in DB, using fallback."
+                "qa_strict_prompt not found in DB, using fallback."
             )
             dynamic_content = DEFAULT_QA_STRICT_PROMPT
 
