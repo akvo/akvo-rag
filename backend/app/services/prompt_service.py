@@ -80,6 +80,7 @@ class PromptService:
         )
 
     def get_full_qa_flexible_prompt(self) -> str:
+        # {context} is fixed: LangChain resolves it at inference time.
         try:
             dynamic_content = self.get_active_prompt_content(
                 prompt_name=PromptNameEnum.qa_flexible_prompt
@@ -104,6 +105,7 @@ class PromptService:
         return f"{dynamic_content.strip()}{suffix}"
 
     def get_full_qa_strict_prompt(self) -> str:
+        # {context} is fixed: LangChain resolves it at inference time.
         try:
             dynamic_content = self.get_active_prompt_content(
                 prompt_name=PromptNameEnum.qa_strict_prompt
