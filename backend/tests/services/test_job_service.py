@@ -44,6 +44,10 @@ class TestJobService:
         assert job.callback_params == '{"param1": "value1"}'
         assert job.trace_id == "trace_12345"
 
+        mock_db.add.assert_called_once_with(job)
+        mock_db.commit.assert_called_once()
+        mock_db.refresh.assert_called_once_with(job)
+
     def test_get_job(self, mock_db):
         """Test retrieving a job by ID."""
         # Setup mock return value
@@ -116,3 +120,19 @@ class TestJobService:
 
         # Verify job status was updated
         assert job.celery_task_id == "celery_12345"
+
+    def test_get_job_not_found(self, mock_db):
+        """Test retrieving a non-existent job returns None."""
+        mock_db.query().filter().first.return_value = None
+
+        job = JobService.get_job(mock_db, "nonexistent_id")
+
+        assert job is None
+
+    def test_update_status_when_job_not_found(self, mock_db):
+        """Test that update methods return None when job does not exist."""
+        mock_db.query().filter().first.return_value = None
+
+        result = JobService.update_status_to_running(mock_db, "nonexistent_id")
+
+        assert result is None
