@@ -166,6 +166,29 @@ class TestChatJobService:
                 chat_job_service.JobService, "update_status_to_failed"
             ) as mock_fail,
             patch.object(
+                chat_job_service.PromptService, "__init__", return_value=None
+            ),
+            patch.object(
+                chat_job_service.PromptService,
+                "get_full_contextualize_prompt",
+                return_value="ctx",
+            ),
+            patch.object(
+                chat_job_service.PromptService,
+                "get_full_qa_strict_prompt",
+                return_value="qa",
+            ),
+            patch.object(
+                chat_job_service.SystemSettingsService,
+                "__init__",
+                return_value=None,
+            ),
+            patch.object(
+                chat_job_service.SystemSettingsService,
+                "get_top_k",
+                return_value=5,
+            ),
+            patch.object(
                 chat_job_service, "query_answering_workflow"
             ) as mock_workflow,
             patch(
@@ -220,8 +243,8 @@ class TestChatJobService:
                 knowledge_base_ids=[],
             )
 
-            # ✅ Should be called using callback_url from apps table
-            mock_callback.assert_awaited()
+            # ✅ Callback is always sent even when callback_url is None
+            mock_callback.assert_awaited_once()
 
     # --- Prompt logic tests ---
 
@@ -407,5 +430,145 @@ class TestChatJobService:
             state_arg = mock_workflow.ainvoke.call_args[0][0]
             assert (
                 state_arg["qa_prompt_str"]
-                == "QA_PROMPT\n\n**IMPORTANT: Follow these additional rules strictly:**\n\nCustom job prompt\n### Provided Context:\n{context}"  # noqa
+                == "QA_PROMPT\n\n**IMPORTANT: Follow these additional rules strictly:**\n\nCustom job prompt"
             )
+
+    # --- Citation suppression tests ---
+
+    def _make_context_doc(self, content="Some chunk", source="doc.pdf"):
+        doc = Mock()
+        doc.page_content = content
+        doc.metadata = {"source": source, "page_label": "1"}
+        return doc
+
+    async def _run_job_with_workflow(self, mock_db, mock_workflow, data, kb_ids=None):
+        """Execute a chat job with all external dependencies patched out."""
+        from contextlib import ExitStack
+
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch.object(
+                    chat_job_service.JobService,
+                    "get_job",
+                    return_value=Mock(id="j", callback_params={}),
+                )
+            )
+            stack.enter_context(
+                patch.object(chat_job_service.JobService, "update_status_to_running")
+            )
+            stack.enter_context(
+                patch.object(chat_job_service.JobService, "update_status_to_completed")
+            )
+            stack.enter_context(
+                patch.object(chat_job_service.JobService, "update_status_to_failed")
+            )
+            stack.enter_context(
+                patch.object(chat_job_service.PromptService, "__init__", return_value=None)
+            )
+            stack.enter_context(
+                patch.object(
+                    chat_job_service.PromptService,
+                    "get_full_contextualize_prompt",
+                    return_value="ctx",
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    chat_job_service.PromptService,
+                    "get_full_qa_strict_prompt",
+                    return_value="qa",
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    chat_job_service.SystemSettingsService, "__init__", return_value=None
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    chat_job_service.SystemSettingsService, "get_top_k", return_value=5
+                )
+            )
+            stack.enter_context(
+                patch.object(chat_job_service, "query_answering_workflow", mock_workflow)
+            )
+            stack.enter_context(
+                patch(
+                    "app.services.chat_job_service.send_callback_async",
+                    new_callable=AsyncMock,
+                )
+            )
+            return await execute_chat_job(
+                db=mock_db,
+                job_id="j",
+                data=data,
+                callback_url="http://cb",
+                app_default_prompt=None,
+                knowledge_base_ids=kb_ids or [1],
+            )
+
+    @pytest.mark.asyncio
+    async def test_citations_suppressed_when_answer_has_no_citation_markers(
+        self, mock_db
+    ):
+        """
+        When the LLM answer contains no [citation:x] markers the citations
+        list must be empty, even if the workflow returned context chunks.
+        This prevents false escalation for out-of-scope questions.
+        """
+        mock_workflow = Mock()
+        mock_workflow.ainvoke = AsyncMock(
+            return_value={
+                "answer": "Information is missing on why the sky is blue based on the provided context.",
+                "context": [self._make_context_doc()],
+                "intent": "knowledge_query",
+            }
+        )
+        data = {"chats": [{"role": "user", "content": "Why is the sky blue?"}]}
+
+        result = await self._run_job_with_workflow(mock_db, mock_workflow, data)
+
+        assert result["citations"] == []
+
+    @pytest.mark.asyncio
+    async def test_citations_present_when_answer_has_citation_markers(
+        self, mock_db
+    ):
+        """
+        When the LLM answer contains [citation:x] markers, the citations list
+        must be populated with the corresponding context chunks.
+        """
+        mock_workflow = Mock()
+        mock_workflow.ainvoke = AsyncMock(
+            return_value={
+                "answer": "Potato blight is caused by a fungus. [citation:1]",
+                "context": [self._make_context_doc("Blight info", "agri.pdf")],
+                "intent": "knowledge_query",
+            }
+        )
+        data = {"chats": [{"role": "user", "content": "What causes potato blight?"}]}
+
+        result = await self._run_job_with_workflow(mock_db, mock_workflow, data)
+
+        assert len(result["citations"]) == 1
+        assert result["citations"][0]["document"] == "agri.pdf"
+
+    @pytest.mark.asyncio
+    async def test_citations_empty_when_no_context_returned(self, mock_db):
+        """
+        When the workflow returns no context at all (empty list), citations
+        must also be empty.
+        """
+        mock_workflow = Mock()
+        mock_workflow.ainvoke = AsyncMock(
+            return_value={
+                "answer": "Hello! How can I help you?",
+                "context": [],
+                "intent": "small_talk",
+            }
+        )
+        data = {"chats": [{"role": "user", "content": "Hello"}]}
+
+        result = await self._run_job_with_workflow(mock_db, mock_workflow, data)
+
+        assert result["citations"] == []
