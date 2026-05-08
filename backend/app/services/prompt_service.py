@@ -8,7 +8,6 @@ from app.constants import (
     DEFAULT_QA_FLEXIBLE_PROMPT,
 )
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -44,9 +43,8 @@ class PromptService:
                 prompt_name=PromptNameEnum.contextualize_q_system_prompt
             )
         except ValueError:
-            logger.error(
-                "Warning: contextualize_q_system_prompt not found in DB, "
-                "using fallback."
+            logger.warning(
+                "contextualize_q_system_prompt not found in DB, using fallback."
             )
             dynamic_content = DEFAULT_CONTEXTUALIZE_PROMPT
 
@@ -80,21 +78,20 @@ class PromptService:
             dynamic_content, static_context_rule, closing_instruction
         )
 
-    def get_full_qa_flexible_prompt(
-        self, context_placeholder: str = "{context}"
-    ) -> str:
+    def get_full_qa_flexible_prompt(self) -> str:
+        # {context} is fixed: LangChain resolves it at inference time.
         try:
             dynamic_content = self.get_active_prompt_content(
                 prompt_name=PromptNameEnum.qa_flexible_prompt
             )
         except ValueError:
-            logger.error(
-                "Warning: qa_flexible_prompt not found in DB, using fallback."
+            logger.warning(
+                "qa_flexible_prompt not found in DB, using fallback."
             )
             dynamic_content = DEFAULT_QA_FLEXIBLE_PROMPT
 
         suffix = (
-            f"\n\nContext: {context_placeholder}\n\n"
+            "\n\nContext: {context}\n\n"
             "Remember:\n"
             "- Cite contexts by their position number (1 for first context, 2 "
             "for second, etc.).\n"
@@ -106,28 +103,31 @@ class PromptService:
         )
         return f"{dynamic_content.strip()}{suffix}"
 
-    def get_full_qa_strict_prompt(
-        self, context_placeholder: str = "{context}"
-    ) -> str:
+    def get_full_qa_strict_prompt(self) -> str:
+        # {context} is fixed: LangChain resolves it at inference time.
         try:
             dynamic_content = self.get_active_prompt_content(
                 prompt_name=PromptNameEnum.qa_strict_prompt
             )
         except ValueError:
-            logger.error(
-                "Warning: qa_strict_prompt not found in DB, using fallback."
+            logger.warning(
+                "qa_strict_prompt not found in DB, using fallback."
             )
             dynamic_content = DEFAULT_QA_STRICT_PROMPT
 
         suffix = (
-            f"\n\n### Provided Context:\n{context_placeholder}\n\n"
+            "\n\n### Provided Context:\n{context}\n\n"
             "**Important Answering Rules:**\n"
             "- Use **ONLY** current context for retrieval queries.\n"
             "- **Exception**: Use **Chat History** only if the intent is a "
             "'memory_query' (meta-chat about the conversation).\n"
-            "- Citation format: `[citation:x]` using the context position "
-            "number.\n"
+            "- **Citation (MANDATORY)**: Every sentence that uses information "
+            "from the context MUST end with `[citation:x]` where x is the "
+            "document position number (1 = first document, 2 = second, etc.). "
+            "Multiple sources: `[citation:1][citation:2]`.\n"
             "- Do NOT use filenames or page numbers for citations.\n"
+            "- If the answer is not found in the context, state so clearly "
+            "and do NOT include any `[citation:x]` markers.\n"
             "- Always paraphrase—never repeat context verbatim."
         )
 

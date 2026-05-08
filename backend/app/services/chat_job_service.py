@@ -1,6 +1,7 @@
+import re
 import logging
 
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from app.services.query_answering_workflow import query_answering_workflow
 from app.services.job_service import JobService
@@ -17,7 +18,7 @@ async def execute_chat_job(
     data: dict,
     callback_url: str,
     app_default_prompt: str,
-    knowledge_base_ids: List[int] = [],
+    knowledge_base_ids: Optional[List[int]] = None,
 ):
     """Background job executor for [chat job]s (non-streaming)."""
     job = JobService.get_job(db, job_id)
@@ -26,13 +27,10 @@ async def execute_chat_job(
 
     try:
         JobService.update_status_to_running(db, job_id)
+        knowledge_base_ids = knowledge_base_ids or []
 
         # prompt from app logic
-        app_default_prompt = app_default_prompt or None
-        job_payload_prompt = data.get("prompt") or None
-        app_final_prompt = (
-            job_payload_prompt if job_payload_prompt else app_default_prompt
-        ) or None
+        app_final_prompt = data.get("prompt") or app_default_prompt or None
         app_final_prompt = (
             "**IMPORTANT: Follow these additional rules strictly:**\n\n"
             + app_final_prompt
@@ -64,12 +62,6 @@ async def execute_chat_job(
 
         # combined prompt
         final_prompt = qa_prompt + "\n\n" + app_final_prompt
-
-        if (
-            "context" not in final_prompt.lower()
-            or "{context}" not in final_prompt.lower()
-        ):
-            final_prompt += "\n### Provided Context:\n{context}"
 
         logger.info("[Chat job] BEGIN final prompt: ==============")
         logger.info(f"[Chat job] final prompt: {final_prompt}")
@@ -111,6 +103,13 @@ async def execute_chat_job(
                 }
             )
 
+        # The strict prompt instructs the LLM to use [citation:x] markers only
+        # when it actually cites a document. If the answer contains no markers
+        # (e.g. "Information is missing on..."), the retrieved chunks were not
+        # used and must not be reported as citations to the caller.
+        if not re.search(r"\[citation:\d+\]", answer):
+            citations = []
+
         output = {"answer": answer, "citations": citations}
 
         if error:
@@ -130,5 +129,9 @@ async def execute_chat_job(
     except Exception as e:
         logger.exception(f"[Chat job] execution failed: {e}")
         JobService.update_status_to_failed(db, job_id, output=str(e))
-        await send_callback_async(callback_url, job, error=str(e))
+        await send_callback_async(
+            callback_url=callback_url,
+            job=job,
+            error=str(e),
+        )
         return str(e)
