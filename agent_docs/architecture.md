@@ -62,6 +62,7 @@ graph TD
 - **Hybrid Search**: Implements a dual-stream retrieval (Vector similarity + BM25 keyword) for maximum resilience and precision.
 - **Server-Side Reranking**: Filters and re-scores candidates using `FlashRank` before returning them to the orchestrator, significantly reducing network payload and client-side processing.
 - **Health & Monitoring**: Provides specialized endpoints to verify the connection status of ChromaDB and MinIO.
+- **MCP Discovery Caching**: Coordinates tool and resource schema queries at startup via `mcp_discovery_manager` and caches them to prevent runtime coordination overhead. See [MCP Discovery Mechanism](features/mcp-discovery-mechanism.md) for details.
 
 ## 4. Data Flow
 

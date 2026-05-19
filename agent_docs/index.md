@@ -19,7 +19,7 @@ This index serves as the master map for all BMAD-generated artifacts.
 - [Features Directory](features/)
   - [Semantic Query Caching](features/semantic-query-caching.md)
   - [Context Re-ranking Service](features/context-reranking.md)
-  - *(New features will be added here)*
+  - [MCP Discovery Mechanism](features/mcp-discovery-mechanism.md)
 
 ## Chronological Records
 - [Stories](stories/)
