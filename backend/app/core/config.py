@@ -1,7 +1,16 @@
 import os
+import warnings
 from typing import Optional
 
 from pydantic_settings import BaseSettings
+
+# Suppress deprecation warnings from authlib
+try:
+    from authlib.deprecate import AuthlibDeprecationWarning
+
+    warnings.filterwarnings("ignore", category=AuthlibDeprecationWarning)
+except ImportError:
+    pass
 
 
 class Settings(BaseSettings):
@@ -76,9 +85,7 @@ class Settings(BaseSettings):
 
     # Weather MCP Server
     USE_ONLY_FREE_WEATHER_MCP_TOOLS: bool = True
-    WEATHER_MCP: str = os.getenv(
-        "WEATHER_MCP", "http://localhost:8200/mcp/"
-    )
+    WEATHER_MCP: str = os.getenv("WEATHER_MCP", "http://localhost:8200/mcp/")
 
     # Email settings (SMTP)
     SMTP_HOST: str = os.getenv("SMTP_HOST", "akvomail.org")
