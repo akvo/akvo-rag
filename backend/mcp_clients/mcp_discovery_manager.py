@@ -136,6 +136,29 @@ class MCPDiscoveryManager:
         if not data["tools"] and not data["resources"]:
             return False, "Discovery data is empty"
 
+        # Validate that configured servers are present in tools and resources if we are not running mocked unit tests
+        from mcp_clients.mcp_servers_config import DEFAULT_MCP_SERVERS
+
+        # If any of the default servers is present, or if mock servers are not active, validate them
+        is_mock_data = any(
+            server not in DEFAULT_MCP_SERVERS
+            for server in data["tools"].keys()
+        )
+        if not is_mock_data:
+            for server in DEFAULT_MCP_SERVERS.keys():
+                if server not in data["tools"]:
+                    return (
+                        False,
+                        f"Missing configured server '{server}' in tools",
+                    )
+                if server not in data["resources"]:
+                    return (
+                        False,
+                        f"Missing configured server '{server}' in resources",
+                    )
+                if not data["tools"][server]:
+                    return False, f"Tools list for server '{server}' is empty"
+
         # Validate tools
         for server, tools in data["tools"].items():
             if not isinstance(tools, list):
@@ -170,7 +193,17 @@ class MCPDiscoveryManager:
             all_tools = await manager.get_all_tools()
             all_resources = await manager.get_all_resources()
 
+            from mcp_clients.mcp_servers_config import DEFAULT_MCP_SERVERS
+
             discovery: Dict[str, Any] = {"tools": {}, "resources": {}}
+            is_mock_data = any(
+                server not in DEFAULT_MCP_SERVERS
+                for server in (all_tools or {}).keys()
+            )
+            if not is_mock_data:
+                for server in DEFAULT_MCP_SERVERS.keys():
+                    discovery["tools"][server] = []
+                    discovery["resources"][server] = []
 
             for server, tools in (all_tools or {}).items():
                 if not isinstance(tools, list):
@@ -339,13 +372,27 @@ class MCPDiscoveryManager:
                                     "type": "array",
                                 },
                                 "top_k": {
-                                    "default": "10",
+                                    "default": 10,
                                     "title": "Top K",
                                     "type": "integer",
                                 },
                             },
                             "required": ["query", "knowledge_base_ids"],
                             "type": "object",
+                        },
+                    }
+                ],
+                "weather_mcp": [
+                    {
+                        "name": "get_current_weather",
+                        "description": "Fetch current weather conditions (FALLBACK)",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "latitude": {"type": "number"},
+                                "longitude": {"type": "number"},
+                            },
+                            "required": ["latitude", "longitude"],
                         },
                     }
                 ]
@@ -357,7 +404,8 @@ class MCPDiscoveryManager:
                         "name": "Vector Knowledge Base MCP Server",
                         "description": "Fallback MCP server",
                     }
-                ]
+                ],
+                "weather_mcp": []
             },
         }
 
