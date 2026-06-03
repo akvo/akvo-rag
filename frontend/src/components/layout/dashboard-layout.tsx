@@ -91,7 +91,7 @@ export default function DashboardLayout({
           {/* Navigation */}
           <nav className="flex-1 space-y-2 px-4 py-6">
             {navigation.map((item) => {
-              const isActive = pathname.startsWith(item.href);
+              const isActive = pathname?.startsWith(item.href);
               return (
                 <Link
                   key={item.name}

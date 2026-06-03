@@ -28,3 +28,8 @@ class User(Base, TimestampMixin):
         remote_side=[id],
         uselist=False
     )
+    password_reset_tokens = relationship(
+        "PasswordResetToken",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )

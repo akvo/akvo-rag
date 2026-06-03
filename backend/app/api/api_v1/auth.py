@@ -150,3 +150,91 @@ def update_user_by_email(
     db.commit()
     db.refresh(user)
     return user
+
+
+from app.schemas.password_reset import (
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    PasswordResetResponse
+)
+from app.services.email_service import EmailService
+
+
+@router.post("/forgot-password", response_model=PasswordResetResponse)
+async def forgot_password(
+    *,
+    db: Session = Depends(get_db),
+    request_data: ForgotPasswordRequest
+) -> Any:
+    """
+    Request password reset. Sends email with reset link.
+    Always returns success to prevent email enumeration.
+    """
+    # Look up user by email
+    user = db.query(User).filter(User.email == request_data.email).first()
+
+    if user and user.is_active:
+        # Generate reset token
+        token = EmailService.generate_reset_token(db, user)
+
+        # Send email (async)
+        await EmailService.send_password_reset_email(
+            email=user.email,
+            reset_token=token,
+            user_name=user.username
+        )
+
+    # Always return success to prevent email enumeration
+    return PasswordResetResponse(
+        message="If an account exists with that email, you will receive password reset instructions."
+    )
+
+
+@router.post("/reset-password", response_model=PasswordResetResponse)
+def reset_password(
+    *,
+    db: Session = Depends(get_db),
+    request_data: ResetPasswordRequest
+) -> Any:
+    """
+    Reset password using valid token.
+    """
+    # Verify token
+    user = EmailService.verify_reset_token(db, request_data.token)
+
+    if not user:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired reset token"
+        )
+
+    # Update password
+    user.hashed_password = security.get_password_hash(request_data.new_password)
+
+    # Mark token as used
+    EmailService.mark_token_as_used(db, request_data.token)
+
+    db.commit()
+
+    return PasswordResetResponse(
+        message="Password has been reset successfully. You can now login with your new password."
+    )
+
+
+@router.get("/verify-reset-token/{token}")
+def verify_reset_token(
+    token: str,
+    db: Session = Depends(get_db)
+) -> Any:
+    """
+    Verify if a reset token is valid (for frontend validation)
+    """
+    user = EmailService.verify_reset_token(db, token)
+
+    if not user:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired reset token"
+        )
+
+    return {"valid": True, "email": user.email}

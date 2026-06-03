@@ -13,6 +13,8 @@ export const metadata: Metadata = {
   description: "A web UI for RAG applications",
 };
 
+export const dynamic = 'force-dynamic';
+
 export default function RootLayout({
   children,
 }: {

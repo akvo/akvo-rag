@@ -19,14 +19,14 @@ if [ "$ENVIRONMENT" = "development" ]; then
     default-libmysqlclient-dev \
     pkg-config \
     netcat-traditional
-    
+
     echo "Installing Python dependencies..."
     mkdir -p "$PIP_CACHE_DIR"
     pip install -q --upgrade pip
     pip install -q --cache-dir="$PIP_CACHE_DIR" -r requirements.txt || \
     (echo "Retrying in 5s..." && sleep 5 && pip install -q --cache-dir="$PIP_CACHE_DIR" -r requirements.txt) || \
     (echo "Retrying in 10s..." && sleep 10 && pip install -q --cache-dir="$PIP_CACHE_DIR" -r requirements.txt)
-    
+
     mkdir -p /app/uploads
 fi
 
