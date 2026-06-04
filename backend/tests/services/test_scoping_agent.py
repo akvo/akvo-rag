@@ -90,12 +90,11 @@ class TestScopingAgent:
         with pytest.raises(FileNotFoundError):
             agent.load_discovery_data()
 
-    async def test_scope_query_tool_not_found(
+    async def test_scope_query_tool_not_found_fallback(
         self, agent, discovery_file, monkeypatch
     ):
         """
-        scope_query() raises ValueError if required tool
-        is missing or LLM fails.
+        scope_query() returns fallback query dict if LLM fails.
         """
         invalid_data = {"tools": {"knowledge_bases_mcp": []}, "resources": {}}
         discovery_file.write_text(json.dumps(invalid_data))
@@ -106,7 +105,36 @@ class TestScopingAgent:
 
         monkeypatch.setattr(agent, "_ask_llm", fake__ask_llm)
 
-        with pytest.raises(
-            ValueError, match="did not return a valid suggestion"
-        ):
-            await agent.scope_query(query="find documents")
+        result = await agent.scope_query(
+            query="find documents", scope={"knowledge_base_ids": [42]}
+        )
+        assert result["server_name"] == "knowledge_bases_mcp"
+        assert result["tool_name"] == "query_knowledge_base"
+        assert result["input"]["query"] == "find documents"
+        assert result["input"]["knowledge_base_ids"] == [42]
+
+    async def test_scope_query_empty_suggestion_fallback(
+        self, agent, discovery_file, monkeypatch
+    ):
+        """
+        scope_query() returns fallback query dict if suggestion has empty server or tool.
+        """
+        invalid_data = {"tools": {"knowledge_bases_mcp": []}, "resources": {}}
+        discovery_file.write_text(json.dumps(invalid_data))
+
+        async def fake__ask_llm(*_, **__):
+            return {
+                "server_name": "",
+                "tool_name": "",
+                "input": {},
+            }
+
+        monkeypatch.setattr(agent, "_ask_llm", fake__ask_llm)
+
+        result = await agent.scope_query(
+            query="find documents", scope={"knowledge_base_ids": [42]}
+        )
+        assert result["server_name"] == "knowledge_bases_mcp"
+        assert result["tool_name"] == "query_knowledge_base"
+        assert result["input"]["query"] == "find documents"
+        assert result["input"]["knowledge_base_ids"] == [42]

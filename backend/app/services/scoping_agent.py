@@ -193,21 +193,45 @@ class ScopingAgent:
         discovery_data = self.load_discovery_data()
         suggestion = await self._ask_llm(query, discovery_data, scope)
 
+        knowledge_base_ids = scope.get("knowledge_base_ids", [])
+        fallback = {
+            "server_name": "knowledge_bases_mcp",
+            "tool_name": "query_knowledge_base",
+            "input": {
+                "query": query,
+                "knowledge_base_ids": knowledge_base_ids,
+            },
+        }
+
         if not suggestion:
-            raise ValueError(
-                "[ScopingAgent] LLM did not return a valid suggestion"
+            logger.warning(
+                "[ScopingAgent] No suggestion returned. Using fallback."
             )
+            return fallback
 
         server_name = suggestion.get("server_name")
         tool_name = suggestion.get("tool_name")
         tool_input = suggestion.get("input", {})
 
-        if not self._validate_input(
-            discovery_data, server_name, tool_name, tool_input
-        ):
-            raise ValueError(
-                "[ScopingAgent] Suggested input is invalid according to schema"
+        if not server_name or not tool_name:
+            logger.warning(
+                f"[ScopingAgent] Invalid empty suggestion values ({server_name}.{tool_name}). Using fallback."
             )
+            return fallback
+
+        try:
+            if not self._validate_input(
+                discovery_data, server_name, tool_name, tool_input
+            ):
+                logger.warning(
+                    "[ScopingAgent] Suggested input schema validation failed. Using fallback."
+                )
+                return fallback
+        except Exception as e:
+            logger.warning(
+                f"[ScopingAgent] Validation error: {e}. Using fallback."
+            )
+            return fallback
 
         info = "[ScopingAgent] Scoped query"
         info += (
