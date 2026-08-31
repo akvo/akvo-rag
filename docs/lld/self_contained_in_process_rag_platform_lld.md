@@ -472,6 +472,7 @@ flowchart LR
   - Large document uploads process asynchronously in the background without degrading conversational query latency.
 * **Technical Acceptance Criteria (TAC):**
   - Ingestion worker runs independently as a Docker container consuming from Redis.
+  - Container entrypoint script executes `alembic upgrade head` on startup to ensure KB & document tables exist in PostgreSQL.
 
 ---
 
@@ -615,6 +616,55 @@ To support in-process execution without architectural bottlenecks, the data arch
 | **Host Web App** (FastAPI) | In-Process (`akvo-rag-core` + `vector-kb-core`) | **Yes** (Conversations, Prompts, KB Registry) | **Yes** (Direct read queries via `ChromaRetriever`) | **No** (Direct upload stream or presigned URLs) | **Yes** (Publishes ingestion tasks) | WhatsApp webhook, chat turn execution, Admin API |
 | **App Worker** (Celery) | Container (`agriconnect`) | **Yes** (Tickets, customer profiles) | **No** | **No** | **Yes** (Worker consumer) | Outbound WhatsApp sends, retries, broadcasts |
 | **Ingestion Worker** (Celery) | Container (`vector-kb-server`) | **Yes** (Document and chunk records) | **Yes** (Writes embeddings to collections) | **Yes** (Stores and reads raw PDF/Docx files) | **Yes** (Ingestion consumer) | Long-running PDF parsing, OCR, chunk embedding |
+
+### 6.5 Database Schema Ownership & Migration Lifecycle
+
+A common architectural question when adopting in-process libraries is: *Where do the database migrations live, and does the host application need to manage the RAG/vector schemas?*
+
+#### 1. Pure & Stateless Python Libraries
+The core libraries (**`akvo-rag-core`** and **`vector-kb-core`**) are deliberately designed as **pure computation and retrieval packages** with zero ORM, SQLAlchemy, or Alembic dependencies.
+- `vector-kb-core` communicates directly with ChromaDB in-memory for vector search.
+- `akvo-rag-core` executes the LangGraph workflow and prompt resolution in-memory.
+- This ensures host applications (e.g. `washconnect`) experience zero SQL migration bloat from the RAG engine.
+
+#### 2. Repository Schema Boundaries
+
+| Repository | Component | Database Responsibility & Migrations |
+|---|---|---|
+| **`vector-knowledge-base-mcp-server`** | **Ingestion Worker** (Background Container) | **Owns KB & Ingestion Schemas:** Manages `knowledge_bases`, `documents`, and `document_chunks` tables in `alembic/versions/`. |
+| **`akvo-rag`** | **Standalone Web App** (Mode 1 UI & API) | **Owns Prompt & Standalone Auth Schemas:** Manages prompt versioning, API keys, and playground sessions for the standalone developer UI. |
+| **Host Application** (`agriconnect` / `washconnect`) | **Host Web App & Worker** (Mode 2 Embedded) | **Owns Host Domain Schemas Only:** Manages WhatsApp conversations, tickets, farmer/community profiles, and domain workflows in its own `alembic/versions/`. |
+
+#### 3. Partner Namespace Deployment Lifecycle
+
+When deploying a new host app namespace (e.g. `washconnect`):
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│ PARTNER NAMESPACE (e.g. washconnect)                                   │
+│                                                                        │
+│  ┌──────────────────────────────┐     ┌─────────────────────────────┐  │
+│  │ 1. Host Web App (WASHConnect)│     │ 2. Ingestion Worker         │  │
+│  │                              │     │    (from vector-kb repo)    │  │
+│  │ • Host Migrations:           │     │                             │  │
+│  │   - conversations, users     │     │ • KB Migrations:            │  │
+│  │ • Python Imports:            │     │   - knowledge_bases         │  │
+│  │   - akvo-rag-core            │     │   - documents               │  │
+│  │   - vector-kb-core           │     │   - document_chunks         │  │
+│  └──────────────┬───────────────┘     └──────────────┬──────────────┘  │
+│                 │                                    │                 │
+│                 ▼                                    ▼                 │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │ Single PostgreSQL 17 Database (All tables created automatically) │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+1. **Ingestion Worker Startup:** The `ingestion-worker` container runs its entrypoint with `alembic upgrade head`, creating the `knowledge_bases`, `documents`, and `document_chunks` tables in the single PostgreSQL instance.
+2. **Host App Startup:** The host application runs its own migrations for conversations/users, then imports `akvo-rag-core` and `vector-kb-core` in-process.
+3. **No Cross-Repo Migration Leakage:**
+   - Host apps do **not** need to copy or maintain document chunking database schemas.
+   - `akvo-rag` does **not** need to absorb the document chunk migrations from `vector-kb`.
 
 ---
 
