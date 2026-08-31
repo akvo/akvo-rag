@@ -87,3 +87,4 @@ celery.log
 docs/research_logs
 .agent/
 agent_docs/
+task.md
