@@ -564,3 +564,222 @@ flowchart LR
   - Answer relevancy score $\ge 0.85$.
   - Zero ungrounded answers produce fake citations.
   - Automated test runs in Docker via `./dev.sh exec backend python -m RAG_evaluation.run_evaluation`.
+
+---
+
+## 6. Database Communication & Data Architecture in Option C
+
+To support in-process execution without architectural bottlenecks, the data architecture separates the system into two distinct operational paths: **Live Retrieval** and **Document Ingestion**.
+
+### 6.1 Dual-Path Operational Model
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   OPTION C DATA ARCHITECTURE                             │
+│                                                                                          │
+│   PATH 1: LIVE RETRIEVAL / QUERY PATH                    PATH 2: DOCUMENT INGESTION PATH │
+│   (Synchronous WhatsApp Question Answering)              (Asynchronous Background Admin) │
+│                                                                                          │
+│   WhatsApp Webhook                                       Admin PDF Upload                │
+│          │                                                      │                        │
+│          ▼                                                      ▼                        │
+│   Host App Pipeline                                      Host App API                    │
+│          │                                                      ├── Save PDF ──► MinIO   │
+│          ▼                                                      ├── Create DB ─► Postgres│
+│   akvo-rag-core (In-Process)                                    └── Task ─────► Redis    │
+│          │                                                                         │     │
+│          ▼                                                                         ▼     │
+│   vector-kb-core (In-Process)                                    Ingestion Worker        │
+│          │                                                              ├── Read PDF     │
+│          │ (Direct In-Memory Search)                                    ├── Chunker      │
+│          ▼                                                              ├── Store Chunks ─► Postgres
+│   ChromaDB Service                                                      └── Embed & Index ─► Chroma
+│   - Vectors (1536-dim)                                                                   │
+│   - Text Content & Metadata                                                              │
+│   * ZERO PostgreSQL queries during search                                                │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 6.2 The Live Query Path (In-Process Direct Retrieval)
+* **ChromaDB Stores Chunk Text & Metadata:** When chunks are ingested, ChromaDB stores the embedding vector, raw chunk text, and all citation metadata (`page`, `source`, `doc_version`, `issuing_authority`).
+* **Zero Relational Database Latency:** When `vector-kb-core` executes `ChromaRetriever.search()`, it queries ChromaDB directly (sub-100ms). It does **not** query PostgreSQL on the live conversation path, keeping query latency minimal.
+
+### 6.3 The Ingestion & Management Path (Consolidated PostgreSQL)
+* **Single PostgreSQL 17 Database:** Instead of 3 databases across 2 engines (MySQL 8 for Akvo RAG, PostgreSQL for Vector KB, PostgreSQL for AgriConnect), all relational metadata is stored in a **single PostgreSQL database** in the partner namespace.
+* **Ingestion Worker:** A standalone background container (from `vector-knowledge-base-mcp-server`) consumes upload tasks from Redis, parses PDFs/docs, writes chunk records to PostgreSQL, computes embeddings, and writes vectors to ChromaDB collections.
+
+### 6.4 Component Connectivity Matrix
+
+| Component | Packaging / Execution | PostgreSQL 17 | ChromaDB | MinIO | Redis Broker | Purpose |
+|---|---|---|---|---|---|---|
+| **Host Web App** (FastAPI) | In-Process (`akvo-rag-core` + `vector-kb-core`) | **Yes** (Conversations, Prompts, KB Registry) | **Yes** (Direct read queries via `ChromaRetriever`) | **No** (Direct upload stream or presigned URLs) | **No** (Publishes tasks) | WhatsApp webhook, chat turn execution, Admin API |
+| **App Worker** (Celery) | Container (`agriconnect`) | **Yes** (Tickets, customer profiles) | **No** | **No** | **Yes** (Worker consumer) | Outbound WhatsApp sends, retries, broadcasts |
+| **Ingestion Worker** (Celery) | Container (`vector-kb-server`) | **Yes** (Document and chunk records) | **Yes** (Writes embeddings to collections) | **Yes** (Stores and reads raw PDF/Docx files) | **Yes** (Ingestion consumer) | Long-running PDF parsing, OCR, chunk embedding |
+
+---
+
+## 7. Impact & Migration Strategy for Current Running Systems
+
+This section defines what happens to the existing running deployments (`agriconnect2-namespace`, `agriconnect-rag-namespace`, `akvo-rag-namespace`, and `kb-mcp-server-namespace`) during and after the rollout of Option C.
+
+### 7.1 What Happens to Existing Production Systems?
+
+```mermaid
+flowchart TB
+    subgraph CurrentTopology["Current Legacy Production (3 Namespaces, ~20 Workloads)"]
+        direction TB
+        NS1["agriconnect2-namespace<br/>(App, Worker, Beat, Redis, Postgres 17, Media)"]
+        NS2["agriconnect-rag-namespace<br/>(RAG Backend, Celery, Beat, MySQL 8, RabbitMQ)"]
+        NS3["kb-mcp-server-namespace<br/>(KB REST/MCP, Celery, Postgres, RabbitMQ, Chroma, MinIO)"]
+        NS1 <-->|"HTTP & Unauthenticated Callbacks"| NS2
+        NS2 <-->|"FastMCP over HTTP"| NS3
+    end
+
+    subgraph TransitionPhase["Step-by-Step Transition & Coexistence"]
+        direction TB
+        C1["1. Database Migration: Consolidate MySQL prompts to PostgreSQL"]
+        C2["2. Dual-Mode Coexistence: RAG operates in-process while legacy APIs stay live"]
+        C3["3. Traffic Cutover: Point WhatsApp webhook to In-Process Pipeline"]
+        C4["4. Decommissioning: Terminate NS2, RabbitMQ, MySQL, and MCP glue"]
+    end
+
+    subgraph TargetTopology["Option C Target Production (1 Namespace, 3 Workloads)"]
+        direction TB
+        TNS["partner-namespace<br/>• Assistant Web App (In-Process RAG + Retriever)<br/>• App Celery Worker<br/>• Ingestion Celery Worker<br/>• Single PostgreSQL 17 + Redis + ChromaDB + MinIO"]
+    end
+
+    CurrentTopology --> TransitionPhase
+    TransitionPhase --> TargetTopology
+```
+
+### 7.2 Zero-Downtime Migration & Rollout Strategy
+
+1. **Dual-Mode Coexistence (B/C Hybrid):**
+   - The standalone service mode (`akvo-rag/backend` FastAPI wrapper) remains available during the transition. Existing deployments continue serving live users without disruption while the in-process packages are validated.
+2. **Database Consolidation & Data Migration:**
+   - **Prompts & App Registry:** Migrate `prompt_definitions` and `prompt_versions` from MySQL to the target PostgreSQL 17 instance via an automated Alembic migration script.
+   - **Knowledge Bases & Documents:** Schema metadata from the legacy vector-kb PostgreSQL is merged into the single PostgreSQL database.
+   - **ChromaDB Collections:** Existing vector collections (`kb_{id}`) in ChromaDB remain unchanged and binary-compatible. Zero re-embedding of existing documents is required.
+   - **MinIO Files:** Object storage bucket paths (`documents/`) remain intact.
+3. **Traffic Cutover:**
+   - In AgriConnect, switch the AI driver configuration from `EXTERNAL_AI_SERVICE` (HTTP/Celery) to `EMBEDDED_AI_SERVICE` (In-process `akvo-rag-core`).
+   - Incoming WhatsApp questions immediately execute in-memory with sub-second retrieval.
+4. **Decommissioning Legacy Workloads:**
+   - Once all traffic is routed through the in-process pipeline, decommission the duplicate `agriconnect-rag-namespace`.
+   - Tear down the 2 legacy RabbitMQ brokers, the legacy MySQL database, and 2 Flower dashboards.
+
+### 7.3 Infrastructure & Operational Impact Summary
+
+| Resource / Dimension | Legacy Production (Today) | Option C Production (Target) | Impact / Net Benefit |
+|---|---|---|---|
+| **Kubernetes Namespaces per Partner** | 3 namespaces | **1 namespace** | Unified configuration & access control |
+| **Workloads / Pods per Partner** | ~20 Deployments | **3 Deployments** (App, Worker, Ingestion) | **~70% reduction in cluster memory & CPU** |
+| **Databases per Partner** | 3 instances (2 PostgreSQL, 1 MySQL) | **1 PostgreSQL 17 instance** | 1 backup routine, 1 migration toolchain |
+| **Message Brokers per Partner** | 3 brokers (2 RabbitMQ, 1 Redis) | **1 Redis broker** | Reduced connection overhead & maintenance |
+| **Internal Network Hops per Turn** | ~5 internal HTTP hops | **0 internal hops** | Sub-second latency, zero network dropouts |
+| **Replication Time for New Partner** | 2–3 weeks of deployment & forking | **1–2 days (configuration only)** | Rapid deployment for WASH, Health, Agri |
+
+---
+
+## 8. Standalone Product & Dedicated Web UI Coexistence
+
+A core requirement is ensuring that the **standalone Akvo-RAG web application, its Next.js Web UI, and developer tools continue to function completely**.
+
+### 8.1 Dual-Deployment Modes (One Codebase, Two Shapes)
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│ AKVO RAG (The Repository)                                                              │
+│                                                                                        │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ akvo-rag-core (In-Process Engine Package)                                        │  │
+│  │ - LangGraph workflow, PromptResolver, citation filtering, direct retriever hook  │  │
+│  └────────────────────────┬─────────────────────────────────────────────────────────┘  │
+│                           │                                                            │
+│         ┌─────────────────┴────────────────────────┐                                   │
+│         ▼                                          ▼                                   │
+│  ┌─────────────────────────────────┐   ┌──────────────────────────────────────────┐    │
+│  │ MODE 1: Standalone Web App      │   │ MODE 2: Embedded in Partner Apps         │    │
+│  │ (With Full Dedicated Web UI)    │   │ (AgriConnect / WASHConnect)              │    │
+│  │                                 │   │                                          │    │
+│  │ • Next.js Web Dashboard         │   │ • No UI needed in partner namespace      │    │
+│  │ • Chat Streaming & Playground   │   │ • Imported directly via Python package   │    │
+│  │ • Prompt Version Management UI  │   │ • Runs inside WhatsApp webhook process   │    │
+│  │ • User / App / API Key Auth     │   │                                          │    │
+│  │ • Standalone REST /api/jobs     │   │                                          │    │
+│  │                                 │   │                                          │    │
+│  │ * 100% Functional Standalone    │   │ * Zero extra microservices deployed      │    │
+│  └─────────────────────────────────┘   └──────────────────────────────────────────┘    │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+1. **Standalone Product Mode (Mode 1):**
+   - The Next.js frontend (`frontend/`) and FastAPI backend (`backend/app/main.py`) remain fully operational.
+   - The FastAPI backend delegates its internal RAG chat endpoints and WebSocket streaming to `akvo-rag-core`.
+   - Admins and developers can run `docker compose up` in `akvo-rag` to access the prompt versioning UI, knowledge base tester, chat playground, and app registry.
+2. **Embedded Library Mode (Mode 2):**
+   - Partner applications (such as AgriConnect or WASHConnect) import `akvo-rag-core` and `vector-kb-core` directly in memory.
+   - This eliminates the need to deploy duplicate copies of the Web UI or separate MySQL/RabbitMQ infrastructure in partner namespaces.
+
+---
+
+## 9. Scoping Agent: Current Removal Rationale & Future Improvements
+
+### 9.1 Why `ScopingAgent` is Removed from the Default Path Today
+
+In the legacy implementation (`backend/app/services/scoping_agent.py`), the `ScopingAgent` invoked an LLM to decide which MCP server and tool to call based on `mcp_discovery.json`. 
+
+#### The Flaws in the Legacy Design:
+1. **Predetermined Outcome:** Partner applications (e.g. AgriConnect) already specify the target `knowledge_base_ids` explicitly in the request (`knowledge_base_ids: [1, 2]`), which instructed the scoping LLM: `"Use ONLY the provided knowledge_base_ids and do NOT choose new IDs"`.
+2. **Broken Validation & Hardcoded Fallback:** The generated `mcp_discovery.json` file only listed weather tools and lacked `knowledge_bases_mcp`. Any suggestion to query the knowledge base failed schema validation in `_validate_input()`, triggering the hardcoded fallback:
+   ```python
+   fallback = {
+       "server_name": "knowledge_bases_mcp",
+       "tool_name": "query_knowledge_base",
+       "input": {"query": query, "knowledge_base_ids": knowledge_base_ids}
+   }
+   ```
+3. **Wasted Round Trip:** Every single farmer question paid for an extra LLM call (1.5s–3.0s latency and token cost) solely to arrive at a hardcoded fallback.
+
+### 9.2 How KB & Tool Selection Works in Option C (Today)
+
+Without `ScopingAgent`, the system determines scope through clean, deterministic application logic:
+* **Knowledge Base Selection:** The host application / tenant configuration supplies the active `kb_ids` for the user's sector/scope (e.g., Avocado KB, Potato KB, National Water Standards). The in-process `ChromaRetriever` queries those collections concurrently and ranks chunks by cosine similarity.
+* **Deterministic Tools vs Model Intuition:** High-stakes tools (such as water quality threshold comparisons, meter reading anomaly detection, and emergency pipe burst routing) are handled by deterministic rule engines (reusing the sourced rule pattern from `weather_advisory_service.py`) in the conversation pipeline rather than relying on ungrounded model judgment.
+
+---
+
+### 9.3 Future Improvements Roadmap for Dynamic Tool & KB Routing
+
+When the platform expands to support multiple heterogeneous external tool servers (e.g. live weather APIs, government MIS/ERP systems, IoT sensors) or 20+ diverse knowledge bases, the following improvements can be introduced:
+
+```mermaid
+flowchart TD
+    subgraph FutureRouting["Future Routing Architecture (When Scale Requires)"]
+        direction TB
+        Q["User Query"] --> Intent{"Intent & Pre-Filter"}
+        
+        Intent -->|"Standard Query (1-3 KBs)"| DirectRet["Direct Vector Retrieval<br/>(Parallel Chroma Search)"]
+        
+        Intent -->|"Large Corpus (20+ KBs)"| KBR["Future 1: Semantic KB Router<br/>(Embedding / Metadata Filter)"]
+        KBR --> DirectRet
+        
+        Intent -->|"Dynamic Operational Query"| ToolRouter{"Future 2: Native Tool Calling"}
+        ToolRouter -->|"MIS / Meter / Sensor"| LangGraphTools["LangGraph ToolNode<br/>(Standard OpenAI Tools API)"]
+        ToolRouter -->|"External MCP"| MCPClient["Future 3: Dynamic MCP Client<br/>(Standardized FastMCP Client)"]
+    end
+```
+
+#### Future Improvement 1: Semantic KB Router (Hierarchical Retrieval)
+* **When to build:** When a single partner has $> 10$ distinct knowledge base collections.
+* **Mechanism:** Maintain a lightweight vector index over Knowledge Base descriptions. The router embeds the user query, selects the top 2–3 most relevant KBs, and scopes retrieval to those collections automatically without querying all collections.
+
+#### Future Improvement 2: Native LLM Tool-Calling (LangGraph `ToolNode`)
+* **When to build:** When the assistant needs to autonomously choose between $\ge 3$ dynamic API tools (e.g., `lookup_meter_reading`, `get_soil_sensor_data`, `check_weather_forecast`).
+* **Mechanism:** Replace custom JSON-in-markdown parsing with standard LLM Function/Tool Calling (OpenAI Tools API / Anthropic Tool Calling) using LangGraph's native `ToolNode`.
+
+#### Future Improvement 3: Dynamic MCP Gateway for Third-Party Plugins
+* **When to build:** When external third parties or ministry partners provide their own MCP-compliant microservices that must be plugged in dynamically at runtime.
+* **Mechanism:** A dedicated `MCPToolGateway` that dynamically mounts external tools into the LangGraph tool-calling loop using standard MCP client SDKs, with resilient connection pooling and timeouts.
+
+
