@@ -126,7 +126,7 @@ flowchart LR
 | `TASK-INT-402` | Unified Single-Namespace Docker Compose & Manifests | Host / Compose | **2.0 hrs** | 1.5 days |
 | **Phase 5** | **Verification, QA & Golden Set Harness** | | | |
 | `TASK-QA-501` | Automated Golden Dataset Evaluation & CI Pipeline | `akvo-rag` | **3.0 hrs** | 2.0 days |
-| **TOTAL** | | | **33.0 hrs (~4 days)** | **23.0 days** |
+| **TOTAL** | | | **33.0 hrs (~4.1 working days)** | **25.5 days** |
 
 ---
 
@@ -612,7 +612,7 @@ To support in-process execution without architectural bottlenecks, the data arch
 
 | Component | Packaging / Execution | PostgreSQL 17 | ChromaDB | MinIO | Redis Broker | Purpose |
 |---|---|---|---|---|---|---|
-| **Host Web App** (FastAPI) | In-Process (`akvo-rag-core` + `vector-kb-core`) | **Yes** (Conversations, Prompts, KB Registry) | **Yes** (Direct read queries via `ChromaRetriever`) | **No** (Direct upload stream or presigned URLs) | **No** (Publishes tasks) | WhatsApp webhook, chat turn execution, Admin API |
+| **Host Web App** (FastAPI) | In-Process (`akvo-rag-core` + `vector-kb-core`) | **Yes** (Conversations, Prompts, KB Registry) | **Yes** (Direct read queries via `ChromaRetriever`) | **No** (Direct upload stream or presigned URLs) | **Yes** (Publishes ingestion tasks) | WhatsApp webhook, chat turn execution, Admin API |
 | **App Worker** (Celery) | Container (`agriconnect`) | **Yes** (Tickets, customer profiles) | **No** | **No** | **Yes** (Worker consumer) | Outbound WhatsApp sends, retries, broadcasts |
 | **Ingestion Worker** (Celery) | Container (`vector-kb-server`) | **Yes** (Document and chunk records) | **Yes** (Writes embeddings to collections) | **Yes** (Stores and reads raw PDF/Docx files) | **Yes** (Ingestion consumer) | Long-running PDF parsing, OCR, chunk embedding |
 
@@ -678,6 +678,7 @@ flowchart TB
 | **Message Brokers per Partner** | 3 brokers (2 RabbitMQ, 1 Redis) | **1 Redis broker** | Reduced connection overhead & maintenance |
 | **Internal Network Hops per Turn** | ~5 internal HTTP hops | **0 internal hops** | Sub-second latency, zero network dropouts |
 | **Replication Time for New Partner** | 2–3 weeks of deployment & forking | **1–2 days (configuration only)** | Rapid deployment for WASH, Health, Agri |
+| **Silent Answer-Loss Paths** | 3 failure paths (failed HTTP callbacks, unauthenticated endpoints, no retry) | **0 failure paths** | Reliable message delivery; WhatsApp answers never silently dropped |
 
 ---
 
@@ -781,5 +782,3 @@ flowchart TD
 #### Future Improvement 3: Dynamic MCP Gateway for Third-Party Plugins
 * **When to build:** When external third parties or ministry partners provide their own MCP-compliant microservices that must be plugged in dynamically at runtime.
 * **Mechanism:** A dedicated `MCPToolGateway` that dynamically mounts external tools into the LangGraph tool-calling loop using standard MCP client SDKs, with resilient connection pooling and timeouts.
-
-
