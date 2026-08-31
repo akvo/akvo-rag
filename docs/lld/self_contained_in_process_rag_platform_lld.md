@@ -1,26 +1,27 @@
-# Option C RAG Platform Architecture Refactoring Plan
+# Self-Contained In-Process RAG Platform LLD
+**System Low-Level Design (LLD): Reusable Multi-Sector In-Process RAG Architecture**
 
-**Document Title:** Option C (Self-Contained In-Process Application) Task Breakdown & Engineering Plan  
-**Target Systems:** `akvo-rag` + `vector-knowledge-base-mcp-server` + Host Application Integration  
-**Author / Roles:** Architect (Winston), Scrum Master (Bob), Developer (Amelia)  
-**Audience:** Product Managers (Joy), Technical Project Managers (Deden), Developers (Iwan & Galih), DevOps (Anjar)  
-**Date:** 2026-08-31  
-
----
-
-## 1. Executive Summary
-
-Based on the RAG Platform Architecture Review, the platform is transitioning from a distributed multi-namespace microservice topology (~20 workloads across 3 namespaces, 3 databases on 2 engines, multiple Celery queues, and HTTP streaming MCP hops) to **Option C (Self-Contained In-Process Application)**.
-
-### Core Objectives
-1. **In-Process RAG & Retrieval:** Package `akvo-rag` and `vector-knowledge-base-mcp-server` into modular Python libraries (`akvo-rag-core` and `vector-kb-core`) imported directly by the host application (AgriConnect / WASHConnect).
-2. **Eliminate Redundant LLM Latency:** Bypass `ScopingAgent` in the default RAG graph path to save 1.5s–3.0s and 1 model call per question.
-3. **Eliminate Network Fragility:** Delete FastMCP streaming HTTP client, startup blocking discovery, and unauthenticated/unretried HTTP callbacks.
-4. **Single-Namespace Topology:** Reduce per-partner workloads from ~20 to **3 application workloads** (Web App, App Worker, Ingestion Worker) backed by 1 PostgreSQL database, 1 Redis broker, ChromaDB, and MinIO.
+- **Document Identifier:** `LLD-001`
+- **Target Systems:** `akvo-rag` + `vector-knowledge-base-mcp-server` + Host Application (`agriconnect` / `washconnect`)
+- **Author / Roles:** System Architect, Technical Project Manager, Tech Leads
+- **Status:** APPROVED / IN-PROGRESS
+- **Date:** 2026-08-31
 
 ---
 
-## 2. Target Architecture Blueprint (Option C)
+## 1. Executive Summary & Architectural Motivation
+
+Based on the RAG Platform Architecture Review, the current multi-namespace distributed deployment topology (~20 workloads across 3 namespaces, 3 databases on 2 engines, multiple Celery queues, and HTTP streaming MCP hops) is being replaced by a **Self-Contained In-Process Architecture**.
+
+### Key Architectural Shifts
+1. **In-Process RAG & Direct Retrieval:** `akvo-rag` and `vector-knowledge-base-mcp-server` are packaged into modular Python libraries (`akvo-rag-core` and `vector-kb-core`) imported directly by the host application process.
+2. **Elimination of Intermediate Network Hops:** Direct Python function calls replace 4 internal HTTP hops, streaming MCP transport, and unauthenticated/unretried HTTP callbacks.
+3. **Elimination of Redundant LLM Overhead:** The `ScopingAgent` LLM call (which previously made an LLM call whose tool-selection output was discarded) is removed from the default RAG graph path, saving 1.5s–3.0s and 1 model call per question.
+4. **Single-Namespace Deployment:** Reduces per-partner infrastructure from ~20 workloads to **3 application workloads** (Web App, App Worker, Ingestion Worker) backed by 1 PostgreSQL database, 1 Redis broker, ChromaDB, and MinIO.
+
+---
+
+## 2. System Architecture Blueprint
 
 ```mermaid
 flowchart TB
@@ -102,9 +103,9 @@ flowchart LR
 
 ---
 
-## 4. Master Task Matrix & Vibe-Coding Estimates
+## 4. Master Task Matrix & Estimates
 
-| Task Code | Title | Target Repo | Vibe-Coding Est. | Traditional Est. |
+| Task Code | Title | Target Repository | Vibe-Coding Est. | Traditional Est. |
 |---|---|---|---|---|
 | **Phase 1** | **`vector-kb-core` Package Extraction** | | | |
 | `TASK-VKB-101` | Scaffold `vector-kb-core` Package & Typed Interfaces | `vector-kb-mcp-server` | **2.0 hrs** | 1.5 days |
@@ -120,7 +121,7 @@ flowchart LR
 | `TASK-VKB-301` | Add KB Embedding Model & Dimension Guard | `vector-kb-mcp-server` | **2.5 hrs** | 1.5 days |
 | `TASK-VKB-302` | Enrich Documents & Chunks with Public-Sector Metadata | `vector-kb-mcp-server` | **2.0 hrs** | 1.5 days |
 | `TASK-VKB-303` | Package Dedicated Background Ingestion Worker | `vector-kb-mcp-server` | **2.0 hrs** | 1.0 day |
-| **Phase 4** | **Host App In-Process Integration (Option C)** | | | |
+| **Phase 4** | **Host App In-Process Integration** | | | |
 | `TASK-INT-401` | Build `EmbeddedAIService` Adapter in Host Application | Host App (`agriconnect`) | **3.5 hrs** | 2.5 days |
 | `TASK-INT-402` | Unified Single-Namespace Docker Compose & Manifests | Host / Compose | **2.0 hrs** | 1.5 days |
 | **Phase 5** | **Verification, QA & Golden Set Harness** | | | |
@@ -474,7 +475,7 @@ flowchart LR
 
 ---
 
-### Phase 4: Host App In-Process Integration (`Option C`) & Packaging
+### Phase 4: Host App In-Process Integration & Packaging
 
 #### `TASK-INT-401`: Build `EmbeddedAIService` Adapter in Host Application
 * **Repository:** Host App (`agriconnect` / new `washconnect`)
@@ -557,7 +558,7 @@ flowchart LR
   - `backend/RAG_evaluation/datasets/golden_benchmark.json` `[NEW]`
   - `.github/workflows/rag_evaluation.yml` `[NEW]`
 * **User Acceptance Criteria (UAC):**
-  - Automated CI verifies that Option C produces identical or superior answer quality compared to the legacy distributed architecture.
+  - Automated CI verifies that the in-process engine produces identical or superior answer quality compared to the legacy distributed architecture.
 * **Technical Acceptance Criteria (TAC):**
   - Faithfulness score $\ge 0.85$.
   - Answer relevancy score $\ge 0.85$.
