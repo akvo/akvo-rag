@@ -61,57 +61,88 @@ Based on architectural reviews and management directives, the RAG platform is tr
 ## 2. System Architecture Blueprint
 
 ```mermaid
-flowchart TB
-    subgraph Clients["Clients & Host Applications"]
-        WebAdmin["Admin / Developer Browser<br/>(http://localhost:3000)"]
-        PartnerApp["Partner Host App (xxxconnect / WhatsApp)<br/>(POST /api/chat)"]
+sequenceDiagram
+    autonumber
+    
+    box rgb(240, 248, 255) Inbound Clients
+        actor User as User / Partner App<br/>(WhatsApp / Next.js UI)
+    end
+    
+    box rgb(255, 250, 240) Core Akvo-RAG Services
+        participant Backend as akvo-rag-backend<br/>(FastAPI & LangGraph)
+        participant PG as PostgreSQL 17<br/>(Core: Users & Prompts)
+    end
+    
+    box rgb(255, 245, 245) Message Broker
+        participant Redis as Redis Queue<br/>(Request-Reply RPC)
+    end
+    
+    box rgb(245, 255, 245) Pluggable MCP Containers
+        participant VectorMCP as vector-kb-mcp<br/>(Vector Worker & Ingest)
+        participant OtherMCP as other-mcp<br/>(e.g., image-recognition)
+    end
+    
+    box rgb(245, 245, 245) Storage & Cloud APIs
+        participant Chroma as ChromaDB<br/>(Vector Store: kb_id)
+        participant MinIO as MinIO<br/>(S3 Bucket: documents/)
+        participant OpenAI as OpenAI API<br/>(Embeddings & LLMs)
     end
 
-    subgraph AkvoStack["Akvo-RAG Containerized Platform (docker-compose.yml)"]
-        direction TB
-
-        Frontend["akvo-rag-frontend (Next.js 14)<br/>• Port: 3000:3000<br/>• Prompt Management & Chat Playground"]
+    %% ==========================================
+    %% FLOW 1: QUEUE-DRIVEN VECTOR RETRIEVAL & RAG
+    %% ==========================================
+    rect rgb(230, 242, 255)
+        note over User, OpenAI: FLOW 1: Live Conversational Turn with Queue-Backed Vector Retrieval
+        User->>Backend: 1. POST /api/chat { query, kb_ids: [1, 2] }
+        Backend->>PG: 2. Load Prompts & Settings (alembic_version)
         
-        Backend["akvo-rag-backend (FastAPI)<br/>• Port: 8000:8000<br/>• LangGraph RAG Engine<br/>• mcp_config Dispatcher"]
+        critical Ultra-Fast Queue Request-Reply (< 5ms)
+            Backend->>Redis: 3. RPUSH mcp:vector:requests { correlation_id, query, kb_ids }
+            Redis->>VectorMCP: 4. BLPOP mcp:vector:requests
+            VectorMCP->>OpenAI: 5. Generate Query Vector (text-embedding-3-small)
+            OpenAI-->>VectorMCP: 1536-dim Vector
+            VectorMCP->>Chroma: 6. Parallel Cosine Search on Collections: kb_1, kb_2
+            Chroma-->>VectorMCP: Return Top-K Ranked Chunks
+            VectorMCP->>Redis: 7. RPUSH mcp:vector:responses:{correlation_id} { chunks }
+            Redis-->>Backend: 8. BLPOP Return Chunks to Backend
+        end
         
-        Queue[("redis (Redis 7 Queue & Cache)<br/>• Port: 6379:6379<br/>• Request-Reply RPC Queues<br/>• Ingestion Task Queue")]
-
-        subgraph MCPContainers["Pluggable MCP Containers Tier"]
-            VectorMCP["vector-mcp (Vector Retrieval & Ingestion)<br/>• Consumes: mcp:vector:requests<br/>• Queries ChromaDB & Embeds Chunks"]
-            OtherMCP["other_mcp (e.g., image_recognition, weather)<br/>• Consumes: mcp:image:requests<br/>• Vision / External Tool Processing"]
-        end
-
-        subgraph PersistentStorage["Unified Storage Tier (Docker Volumes)"]
-            PG[("postgres (PostgreSQL 17)<br/>• Port: 5432:5432<br/>• Vol: postgres_data<br/>• Users, Prompts, KBs, Chunks")]
-            Chroma[("chromadb (Chroma Vector DB)<br/>• Port: 8000:8000<br/>• Vol: chroma_data<br/>• Collections: kb_1, kb_2...")]
-            MinIO[("minio (Object Storage)<br/>• Ports: 9000 (API), 9001 (Console)<br/>• Vol: minio_data<br/>• Bucket: documents/")]
-        end
+        Backend->>OpenAI: 9. Grounded Answer Generation (gpt-4o-mini)
+        OpenAI-->>Backend: Return Grounded Answer with [citation:N]
+        Backend-->>User: 10. Return RAGResponse { answer, citations, grounded: true }
     end
 
-    subgraph CloudAPIs["External Cloud Providers"]
-        OpenAI["OpenAI API (api.openai.com:443)<br/>• text-embedding-3-small<br/>• gpt-4o-mini"]
+    %% ==========================================
+    %% FLOW 2: DYNAMIC OTHER MCP INVOCATION (e.g. VISION)
+    %% ==========================================
+    rect rgb(255, 243, 230)
+        note over User, OtherMCP: FLOW 2: Dynamic Multi-MCP Invocation (Defined in mcp_config.json)
+        User->>Backend: 11. Request with Image { image_url, crop: 'avocado' }
+        Backend->>Redis: 12. RPUSH mcp:image:requests { correlation_id, tool: 'analyze_crop' }
+        Redis->>OtherMCP: 13. BLPOP mcp:image:requests
+        OtherMCP->>OtherMCP: 14. Execute Vision Model Analysis
+        OtherMCP->>Redis: 15. RPUSH mcp:image:responses:{correlation_id} { diagnosis }
+        Redis-->>Backend: 16. BLPOP Return Diagnosis
+        Backend-->>User: 17. Return Pest/Disease Analysis Result
     end
 
-    %% Client Inbound
-    WebAdmin -->|HTTP 3000| Frontend
-    Frontend -->|REST / SSE 8000| Backend
-    PartnerApp -->|POST /api/chat 8000| Backend
-
-    %% Backend Integrations
-    Backend -->|SQLAlchemy asyncpg: 5432| PG
-    Backend -->|S3 Upload PDF: 9000| MinIO
-    Backend -->|Publish Request: 6379| Queue
-    Backend -->|HTTPS: 443| OpenAI
-
-    %% Queue-Driven MCP Dispatch
-    Queue <-->|Request-Reply RPC| VectorMCP
-    Queue <-->|Request-Reply RPC| OtherMCP
-
-    %% Vector MCP Integrations
-    VectorMCP -->|HTTP: 8000| Chroma
-    VectorMCP -->|Read/Write Chunks: 5432| PG
-    VectorMCP -->|Fetch PDF: 9000| MinIO
-    VectorMCP -->|Embeddings: 443| OpenAI
+    %% ==========================================
+    %% FLOW 3: ASYNCHRONOUS DOCUMENT INGESTION
+    %% ==========================================
+    rect rgb(240, 255, 240)
+        note over User, OpenAI: FLOW 3: Asynchronous PDF Document Ingestion
+        User->>Backend: 18. Upload PDF Manual (POST /api/v1/kb/{id}/documents)
+        Backend->>MinIO: 19. Store Raw PDF in Bucket: documents/
+        Backend->>Redis: 20. RPUSH document_ingestion { document_id, kb_id }
+        Backend-->>User: 21. 202 Accepted (Processing in background)
+        
+        Redis->>VectorMCP: 22. Ingestion Task Consumed by Worker
+        VectorMCP->>MinIO: 23. Download Raw PDF File
+        VectorMCP->>OpenAI: 24. Compute Batch Embeddings for Chunks
+        OpenAI-->>VectorMCP: Return Chunk Vectors
+        VectorMCP->>Chroma: 25. Upsert Vectors to Collection kb_{id}
+        VectorMCP->>VectorMCP: 26. Update Status = INDEXED in vkb_documents
+    end
 ```
 
 ---
