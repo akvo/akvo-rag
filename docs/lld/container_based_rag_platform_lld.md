@@ -665,7 +665,7 @@ sequenceDiagram
 | `TASK-MCP-303` | Integrate `MCPQueueDispatcher` into LangGraph RAG Engine | `backend/app/services/` | **2.5 hrs** | 2.0 days |
 | **Phase 4** | **Document Ingestion & MinIO Storage** | | | |
 | `TASK-ING-401` | Integrate MinIO Client for Document Uploads in FastAPI Backend | `backend/app/services/` | **1.5 hrs** | 1.0 day |
-| `TASK-ING-402` | Build Celery/Redis Async Ingestion Consumer in `vector-mcp` | `vector-kb-mcp/` | **2.0 hrs** | 1.5 days |
+| `TASK-ING-402` | Build Native Async Redis Ingestion Worker in `vector-kb-mcp` | `vector-kb-mcp/` | **2.0 hrs** | 1.5 days |
 | **Phase 5** | **Docker Compose Orchestration & Extensibility Verification** | | | |
 | `TASK-OPS-501` | Author Unified `docker-compose.yml` for All 7 Services | Root `docker-compose.yml` | **2.0 hrs** | 1.5 days |
 | `TASK-OPS-502` | Create Mock External MCP Container (e.g. `mock-image-mcp`) & Verify Config Plug-in | `mock-image-mcp/` | **1.5 hrs** | 1.0 day |
