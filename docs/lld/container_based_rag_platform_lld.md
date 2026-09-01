@@ -693,7 +693,8 @@ sequenceDiagram
 | **Phase 5** | **Docker Compose Orchestration & Quality Gates** | | | |
 | `TASK-OPS-501` | Author Unified `docker-compose.yml` with Healthchecks for All 7 Services | Root `docker-compose.yml` | **2.0 hrs** | 1.5 days |
 | `TASK-OPS-502` | End-to-End Golden Set Accuracy & Legacy Test Gate (Faithfulness $\ge 0.85$) | `backend/RAG_evaluation/` | **2.5 hrs** | 2.0 days |
-| **TOTAL** | | | **30.0 hrs (~4.0 working days)** | **23.5 days** |
+| `TASK-DOC-503` | Comprehensive Developer Onboarding & Architecture Documentation Alignment | `docs/` & `README.md` | **1.5 hrs** | 1.0 day |
+| **TOTAL** | | | **31.5 hrs (~4.0 working days)** | **24.5 days** |
 
 ---
 
@@ -1057,6 +1058,24 @@ sequenceDiagram
     - **Groundedness:** $\ge 0.90$
 * **Technical Acceptance Criteria (TAC):**
   - All unit tests pass cleanly: `pytest tests/unit -v` with 0 failures and 0 regressions.
+
+---
+
+#### `TASK-DOC-503`: Comprehensive Developer Onboarding & Architecture Documentation Alignment
+* **Target Path:** `docs/` & `README.md`
+* **Vibe-Coding Estimate:** `1.5 hours`
+* **Detailed Description:**  
+  Update all developer documentation, architecture guides, and onboarding manuals to reflect the unified 7-container monorepo architecture, Redis queue-based MCP communication, `mcp_config.json` extensibility, service-owned Alembic schema isolation (`alembic_version` / `alembic_version_vkb`), and troubleshooting playbooks.
+* **Key Touchpoints:**
+  - `README.md` `[MODIFY]` (Updated 7-container startup instructions & architecture diagram)
+  - `docs/dev-guide.md` `[MODIFY]` (Local setup, watch mode, running migrations, seed prompts)
+  - `docs/architecture_map.md` `[MODIFY]` (Container topology, Redis queue RPC contracts, MinIO bucket layout)
+  - `docs/admin-guide.md` `[MODIFY]` (Knowledge base management, prompt editing, API key provisioning)
+  - `docs/troubleshooting.md` `[MODIFY]` (Redis queue debugging, timeout tuning, ChromaDB healthchecks)
+* **User Acceptance Criteria (UAC):**
+  - A new developer can clone the repository, spin up the entire platform via `docker compose up -d --build`, run the test suite, and understand how to attach a new MCP tool within 15 minutes.
+* **Technical Acceptance Criteria (TAC):**
+  - Documentation complies with `.agent/rules/docs-standard.md` (root-relative paths only, no hardcoded machine paths, zero credentials/API keys).
 
 ---
 
