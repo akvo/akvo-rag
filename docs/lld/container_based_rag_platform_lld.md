@@ -27,11 +27,11 @@ Based on architectural reviews and management directives, the RAG platform is tr
 │           ┌───────────────────────────────────┼─────────────────────────────────┼──────────┐     │
 │           ▼                                   ▼                                 ▼          ▼     │
 │  ┌─────────────────┐                 ┌─────────────────┐             ┌──────────────┐ ┌────────┐ │
-│  │  PostgreSQL 17  │                 │      MinIO      │             │  vector-mcp  │ │ Other  │ │
-│  │ (Consolidated:  │                 │ (Object Storage:│             │  Container   │ │ MCPs   │ │
-│  │  Users, Prompts,│                 │  documents/     │             │ (ChromaRetr) │ │(Image, │ │
-│  │  KBs, Chunks)   │                 │  raw files)     │             └──────┬───────┘ │Weathr) │ │
-│  └─────────────────┘                 └─────────────────┘                    │         └────────┘ │
+│  │  PostgreSQL 17  │                 │      MinIO      │             │vector-kb-mcp │ │ Other  │ │
+│  │ (Multi-Schema:  │                 │ (Object Storage:│             │  Container   │ │ MCPs   │ │
+│  │  Core + VKB)    │                 │  documents/     │             │ (ChromaRetr) │ │(Image, │ │
+│  └─────────────────┘                 └─────────────────┘             └──────┬───────┘ │Weathr) │ │
+│                                                                             │         └────────┘ │
 │                                                                             ▼                    │
 │                                                                      ┌──────────────┐            │
 │                                                                      │   ChromaDB   │            │
@@ -44,7 +44,7 @@ Based on architectural reviews and management directives, the RAG platform is tr
 1. **Discontinuation of Standalone `vector-knowledge-base-mcp-server` Repo:**
    - All document ingestion, chunking, OpenAI embeddings, and ChromaDB retrieval code is migrated directly into `akvo-rag/vector-kb-mcp/`.
 2. **Container-Based Microservice Isolation:**
-   - `akvo-rag-backend`, `akvo-rag-frontend`, `vector-mcp`, and any `other_mcp` (e.g. image recognition, weather) run as dedicated, isolated Docker containers within the same Docker Compose / Kubernetes network.
+   - `akvo-rag-backend`, `akvo-rag-frontend`, `vector-kb-mcp`, and any `other_mcp` (e.g. image recognition, weather) run as dedicated, isolated Docker containers within the same Docker Compose / Kubernetes network.
 3. **Replacement of HTTP/SSE MCP Calls with High-Speed Redis Queue Request-Reply:**
    - Internal HTTP/HTTPS FastMCP streaming hops between `akvo-rag` and MCP servers are eliminated.
    - Requests are published to designated Redis queues (`mcp:vector:requests`) with correlation IDs, returning results in $< 5\text{ms}$.
@@ -324,7 +324,7 @@ The Docker Compose file (`docker-compose.yml`) defines 7 primary containers:
 |---|---|---|---|---|
 | **`frontend`** | `akvo-rag/frontend` (Next.js 14) | Admin Web Dashboard, Prompt Editor, Chat Playground UI | `3000:3000` | Code bind mount |
 | **`backend`** | `akvo-rag/backend` (FastAPI) | Core API, Auth, LangGraph RAG Workflow, `mcp_config` Dispatcher | `8000:8000` | Code bind mount |
-| **`vector-mcp`** | `akvo-rag/vector-kb-mcp` | Vector similarity search worker and PDF document ingestion worker | Internal | Code bind mount |
+| **`vector-kb-mcp`** | `akvo-rag/vector-kb-mcp` | Vector similarity search worker and PDF document ingestion worker | Internal | Code bind mount |
 | **`postgres`** | `postgres:17-alpine` | Unified relational database for users, prompts, KB metadata, and document chunks | `5432:5432` | `postgres_data:/var/lib/postgresql/data` |
 | **`chromadb`** | `chromadb/chroma:latest` | Vector database storing embeddings per knowledge base collection | `8000:8000` | `chroma_data:/chroma/chroma` |
 | **`minio`** | `minio/minio:latest` | S3-compatible object storage for uploaded PDF files | `9000:9000`, `9001:9001` | `minio_data:/data` |
@@ -390,7 +390,7 @@ sequenceDiagram
     autonumber
     participant RAG as akvo-rag-backend (FastAPI)
     participant Redis as Redis Queue Broker
-    participant Worker as vector-mcp Container
+    participant Worker as vector-kb-mcp Container
     participant Chroma as ChromaDB
 
     Note over RAG, Worker: Step 1: Dispatch Tool Request
@@ -477,7 +477,7 @@ akvo-rag/
 │   └── mcp_config.json       # Static MCP configuration file
 ├── frontend/                 # Next.js 14 Web Dashboard & Chat Playground
 ├── vector-kb-mcp/            # Merged Vector MCP Container (Self-Contained Microservice)
-│   ├── Dockerfile            # Container build for vector-mcp
+│   ├── Dockerfile            # Container build for vector-kb-mcp
 │   ├── requirements.txt      # PDF parsing & ChromaDB dependencies
 │   ├── main.py               # Redis Queue Worker entrypoint
 │   ├── alembic/              # Vector-KB Alembic Migrations (version_table = 'alembic_version_vkb')
@@ -520,7 +520,7 @@ Consolidated PostgreSQL 17 Database
 2. **Pluggable Blueprint for Future MCPs:** Any new MCP (e.g. `image-recognition-mcp` or `weather-mcp`) can follow the exact same pattern with its own `img_` table prefix and `alembic_version_img` table.
 3. **Independent Startup Lifecycle:**
    - On boot, `akvo-rag-backend` executes: `alembic -c alembic.ini upgrade head`
-   - On boot, `vector-mcp` executes: `alembic -c alembic.ini upgrade head`
+   - On boot, `vector-kb-mcp` executes: `alembic -c alembic.ini upgrade head`
    - Since each uses a dedicated `version_table`, they never conflict or overwrite each other.
 
 ### 6.2 Schema Registry
@@ -591,7 +591,7 @@ sequenceDiagram
     actor User as User / WhatsApp / Web
     participant Backend as akvo-rag-backend (FastAPI)
     participant Redis as Redis Queue (Broker)
-    participant VectorMCP as vector-mcp Container
+    participant VectorMCP as vector-kb-mcp Container
     participant Chroma as ChromaDB
     participant OpenAI as OpenAI API
 
@@ -625,7 +625,7 @@ sequenceDiagram
     participant MinIO as MinIO Object Storage
     participant PG as PostgreSQL 17
     participant Redis as Redis Queue
-    participant VectorMCP as vector-mcp Container
+    participant VectorMCP as vector-kb-mcp Container
     participant Chroma as ChromaDB
     participant OpenAI as OpenAI API
 
@@ -642,7 +642,7 @@ sequenceDiagram
     VectorMCP->>OpenAI: 10. Compute Batch Embeddings
     OpenAI-->>VectorMCP: Return Chunk Vectors
     VectorMCP->>Chroma: 11. Upsert Embeddings into Collection kb_{id}
-    VectorMCP->>PG: 12. Save Chunk Records & Update Status = INDEXED
+    VectorMCP->>PG: 12. Save Chunk Records & Update Status = INDEXED (vkb_documents / alembic_version_vkb)
     Frontend->>Backend: 13. Poll KB Status -> Shows "Indexed"
 ```
 
@@ -654,7 +654,7 @@ sequenceDiagram
 |---|---|---|---|---|
 | **Phase 1** | **Codebase Consolidation & Monorepo Setup** | | | |
 | `TASK-MONO-101` | Migrate `vector-kb` Parsing & Chunking Code into `vector-kb-mcp/` | `vector-kb-mcp/` | **2.5 hrs** | 2.0 days |
-| `TASK-MONO-102` | Build `vector-mcp` Dockerfile & Redis Worker Entrypoint | `vector-kb-mcp/Dockerfile` | **2.0 hrs** | 1.5 days |
+| `TASK-MONO-102` | Build `vector-kb-mcp` Dockerfile & Redis Worker Entrypoint | `vector-kb-mcp/Dockerfile` | **2.0 hrs** | 1.5 days |
 | **Phase 2** | **Unified Database & Service-Owned Migration Strategy** | | | |
 | `TASK-DB-201` | Port Vector-KB SQLAlchemy Models into `vector-kb-mcp/models/` | `vector-kb-mcp/models/` | **2.0 hrs** | 1.5 days |
 | `TASK-DB-202` | Setup Service-Owned Alembic Migrations (`alembic_version_vkb`) | `vector-kb-mcp/alembic/` | **1.5 hrs** | 1.0 day |
