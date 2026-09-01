@@ -672,34 +672,402 @@ sequenceDiagram
 | Task Code | Title | Component / Path | Vibe-Coding Est. | Traditional Est. |
 |---|---|---|---|---|
 | **Phase 1** | **Codebase Consolidation & Monorepo Setup** | | | |
-| `TASK-MONO-101` | Migrate `vector-kb` Parsing, Chunking & 1536-dim Embedding Guard into `vector-kb-mcp/` | `vector-kb-mcp/` | **2.5 hrs** | 2.0 days |
+| `TASK-MONO-101` | Migrate `vector-kb` Parsing, Chunking & Chroma Direct Search into `vector-kb-mcp/` | `vector-kb-mcp/` | **2.5 hrs** | 2.0 days |
 | `TASK-MONO-102` | Build `vector-kb-mcp` Dockerfile & Native Async Redis Worker Entrypoint | `vector-kb-mcp/Dockerfile` | **2.0 hrs** | 1.5 days |
-| **Phase 2** | **Unified Database & Service-Owned Migration Strategy** | | | |
-| `TASK-DB-201` | Port Vector-KB SQLAlchemy Models into `vector-kb-mcp/models/` | `vector-kb-mcp/models/` | **2.0 hrs** | 1.5 days |
+| `TASK-TEST-103` | Unit & Integration Test Suite for `vector-kb-mcp` (Parser, Chunker, Retriever & Redis Worker) | `vector-kb-mcp/tests/` | **1.5 hrs** | 1.0 day |
+| **Phase 2** | **Unified Database, Schema Isolation & Metadata Hardening** | | | |
+| `TASK-DB-201` | Port Vector-KB SQLAlchemy Models into `vector-kb-mcp/models/` | `vector-kb-mcp/models/` | **1.5 hrs** | 1.0 day |
 | `TASK-DB-202` | Setup Service-Owned Alembic Migrations (`alembic_version_vkb`) | `vector-kb-mcp/alembic/` | **1.5 hrs** | 1.0 day |
 | `TASK-DB-203` | PostgreSQL Adapter (`asyncpg`) & Automated Legacy Data Migration CLI | `backend/app/scripts/` | **2.0 hrs** | 1.5 days |
+| `TASK-DB-204` | Enrich `KnowledgeBase` & `Document` Models with Metadata & 1536-dim Embedding Guard | `vector-kb-mcp/models/` | **1.5 hrs** | 1.0 day |
 | **Phase 3** | **Queue-Backed MCP Dispatcher, Scoping Removal & FastMCP Purge** | | | |
 | `TASK-MCP-301` | Implement `mcp_config.json` Declarative Schema & Static Parser | `backend/app/core/` | **1.0 hr** | 1.0 day |
 | `TASK-MCP-302` | Build `MCPQueueDispatcher` (Redis Request-Reply with Correlation ID) | `backend/app/services/` | **3.0 hrs** | 2.5 days |
 | `TASK-MCP-303` | Integrate `MCPQueueDispatcher` into LangGraph RAG Engine & Purge Legacy FastMCP Client | `backend/app/services/` | **2.0 hrs** | 1.5 days |
 | `TASK-MCP-304` | Remove `ScopingAgent` Redundant LLM Call & Route Directly to Vector Queue | `backend/app/services/` | **1.5 hrs** | 1.0 day |
+| `TASK-MCP-305` | Dynamic Prompt Resolver (`PromptService`) with PostgreSQL 17 Overlays | `backend/app/services/` | **1.5 hrs** | 1.0 day |
+| `TASK-TEST-306` | Backend Unit & Integration Test Suite (Dispatcher, RAG Graph, Config Parser, Session) | `backend/tests/` | **2.0 hrs** | 1.5 days |
 | **Phase 4** | **Document Ingestion, MinIO Storage & Celery Deletion** | | | |
 | `TASK-ING-401` | Integrate MinIO S3 Client in FastAPI & Purge Legacy Celery/RabbitMQ Code | `backend/app/services/` | **1.5 hrs** | 1.0 day |
 | `TASK-ING-402` | Build Native Async Redis Ingestion Consumer in `vector-kb-mcp` | `vector-kb-mcp/` | **2.0 hrs** | 1.5 days |
-| **Phase 5** | **Docker Compose Orchestration & Verification** | | | |
+| **Phase 5** | **Docker Compose Orchestration & Quality Gates** | | | |
 | `TASK-OPS-501` | Author Unified `docker-compose.yml` with Healthchecks for All 7 Services | Root `docker-compose.yml` | **2.0 hrs** | 1.5 days |
 | `TASK-OPS-502` | End-to-End Golden Set Accuracy & Legacy Test Gate (Faithfulness $\ge 0.85$) | `backend/RAG_evaluation/` | **2.5 hrs** | 2.0 days |
-| **TOTAL** | | | **25.5 hrs (~3.5 working days)** | **20.0 days** |
+| **TOTAL** | | | **30.0 hrs (~4.0 working days)** | **23.5 days** |
 
 ---
 
-## 9. Verification & Quality Gates
+## 9. Detailed Task Specifications & Acceptance Criteria
 
-1. **Legacy Test Gate:**
-   - Execute unit tests: `docker exec akvo-rag-backend-1 python -m pytest tests/unit -v`.
-   - All tests must pass cleanly against PostgreSQL 17.
+### Phase 1: Codebase Consolidation & Monorepo Setup
+
+#### `TASK-MONO-101`: Migrate `vector-kb` Parsing, Chunking & Chroma Direct Search into `vector-kb-mcp/`
+* **Target Path:** `vector-kb-mcp/`
+* **Vibe-Coding Estimate:** `2.5 hours`
+* **Detailed Description:**  
+  Extract document parsing (PDF, DOCX), token chunking (`RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)`), and direct ChromaDB similarity search from `vector-knowledge-base-mcp-server` into `vector-kb-mcp/`. Implement direct Chroma collection search without FastMCP or base64 wrappers.
+* **Key Touchpoints:**
+  - `vector-kb-mcp/parser/pdf_parser.py` `[NEW]`
+  - `vector-kb-mcp/chunker/text_chunker.py` `[NEW]`
+  - `vector-kb-mcp/retriever/chroma_retriever.py` `[NEW]`
+  - `vector-kb-mcp/requirements.txt` `[NEW]`
+* **Code Specification:**
+  ```python
+  # vector-kb-mcp/retriever/chroma_retriever.py
+  from dataclasses import dataclass, field
+  from typing import List, Dict, Any, Optional
+  import chromadb
+  from openai import AsyncOpenAI
+
+  @dataclass(frozen=True)
+  class RetrievedChunk:
+      content: str
+      kb_id: int
+      document_id: str
+      chunk_id: str
+      score: float
+      metadata: Dict[str, Any] = field(default_factory=dict)
+
+  class ChromaRetriever:
+      def __init__(self, chroma_client: chromadb.ClientAPI, openai_client: AsyncOpenAI, embedding_model: str = "text-embedding-3-small"):
+          self.chroma = chroma_client
+          self.openai = openai_client
+          self.embedding_model = embedding_model
+
+      async def search(self, query: str, kb_ids: List[int], top_k: int = 4, score_threshold: Optional[float] = None) -> List[RetrievedChunk]:
+          emb_resp = await self.openai.embeddings.create(input=[query], model=self.embedding_model)
+          query_vector = emb_resp.data[0].embedding
+          # Multi-KB parallel query and score ranking
+          ...
+  ```
+* **User Acceptance Criteria (UAC):**
+  - Vector similarity search returns relevant document chunks from multiple knowledge bases in $< 50\text{ms}$.
+* **Technical Acceptance Criteria (TAC):**
+  - Zero dependencies on FastMCP or HTTP client wrappers inside `vector-kb-mcp/retriever/`.
+  - Type annotations pass `mypy --strict`.
+
+---
+
+#### `TASK-MONO-102`: Build `vector-kb-mcp` Dockerfile & Native Async Redis Worker Entrypoint
+* **Target Path:** `vector-kb-mcp/`
+* **Vibe-Coding Estimate:** `2.0 hours`
+* **Detailed Description:**  
+  Build the container runtime for `vector-kb-mcp`. Implement the main Redis event loop (`main.py`) that uses `BLPOP` to listen for tool requests on `mcp:vector:requests`, executes `ChromaRetriever.search()`, and returns results via `RPUSH` to `mcp:vector:responses:{correlation_id}` with TTL expiry.
+* **Key Touchpoints:**
+  - `vector-kb-mcp/Dockerfile` `[NEW]`
+  - `vector-kb-mcp/main.py` `[NEW]`
+  - `vector-kb-mcp/core/config.py` `[NEW]`
+* **Code Specification:**
+  ```python
+  # vector-kb-mcp/main.py
+  import json
+  import asyncio
+  import redis.asyncio as redis
+  from retriever.chroma_retriever import ChromaRetriever
+
+  async def mcp_worker_loop():
+      r = redis.from_url(REDIS_URL, decode_responses=True)
+      retriever = ChromaRetriever(...)
+      while True:
+          item = await r.blpop("mcp:vector:requests", timeout=0)
+          if not item:
+              continue
+          _, raw_payload = item
+          msg = json.loads(raw_payload)
+          correlation_id = msg["correlation_id"]
+          response_queue = msg["response_queue"]
+          args = msg.get("arguments", {})
+
+          chunks = await retriever.search(
+              query=args["query"],
+              kb_ids=args["kb_ids"],
+              top_k=args.get("top_k", 4),
+              score_threshold=args.get("score_threshold")
+          )
+          payload = {"status": "ok", "data": [c.__dict__ for c in chunks]}
+          await r.rpush(response_queue, json.dumps(payload))
+          await r.expire(response_queue, 60)
+  ```
+* **User Acceptance Criteria (UAC):**
+  - Worker starts up cleanly, registers with Redis, and replies to vector queries in $< 5\text{ms}$ queue latency.
+* **Technical Acceptance Criteria (TAC):**
+  - Dockerfile uses lightweight `python:3.11-slim`.
+  - Handles SIGTERM/SIGINT gracefully without dropping in-flight requests.
+
+---
+
+#### `TASK-TEST-103`: Unit & Integration Test Suite for `vector-kb-mcp`
+* **Target Path:** `vector-kb-mcp/tests/`
+* **Vibe-Coding Estimate:** `1.5 hours`
+* **Detailed Description:**  
+  Implement a complete test suite for `vector-kb-mcp` validating text extractors, PDF parsers, chunk token boundaries, ChromaRetriever query execution, and the Redis request-reply worker loop using `fakeredis` or test containers.
+* **Key Touchpoints:**
+  - `vector-kb-mcp/tests/test_parser.py` `[NEW]`
+  - `vector-kb-mcp/tests/test_chunker.py` `[NEW]`
+  - `vector-kb-mcp/tests/test_retriever.py` `[NEW]`
+  - `vector-kb-mcp/tests/test_redis_worker.py` `[NEW]`
+* **User Acceptance Criteria (UAC):**
+  - All tests execute and pass via `pytest` inside the `vector-kb-mcp` container.
+* **Technical Acceptance Criteria (TAC):**
+  - Test suite achieves $\ge 85\%$ line coverage across `parser/`, `chunker/`, and `retriever/`.
+
+---
+
+### Phase 2: Unified Database, Schema Isolation & Metadata Hardening
+
+#### `TASK-DB-201`: Port Vector-KB SQLAlchemy Models into `vector-kb-mcp/models/`
+* **Target Path:** `vector-kb-mcp/models/`
+* **Vibe-Coding Estimate:** `1.5 hours`
+* **Detailed Description:**  
+  Port `KnowledgeBase`, `Document`, and `DocumentChunk` models from the legacy repository into `vector-kb-mcp/models/`. Use SQLAlchemy 2.0 declarative models matching PostgreSQL 17 datatypes (UUID, JSONB, TIMESTAMP with timezone).
+* **Key Touchpoints:**
+  - `vector-kb-mcp/models/__init__.py` `[NEW]`
+  - `vector-kb-mcp/models/knowledge_base.py` `[NEW]`
+  - `vector-kb-mcp/models/document.py` `[NEW]`
+  - `vector-kb-mcp/models/document_chunk.py` `[NEW]`
+* **User Acceptance Criteria (UAC):**
+  - Relational metadata for knowledge bases, uploaded documents, and chunks are tracked accurately in PostgreSQL 17.
+* **Technical Acceptance Criteria (TAC):**
+  - ForeignKey relationships link `documents.kb_id -> knowledge_bases.id` and `document_chunks.document_id -> documents.id`.
+
+---
+
+#### `TASK-DB-202`: Setup Service-Owned Alembic Migrations (`alembic_version_vkb`)
+* **Target Path:** `vector-kb-mcp/alembic/`
+* **Vibe-Coding Estimate:** `1.5 hours`
+* **Detailed Description:**  
+  Configure a dedicated, service-owned Alembic environment inside `vector-kb-mcp/`. Configure `env.py` and `alembic.ini` with `version_table = "alembic_version_vkb"`. Generate the initial migration script creating `vkb_knowledge_bases`, `vkb_documents`, and `vkb_document_chunks`.
+* **Key Touchpoints:**
+  - `vector-kb-mcp/alembic.ini` `[NEW]`
+  - `vector-kb-mcp/alembic/env.py` `[NEW]`
+  - `vector-kb-mcp/alembic/versions/001_initial_vkb_schema.py` `[NEW]`
+* **User Acceptance Criteria (UAC):**
+  - Running `alembic upgrade head` creates all vector KB tables without interfering with core tables (`users`, `prompts`, `chats`).
+* **Technical Acceptance Criteria (TAC):**
+  - `version_table` is explicitly isolated to prevent migration state collisions in PostgreSQL 17.
+
+---
+
+#### `TASK-DB-203`: PostgreSQL Adapter (`asyncpg`) & Automated Legacy Data Migration CLI
+* **Target Path:** `backend/app/scripts/` & `backend/app/core/`
+* **Vibe-Coding Estimate:** `2.0 hours`
+* **Detailed Description:**  
+  Update `backend/app/core/config.py` and `backend/app/db/session.py` to connect to PostgreSQL 17 using `asyncpg`. Build an automated CLI ETL script (`migrate_legacy_to_consolidated_postgres.py`) to extract all users, prompts, chats, and vector KB records from legacy MySQL and PostgreSQL instances into the new database.
+* **Key Touchpoints:**
+  - `backend/app/core/config.py` `[MODIFY]`
+  - `backend/app/db/session.py` `[MODIFY]`
+  - `backend/app/scripts/migrate_legacy_to_consolidated_postgres.py` `[NEW]`
+* **Code Specification:**
+  ```python
+  # CLI execution command
+  python -m app.scripts.migrate_legacy_to_consolidated_postgres \
+    --mysql-url "mysql+pymysql://user:pass@mysql:3306/akvo_rag" \
+    --legacy-pg-url "postgresql://user:pass@legacy_vkb:5432/vector_kb" \
+    --target-pg-url "postgresql+asyncpg://postgres:postgres@postgres:5432/akvo_rag"
+  ```
+* **User Acceptance Criteria (UAC):**
+  - All existing prompt versions, admin users, apps, and knowledge bases migrate into PostgreSQL 17 with 0 data loss.
+* **Technical Acceptance Criteria (TAC):**
+  - Idempotent execution (safe to run multiple times with UPSERT logic).
+
+---
+
+#### `TASK-DB-204`: Enrich `KnowledgeBase` & `Document` Models with Metadata & 1536-dim Embedding Guard
+* **Target Path:** `vector-kb-mcp/models/`
+* **Vibe-Coding Estimate:** `1.5 hours`
+* **Detailed Description:**  
+  Add public-sector and governance metadata fields to `documents` (`doc_version`, `issuing_authority`, `effective_date`, `doc_type`, `jurisdiction`). Add `embedding_model` (default: `text-embedding-3-small`) and `embedding_dim` (default: 1536) to `knowledge_bases` with validation guards that reject query/ingest attempts if dimension mismatch occurs.
+* **Key Touchpoints:**
+  - `vector-kb-mcp/models/knowledge_base.py` `[MODIFY]`
+  - `vector-kb-mcp/models/document.py` `[MODIFY]`
+  - `vector-kb-mcp/models/document_chunk.py` `[MODIFY]`
+* **User Acceptance Criteria (UAC):**
+  - Document citations include issuing authority, effective date, and edition (e.g. *"National Water Standard 2024, Ministry of Water, Section 4"*).
+* **Technical Acceptance Criteria (TAC):**
+  - Database schema includes indices on `(kb_id, status)` and `(document_id, chunk_index)`.
+
+---
+
+### Phase 3: Queue-Backed MCP Dispatcher, Scoping Removal & FastMCP Purge
+
+#### `TASK-MCP-301`: Implement `mcp_config.json` Declarative Schema & Static Parser
+* **Target Path:** `backend/app/core/` & `backend/mcp_config.json`
+* **Vibe-Coding Estimate:** `1.0 hour`
+* **Detailed Description:**  
+  Define the declarative static MCP registry schema in `backend/mcp_config.json`. Implement a type-safe parser (`backend/app/core/mcp_config.py`) that loads server definitions, tool schemas, request/reply queue names, and timeout values at FastAPI startup.
+* **Key Touchpoints:**
+  - `backend/mcp_config.json` `[NEW]`
+  - `backend/app/core/mcp_config.py` `[NEW]`
+* **User Acceptance Criteria (UAC):**
+  - Adding a new tool to `mcp_config.json` immediately exposes the tool to the backend without code modifications.
+* **Technical Acceptance Criteria (TAC):**
+  - Pydantic v2 validation enforces presence of `mcp_name`, `request_queue`, `response_prefix`, and `timeout_ms`.
+
+---
+
+#### `TASK-MCP-302`: Build `MCPQueueDispatcher` (Redis Request-Reply with Correlation ID)
+* **Target Path:** `backend/app/services/`
+* **Vibe-Coding Estimate:** `3.0 hours`
+* **Detailed Description:**  
+  Implement the high-performance async Redis Request-Reply client (`MCPQueueDispatcher`). It generates a unique UUID `correlation_id` per tool call, pushes the payload to `mcp:{name}:requests`, and awaits the response on `mcp:{name}:responses:{correlation_id}` using `BLPOP` with sub-10ms overhead.
+* **Key Touchpoints:**
+  - `backend/app/services/mcp_queue_dispatcher.py` `[NEW]`
+* **Code Specification:**
+  ```python
+  # backend/app/services/mcp_queue_dispatcher.py
+  class MCPQueueDispatcher:
+      async def call_tool(self, mcp_name: str, tool_name: str, arguments: Dict[str, Any], timeout_seconds: float = 5.0) -> Dict[str, Any]:
+          ...
+  ```
+* **User Acceptance Criteria (UAC):**
+  - Core RAG engine invokes remote MCP tools with $< 5\text{ms}$ queue latency and clean error propagation on timeout.
+* **Technical Acceptance Criteria (TAC):**
+  - Fully asynchronous with `redis.asyncio`. Connection pooling configured for high concurrency.
+
+---
+
+#### `TASK-MCP-303`: Integrate `MCPQueueDispatcher` into LangGraph RAG Engine & Purge Legacy FastMCP Client
+* **Target Path:** `backend/app/services/` & `backend/mcp_clients/`
+* **Vibe-Coding Estimate:** `2.0 hours`
+* **Detailed Description:**  
+  Refactor the LangGraph workflow (`query_answering_workflow.py`) to execute retrieval tool calls via `MCPQueueDispatcher.call_tool("vector", "query_knowledge_base", ...)`. Delete legacy FastMCP HTTP transport files and startup discovery managers.
+* **Key Touchpoints:**
+  - `backend/app/services/query_answering_workflow.py` `[MODIFY]`
+  - `backend/mcp_clients/fastmcp_client_service.py` `[DELETE]`
+  - `backend/mcp_clients/mcp_discovery_manager.py` `[DELETE]`
+  - `backend/mcp_clients/mcp_servers_config.py` `[DELETE]`
+* **User Acceptance Criteria (UAC):**
+  - Live chat queries return grounded answers with citations without making any HTTP hops to vector services.
+* **Technical Acceptance Criteria (TAC):**
+  - Deletion of ~900 lines of legacy HTTP reconnect/retry/discovery code.
+
+---
+
+#### `TASK-MCP-304`: Remove `ScopingAgent` Redundant LLM Call & Route Directly to Vector Queue
+* **Target Path:** `backend/app/services/`
+* **Vibe-Coding Estimate:** `1.5 hours`
+* **Detailed Description:**  
+  Remove the `scoping_node` from the primary LangGraph execution graph. Route execution directly from `contextualize` $\rightarrow$ `vector_queue_rpc` $\rightarrow$ `generate_answer`, saving 1.5s–3.0s of latency and 1 LLM API call per turn.
+* **Key Touchpoints:**
+  - `backend/app/services/query_answering_workflow.py` `[MODIFY]`
+  - `backend/app/services/scoping_agent.py` `[MODIFY / DEPRECATE]`
+* **User Acceptance Criteria (UAC):**
+  - End-to-end question answering latency drops by 1.5s–3.0s on the default knowledge query path.
+* **Technical Acceptance Criteria (TAC):**
+  - LangGraph node graph passes tests with direct edge `contextualize -> retrieve`.
+
+---
+
+#### `TASK-MCP-305`: Dynamic Prompt Resolver (`PromptService`) with PostgreSQL 17 Overlays
+* **Target Path:** `backend/app/services/`
+* **Vibe-Coding Estimate:** `1.5 hours`
+* **Detailed Description:**  
+  Refactor `PromptService` to dynamically query PostgreSQL 17 (`prompt_definitions` and `prompt_versions`), applying application/tenant prompt overlays (e.g. `AgriConnect` or `WASH` system instructions) with fallback to hardcoded default constants.
+* **Key Touchpoints:**
+  - `backend/app/services/prompt_service.py` `[MODIFY]`
+  - `backend/app/seeder/seed_prompts.py` `[MODIFY]`
+* **User Acceptance Criteria (UAC):**
+  - Editing prompts in the Admin UI immediately takes effect on the next conversation turn without container restart.
+* **Technical Acceptance Criteria (TAC):**
+  - In-memory LRU cache (TTL = 60s) with explicit cache invalidation endpoint on prompt update.
+
+---
+
+#### `TASK-TEST-306`: Backend Unit & Integration Test Suite (Dispatcher, RAG Graph, Config Parser, Session)
+* **Target Path:** `backend/tests/`
+* **Vibe-Coding Estimate:** `2.0 hours`
+* **Detailed Description:**  
+  Implement unit and integration tests verifying `MCPQueueDispatcher` Redis RPC request-reply, timeout handling, `mcp_config.json` validation, PostgreSQL 17 session handling, and LangGraph workflow execution with direct vector queue retrieval.
+* **Key Touchpoints:**
+  - `backend/tests/services/test_mcp_queue_dispatcher.py` `[NEW]`
+  - `backend/tests/core/test_mcp_config.py` `[NEW]`
+  - `backend/tests/services/test_query_answering_workflow.py` `[MODIFY]`
+  - `backend/tests/services/test_prompt_service.py` `[MODIFY]`
+* **User Acceptance Criteria (UAC):**
+  - All backend unit and integration tests run and pass cleanly via `pytest tests/unit -v`.
+* **Technical Acceptance Criteria (TAC):**
+  - Mock Redis and mock OpenAI clients ensure tests run deterministically offline in $< 10\text{s}$.
+
+---
+
+### Phase 4: Document Ingestion, MinIO Storage & Celery Deletion
+
+#### `TASK-ING-401`: Integrate MinIO S3 Client in FastAPI & Purge Legacy Celery/RabbitMQ Code
+* **Target Path:** `backend/app/services/` & `backend/app/tasks/`
+* **Vibe-Coding Estimate:** `1.5 hours`
+* **Detailed Description:**  
+  Integrate MinIO S3 client for saving uploaded PDF files into bucket `documents/`. Enqueue processing tasks directly to Redis queue `document_ingestion`. Delete legacy `celery_app.py`, RabbitMQ configurations, and `backend/app/tasks/`.
+* **Key Touchpoints:**
+  - `backend/app/services/minio_service.py` `[NEW]`
+  - `backend/app/api/api_v1/knowledge_bases.py` `[MODIFY]`
+  - `backend/app/celery_app.py` `[DELETE]`
+  - `backend/app/tasks/upload_task.py` `[DELETE]`
+  - `backend/app/tasks/chat_task.py` `[DELETE]`
+* **User Acceptance Criteria (UAC):**
+  - Admin document upload saves raw PDF to MinIO, creates `vkb_documents` record, and enqueues task to Redis.
+* **Technical Acceptance Criteria (TAC):**
+  - Celery and RabbitMQ completely eliminated from `backend/requirements.txt` and codebase.
+
+---
+
+#### `TASK-ING-402`: Build Native Async Redis Ingestion Consumer in `vector-kb-mcp`
+* **Target Path:** `vector-kb-mcp/`
+* **Vibe-Coding Estimate:** `2.0 hours`
+* **Detailed Description:**  
+  Implement the background document ingestion consumer inside `vector-kb-mcp/`. Consumes from Redis `document_ingestion`, downloads raw file from MinIO, parses text/OCR, splits tokens, computes OpenAI embeddings, upserts vectors into ChromaDB `kb_{id}`, and updates document status to `INDEXED` in PostgreSQL 17.
+* **Key Touchpoints:**
+  - `vector-kb-mcp/ingestion/worker.py` `[NEW]`
+  - `vector-kb-mcp/ingestion/processor.py` `[NEW]`
+* **User Acceptance Criteria (UAC):**
+  - Uploaded documents process asynchronously in the background and become immediately searchable in $< 15\text{s}$.
+* **Technical Acceptance Criteria (TAC):**
+  - Catches parsing errors and safely updates document status to `FAILED` with detailed error logs.
+
+---
+
+### Phase 5: Docker Compose Orchestration & Quality Gates
+
+#### `TASK-OPS-501`: Author Unified `docker-compose.yml` with Healthchecks for All 7 Services
+* **Target Path:** Root `docker-compose.yml`
+* **Vibe-Coding Estimate:** `2.0 hours`
+* **Detailed Description:**  
+  Create the unified 7-container Docker Compose file (`frontend`, `backend`, `vector-kb-mcp`, `postgres`, `redis`, `chromadb`, `minio`). Include strict healthchecks (`pg_isready`, `redis-cli ping`, ChromaDB heartbeat) and `depends_on: { condition: service_healthy }` to eliminate startup race conditions.
+* **Key Touchpoints:**
+  - `docker-compose.yml` `[NEW / OVERWRITE]`
+  - `.env.example` `[MODIFY]`
+* **User Acceptance Criteria (UAC):**
+  - Executing `docker compose up -d --build` starts all 7 containers cleanly and reaches healthy state with zero crashes.
+* **Technical Acceptance Criteria (TAC):**
+  - Volume definitions persist `postgres_data`, `redis_data`, `chroma_data`, and `minio_data`.
+
+---
+
+#### `TASK-OPS-502`: End-to-End Golden Set Accuracy & Legacy Test Gate (Faithfulness $\ge 0.85$)
+* **Target Path:** `backend/RAG_evaluation/`
+* **Vibe-Coding Estimate:** `2.5 hours`
+* **Detailed Description:**  
+  Run the automated headless evaluation harness (`backend/RAG_evaluation/run_e2e_tests_headless_container.sh`) against the golden evaluation dataset on the consolidated PostgreSQL 17 and ChromaDB stack. Assert quality thresholds across RAG metrics.
+* **Key Touchpoints:**
+  - `backend/RAG_evaluation/headless_evaluation.py` `[MODIFY]`
+  - `backend/RAG_evaluation/run_e2e_tests_headless_container.sh` `[MODIFY]`
+* **User Acceptance Criteria (UAC):**
+  - RAGAS evaluation passes with:
+    - **Faithfulness:** $\ge 0.85$
+    - **Answer Relevancy:** $\ge 0.85$
+    - **Groundedness:** $\ge 0.90$
+* **Technical Acceptance Criteria (TAC):**
+  - All unit tests pass cleanly: `pytest tests/unit -v` with 0 failures and 0 regressions.
+
+---
+
+## 10. Verification & Quality Gates
+
+1. **Legacy & Unit Test Gate:**
+   - Execute backend unit tests: `docker exec akvo-rag-backend-1 python -m pytest tests/unit -v`.
+   - Execute vector KB unit tests: `docker exec akvo-rag-vector-kb-mcp-1 python -m pytest tests/ -v`.
+   - All tests must pass cleanly against PostgreSQL 17 with 0 errors.
 2. **Queue Request-Reply Latency Assertion:**
-   - Benchmark `MCPQueueDispatcher.call_tool("vector", ...)`: Must return in $< 10\text{ms}$ queue overhead (excluding Chroma/OpenAI compute).
+   - Benchmark `MCPQueueDispatcher.call_tool("vector", ...)`: Must return in $< 5\text{ms}$ queue overhead (excluding Chroma/OpenAI compute).
 3. **Multi-MCP Extensibility Gate:**
    - Add mock tool to `mcp_config.json` $\rightarrow$ verify backend dynamically discovers and routes tool calls to the mock queue without code alterations.
 4. **Golden Set RAGAS Evaluation:**
@@ -707,3 +1075,4 @@ sequenceDiagram
      - Faithfulness $\ge 0.85$
      - Answer Relevancy $\ge 0.85$
      - Groundedness $\ge 0.90$
+
