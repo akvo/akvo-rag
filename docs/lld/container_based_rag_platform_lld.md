@@ -60,88 +60,257 @@ Based on architectural reviews and management directives, the RAG platform is tr
 
 ## 2. System Architecture Blueprint
 
+This section provides 4 comprehensive, color-coded Mermaid sequence diagrams covering every standalone and host-embedded operational mode.
+
+---
+
+### 2.1 Mode 1: `akvo-rag` + `vector-kb-mcp` Only (Base RAG Platform)
+*Standalone deployment with Next.js web playground, FastAPI RAG backend, and internal queue-backed vector retrieval.*
+
 ```mermaid
 sequenceDiagram
     autonumber
     
-    box rgb(240, 248, 255) Inbound Clients
-        actor User as User / Partner App<br/>(WhatsApp / Next.js UI)
+    box rgb(240, 248, 255) Web Client
+        actor User as Admin / Developer<br/>(Next.js Web UI :3000)
     end
     
-    box rgb(255, 250, 240) Core Akvo-RAG Services
-        participant Backend as akvo-rag-backend<br/>(FastAPI & LangGraph)
-        participant PG as PostgreSQL 17<br/>(Core: Users & Prompts)
+    box rgb(255, 250, 240) Core Akvo-RAG Backend
+        participant Backend as akvo-rag-backend<br/>(FastAPI :8000)
+        participant PG as PostgreSQL 17<br/>(Users, Prompts)
     end
     
     box rgb(255, 245, 245) Message Broker
-        participant Redis as Redis Queue<br/>(Request-Reply RPC)
+        participant Redis as Redis Queue<br/>(RPC & Tasks :6379)
     end
     
-    box rgb(245, 255, 245) Pluggable MCP Containers
-        participant VectorMCP as vector-kb-mcp<br/>(Vector Worker & Ingest)
-        participant OtherMCP as other-mcp<br/>(e.g., image-recognition)
+    box rgb(245, 255, 245) Vector Microservice
+        participant VectorMCP as vector-kb-mcp<br/>(Vector Worker & Ingestion)
     end
     
-    box rgb(245, 245, 245) Storage & Cloud APIs
-        participant Chroma as ChromaDB<br/>(Vector Store: kb_id)
-        participant MinIO as MinIO<br/>(S3 Bucket: documents/)
-        participant OpenAI as OpenAI API<br/>(Embeddings & LLMs)
+    box rgb(245, 245, 245) Datastores & AI APIs
+        participant Chroma as ChromaDB<br/>(Vector DB :8000)
+        participant MinIO as MinIO<br/>(PDF Storage :9000)
+        participant OpenAI as OpenAI API<br/>(Embeddings & LLM)
     end
 
-    %% ==========================================
-    %% FLOW 1: QUEUE-DRIVEN VECTOR RETRIEVAL & RAG
-    %% ==========================================
+    %% FLOW 1: RAG CHAT
     rect rgb(230, 242, 255)
-        note over User, OpenAI: FLOW 1: Live Conversational Turn with Queue-Backed Vector Retrieval
-        User->>Backend: 1. POST /api/chat { query, kb_ids: [1, 2] }
-        Backend->>PG: 2. Load Prompts & Settings (alembic_version)
+        note over User, OpenAI: FLOW 1: Live Chat Query with Queue-Backed Vector Search
+        User->>Backend: 1. POST /api/chat { query, kb_ids: [1] }
+        Backend->>PG: 2. Load Prompt Template (alembic_version)
         
-        critical Ultra-Fast Queue Request-Reply (< 5ms)
+        critical Queue Request-Reply (< 5ms)
             Backend->>Redis: 3. RPUSH mcp:vector:requests { correlation_id, query, kb_ids }
             Redis->>VectorMCP: 4. BLPOP mcp:vector:requests
             VectorMCP->>OpenAI: 5. Generate Query Vector (text-embedding-3-small)
-            OpenAI-->>VectorMCP: 1536-dim Vector
-            VectorMCP->>Chroma: 6. Parallel Cosine Search on Collections: kb_1, kb_2
-            Chroma-->>VectorMCP: Return Top-K Ranked Chunks
+            OpenAI-->>VectorMCP: Return Vector
+            VectorMCP->>Chroma: 6. Search Collection: kb_1
+            Chroma-->>VectorMCP: Top Chunks
             VectorMCP->>Redis: 7. RPUSH mcp:vector:responses:{correlation_id} { chunks }
-            Redis-->>Backend: 8. BLPOP Return Chunks to Backend
+            Redis-->>Backend: 8. BLPOP Return Chunks
         end
         
-        Backend->>OpenAI: 9. Grounded Answer Generation (gpt-4o-mini)
-        OpenAI-->>Backend: Return Grounded Answer with [citation:N]
-        Backend-->>User: 10. Return RAGResponse { answer, citations, grounded: true }
+        Backend->>OpenAI: 9. Generate Grounded Answer (gpt-4o-mini)
+        OpenAI-->>Backend: Grounded Answer with Citations
+        Backend-->>User: 10. Stream / Return RAGResponse
     end
 
-    %% ==========================================
-    %% FLOW 2: DYNAMIC OTHER MCP INVOCATION (e.g. VISION)
-    %% ==========================================
-    rect rgb(255, 243, 230)
-        note over User, OtherMCP: FLOW 2: Dynamic Multi-MCP Invocation (Defined in mcp_config.json)
-        User->>Backend: 11. Request with Image { image_url, crop: 'avocado' }
-        Backend->>Redis: 12. RPUSH mcp:image:requests { correlation_id, tool: 'analyze_crop' }
-        Redis->>OtherMCP: 13. BLPOP mcp:image:requests
-        OtherMCP->>OtherMCP: 14. Execute Vision Model Analysis
-        OtherMCP->>Redis: 15. RPUSH mcp:image:responses:{correlation_id} { diagnosis }
-        Redis-->>Backend: 16. BLPOP Return Diagnosis
-        Backend-->>User: 17. Return Pest/Disease Analysis Result
-    end
-
-    %% ==========================================
-    %% FLOW 3: ASYNCHRONOUS DOCUMENT INGESTION
-    %% ==========================================
+    %% FLOW 2: DOCUMENT INGESTION
     rect rgb(240, 255, 240)
-        note over User, OpenAI: FLOW 3: Asynchronous PDF Document Ingestion
-        User->>Backend: 18. Upload PDF Manual (POST /api/v1/kb/{id}/documents)
-        Backend->>MinIO: 19. Store Raw PDF in Bucket: documents/
-        Backend->>Redis: 20. RPUSH document_ingestion { document_id, kb_id }
-        Backend-->>User: 21. 202 Accepted (Processing in background)
+        note over User, OpenAI: FLOW 2: Asynchronous PDF Document Ingestion
+        User->>Backend: 11. Upload PDF (POST /api/v1/kb/{id}/documents)
+        Backend->>MinIO: 12. Save PDF in Bucket: documents/
+        Backend->>Redis: 13. RPUSH document_ingestion { document_id, kb_id }
+        Backend-->>User: 14. 202 Accepted
         
-        Redis->>VectorMCP: 22. Ingestion Task Consumed by Worker
-        VectorMCP->>MinIO: 23. Download Raw PDF File
-        VectorMCP->>OpenAI: 24. Compute Batch Embeddings for Chunks
-        OpenAI-->>VectorMCP: Return Chunk Vectors
-        VectorMCP->>Chroma: 25. Upsert Vectors to Collection kb_{id}
-        VectorMCP->>VectorMCP: 26. Update Status = INDEXED in vkb_documents
+        Redis->>VectorMCP: 15. Ingest Task Consumed
+        VectorMCP->>MinIO: 16. Fetch Raw PDF
+        VectorMCP->>OpenAI: 17. Batch Compute Chunk Embeddings
+        OpenAI-->>VectorMCP: Chunk Vectors
+        VectorMCP->>Chroma: 18. Upsert Vectors to kb_{id}
+        VectorMCP->>VectorMCP: 19. Update Status = INDEXED (alembic_version_vkb)
+    end
+```
+
+---
+
+### 2.2 Mode 2: `akvo-rag` + `vector-kb-mcp` + `other-mcp` (Multi-MCP Extended Platform)
+*Standalone deployment dynamically executing multiple MCPs (Vector + Image Recognition) via `mcp_config.json`.*
+
+```mermaid
+sequenceDiagram
+    autonumber
+    
+    box rgb(240, 248, 255) Web Client
+        actor User as Admin / Developer<br/>(Next.js Web UI :3000)
+    end
+    
+    box rgb(255, 250, 240) Core Akvo-RAG Backend
+        participant Backend as akvo-rag-backend<br/>(FastAPI :8000)
+        participant PG as PostgreSQL 17<br/>(Users, Prompts)
+    end
+    
+    box rgb(255, 245, 245) Message Broker
+        participant Redis as Redis Queue<br/>(RPC Broker :6379)
+    end
+    
+    box rgb(245, 255, 245) Pluggable MCP Tier
+        participant VectorMCP as vector-kb-mcp<br/>(Vector Retrieval)
+        participant OtherMCP as other-mcp<br/>(image_recognition / weather)
+    end
+    
+    box rgb(245, 245, 245) Datastores & AI APIs
+        participant Chroma as ChromaDB<br/>(Vector DB :8000)
+        participant MinIO as MinIO<br/>(PDF Storage :9000)
+        participant OpenAI as OpenAI API<br/>(Embeddings & LLM)
+    end
+
+    %% FLOW 1: MULTI-MCP ORCHESTRATION
+    rect rgb(230, 242, 255)
+        note over User, OpenAI: FLOW 1: Composite Query (Vector Retrieval + Image Analysis)
+        User->>Backend: 1. POST /api/chat { query, image_url, kb_ids: [1] }
+        Backend->>PG: 2. Load Prompts
+        
+        par Parallel Queue MCP Invocations via mcp_config.json
+            Backend->>Redis: 3a. RPUSH mcp:vector:requests { correlation_id_1, query, kb_ids }
+            Redis->>VectorMCP: 4a. BLPOP Request
+            VectorMCP->>Chroma: 5a. Query Vector Chunks
+            Chroma-->>VectorMCP: Chunks
+            VectorMCP->>Redis: 6a. RPUSH mcp:vector:responses:{id_1}
+        and
+            Backend->>Redis: 3b. RPUSH mcp:image:requests { correlation_id_2, image_url }
+            Redis->>OtherMCP: 4b. BLPOP Request
+            OtherMCP->>OtherMCP: 5b. Analyze Image Features
+            OtherMCP->>Redis: 6b. RPUSH mcp:image:responses:{id_2}
+        end
+        
+        Redis-->>Backend: 7. Collect Chunks & Image Diagnostics
+        Backend->>OpenAI: 8. Synthesize Grounded Composite Response
+        OpenAI-->>Backend: Grounded Answer
+        Backend-->>User: 9. Return Multimodal RAG Response
+    end
+```
+
+---
+
+### 2.3 Mode 3: Host (`xxxconnect`) + `akvo-rag` + `vector-kb-mcp`
+*Embedded WhatsApp CRM integration: Meta Cloud API webhook, FastAPI RAG REST invocation, queue vector search, and async outbound message dispatching.*
+
+```mermaid
+sequenceDiagram
+    autonumber
+    
+    box rgb(240, 248, 255) WhatsApp Farmers
+        actor Farmer as Farmer / Citizen<br/>(WhatsApp Mobile App)
+        participant WA as Meta WhatsApp Cloud API<br/>(graph.facebook.com:443)
+    end
+    
+    box rgb(255, 240, 240) Partner Host Application
+        participant HostApp as xxxconnect Host Backend<br/>(WhatsApp Webhook Router)
+        participant HostWorker as xxxconnect Celery Worker<br/>(Outbound Message Dispatcher)
+    end
+    
+    box rgb(255, 250, 240) Akvo-RAG Microservice
+        participant Backend as akvo-rag-backend<br/>(FastAPI POST /api/chat)
+        participant Redis as Redis Queue<br/>(Request-Reply Broker)
+        participant VectorMCP as vector-kb-mcp<br/>(Vector Retrieval)
+    end
+    
+    box rgb(245, 245, 245) Datastores & AI APIs
+        participant Chroma as ChromaDB<br/>(Vector Store)
+        participant OpenAI as OpenAI API<br/>(LLM Generation)
+    end
+
+    %% INBOUND WHATSAPP
+    rect rgb(230, 242, 255)
+        note over Farmer, OpenAI: Host Inbound Flow & Sub-Second RAG Generation
+        Farmer->>WA: 1. WhatsApp Text Message ('How to treat avocado root rot?')
+        WA->>HostApp: 2. Webhook Event (POST /whatsapp/webhook)
+        HostApp-->>WA: 3. 200 OK (Immediate Webhook Ack in < 1s)
+        
+        HostApp->>Backend: 4. POST /api/chat { query, kb_ids: [1] } (Intra-cluster REST: ~5ms)
+        
+        critical Akvo-RAG Internal Queue Retrieval
+            Backend->>Redis: 5. RPUSH mcp:vector:requests { correlation_id, query, kb_ids }
+            Redis->>VectorMCP: 6. BLPOP Request
+            VectorMCP->>Chroma: 7. Cosine Search on Avocado Manuals (kb_1)
+            Chroma-->>VectorMCP: Agronomy Context Chunks
+            VectorMCP->>Redis: 8. RPUSH mcp:vector:responses:{correlation_id}
+            Redis-->>Backend: 9. Return Context Chunks
+        end
+        
+        Backend->>OpenAI: 10. Generate Grounded Farmer Answer (gpt-4o-mini)
+        OpenAI-->>Backend: Agronomy Advice with Citations
+        Backend-->>HostApp: 11. Return RAGResponse { answer, citations }
+        
+        HostApp->>HostWorker: 12. Enqueue Outbound WhatsApp Task
+        HostWorker->>WA: 13. POST /v18.0/messages { to: Farmer, text: answer }
+        WA->>Farmer: 14. Deliver WhatsApp Response to Farmer
+    end
+```
+
+---
+
+### 2.4 Mode 4: Host (`xxxconnect`) + `akvo-rag` + `vector-kb-mcp` + `other-mcp`
+*Full multimodal WhatsApp Turn: Farmer uploads crop disease photo + text query; system concurrently invokes Vector MCP (manuals) & Vision MCP (leaf diagnosis).*
+
+```mermaid
+sequenceDiagram
+    autonumber
+    
+    box rgb(240, 248, 255) WhatsApp Farmers
+        actor Farmer as Farmer / Citizen<br/>(WhatsApp Mobile App)
+        participant WA as Meta WhatsApp Cloud API<br/>(graph.facebook.com:443)
+    end
+    
+    box rgb(255, 240, 240) Partner Host Application
+        participant HostApp as xxxconnect Host Backend<br/>(WhatsApp Webhook Router)
+        participant HostWorker as xxxconnect Celery Worker<br/>(Outbound Message Dispatcher)
+    end
+    
+    box rgb(255, 250, 240) Akvo-RAG Microservice
+        participant Backend as akvo-rag-backend<br/>(FastAPI POST /api/chat)
+        participant Redis as Redis Queue<br/>(Request-Reply Broker)
+        participant VectorMCP as vector-kb-mcp<br/>(Vector Retrieval)
+        participant OtherMCP as other-mcp<br/>(image_recognition)
+    end
+    
+    box rgb(245, 245, 245) Datastores & AI APIs
+        participant Chroma as ChromaDB<br/>(Vector Store)
+        participant OpenAI as OpenAI API<br/>(LLM Generation)
+    end
+
+    %% INBOUND MULTIMODAL WHATSAPP
+    rect rgb(230, 242, 255)
+        note over Farmer, OpenAI: Host Multimodal Turn (Photo + Text Advice)
+        Farmer->>WA: 1. Send Photo of Diseased Leaf + Text ('What is attacking my crop?')
+        WA->>HostApp: 2. Webhook Event with media_url
+        HostApp-->>WA: 3. 200 OK Ack
+        
+        HostApp->>Backend: 4. POST /api/chat { query, image_url: media_url, kb_ids: [1] }
+        
+        par Parallel Queue Dispatch
+            Backend->>Redis: 5a. RPUSH mcp:vector:requests { correlation_id_1, query, kb_ids }
+            Redis->>VectorMCP: 6a. Search Sector Crop Manuals
+            VectorMCP->>Chroma: 7a. Query Vectors
+            Chroma-->>VectorMCP: Relevant Treatment Chunks
+            VectorMCP->>Redis: 8a. Reply Chunks
+        and
+            Backend->>Redis: 5b. RPUSH mcp:image:requests { correlation_id_2, image_url }
+            Redis->>OtherMCP: 6b. Run Pest/Disease Vision Classifier
+            OtherMCP-->>OtherMCP: 7b. Identify 'Anthracnose Fungal Lesions (96% conf)'
+            OtherMCP->>Redis: 8b. Reply Vision Diagnosis
+        end
+        
+        Redis-->>Backend: 9. Collect Vision Diagnosis + Manual Treatment Chunks
+        Backend->>OpenAI: 10. Generate Comprehensive Grounded Action Plan
+        OpenAI-->>Backend: Complete Agronomy Diagnosis & Remediation Advice
+        Backend-->>HostApp: 11. Return RAGResponse { answer, citations }
+        
+        HostApp->>HostWorker: 12. Enqueue Outbound WhatsApp Task
+        HostWorker->>WA: 13. POST Formatted WhatsApp Message
+        WA->>Farmer: 14. Farmer receives verified diagnosis and treatment steps
     end
 ```
 
