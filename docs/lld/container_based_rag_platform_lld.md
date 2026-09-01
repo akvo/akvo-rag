@@ -665,6 +665,65 @@ sequenceDiagram
     Frontend->>Backend: 13. Poll KB Status -> Shows "Indexed"
 ```
 
+### 7.3 Host Application API Contract & Backwards Compatibility (AgriConnect & CoM)
+
+To ensure **zero breaking changes or regressions** for partner applications (e.g. `AgriConnect`, `CoM`, or external Web UIs), `akvo-rag-backend` preserves the exact REST/SSE API contract. Partner applications continue calling the same routes with the same request/response payloads:
+
+| Route Path | Method | Host / Caller Role | Legacy Implementation | Option C Container Implementation |
+|---|---|---|---|---|
+| `/api/v1/chat` or `/api/chat` | `POST` | Conversational RAG Query | FastMCP HTTP hop $\rightarrow$ `vector-kb` | Redis Queue RPC (`mcp:vector:requests`) |
+| `/api/v1/knowledge-bases` | `GET` | List tenant KBs | HTTP Proxy $\rightarrow$ `vector-kb` | Redis Queue RPC `list_kbs` (or direct scoped read) |
+| `/api/v1/knowledge-bases` | `POST` | Create new Knowledge Base | HTTP Proxy $\rightarrow$ `vector-kb` | Redis Queue RPC `create_kb` |
+| `/api/v1/knowledge-bases/{id}` | `GET` | Get KB details & doc count | HTTP Proxy $\rightarrow$ `vector-kb` | Redis Queue RPC `get_kb` |
+| `/api/v1/knowledge-bases/{id}` | `PUT` | Update KB metadata/prompts | HTTP Proxy $\rightarrow$ `vector-kb` | Redis Queue RPC `update_kb` |
+| `/api/v1/knowledge-bases/{id}` | `DELETE` | Delete KB & vector collections | HTTP Proxy $\rightarrow$ `vector-kb` | Redis Queue RPC `delete_kb` |
+| `/api/v1/knowledge-bases/{id}/documents` | `GET` | List documents in a KB | HTTP Proxy $\rightarrow$ `vector-kb` | Redis Queue RPC `list_documents` |
+| `/api/v1/knowledge-bases/{id}/documents/upload` | `POST` | Multipart PDF/DOCX Upload | Celery task $\rightarrow$ HTTP upload | Stream to **MinIO** $\rightarrow$ Redis `document_ingestion` |
+| `/api/v1/knowledge-bases/{id}/documents/tasks` | `GET` | Poll async ingestion status | HTTP Proxy $\rightarrow$ `vector-kb` | Redis Queue RPC `get_processing_tasks` |
+| `/api/v1/prompts` | `GET`/`POST` | Manage versioned prompts | MySQL database query | PostgreSQL 17 `prompt_definitions` query |
+
+#### Detailed Flow: Host KB Creation & Document Lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Host as Host App (AgriConnect / CoM)
+    participant Backend as akvo-rag-backend (FastAPI)
+    participant MinIO as MinIO Object Storage
+    participant Redis as Redis Queue Broker
+    participant VectorMCP as vector-kb-mcp (Owns Schema)
+    participant PG as PostgreSQL 17 (alembic_version_vkb)
+
+    %% Flow 1: Create KB
+    Note over Host, PG: 1. Host creates a Knowledge Base
+    Host->>Backend: POST /api/v1/knowledge-bases { name: "WASH SOPs", description: "Handpump O&M" }
+    Backend->>Backend: Validate App API Key & Tenant ID
+    Backend->>Redis: RPUSH mcp:vector:requests { tool: 'create_kb', name, description }
+    Redis->>VectorMCP: BLPOP mcp:vector:requests
+    VectorMCP->>PG: INSERT INTO vkb_knowledge_bases (...)
+    VectorMCP->>Redis: RPUSH mcp:vector:responses:{id} { status: 'ok', kb_id: 10 }
+    Redis-->>Backend: Return new KB metadata
+    Backend-->>Host: 201 Created { id: 10, name: "WASH SOPs", status: "ACTIVE" }
+
+    %% Flow 2: Upload Document
+    Note over Host, PG: 2. Host uploads a PDF Document
+    Host->>Backend: POST /api/v1/knowledge-bases/10/documents/upload (Multipart PDF)
+    Backend->>MinIO: Save raw file to documents/wash_sop_2024.pdf
+    Backend->>PG: Insert Document row (status: "PROCESSING")
+    Backend->>Redis: RPUSH document_ingestion { document_id: "doc-99", kb_id: 10 }
+    Backend-->>Host: 202 Accepted { document_id: "doc-99", status: "PROCESSING" }
+
+    %% Flow 3: List Documents
+    Note over Host, PG: 3. Host lists documents in KB #10
+    Host->>Backend: GET /api/v1/knowledge-bases/10/documents
+    Backend->>Redis: RPUSH mcp:vector:requests { tool: 'list_documents', kb_id: 10 }
+    Redis->>VectorMCP: BLPOP mcp:vector:requests
+    VectorMCP->>PG: SELECT * FROM vkb_documents WHERE kb_id = 10
+    VectorMCP->>Redis: RPUSH mcp:vector:responses:{id} { documents: [...] }
+    Redis-->>Backend: Return documents list
+    Backend-->>Host: 200 OK [ { id: "doc-99", title: "wash_sop_2024.pdf", status: "INDEXED", ... } ]
+```
+
 ---
 
 ## 8. Master Task Matrix & Implementation Phases
