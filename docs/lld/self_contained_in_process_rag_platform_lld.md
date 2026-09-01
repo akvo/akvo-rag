@@ -143,6 +143,7 @@ flowchart LR
   Extract the retrieval interfaces into an installable Python package `vector-kb-core`. This package will be directly imported by `akvo-rag-core` and host applications. Define strongly typed immutable data structures (`RetrievedChunk`, `QueryFilter`, `KBMetadata`) and the abstract base class `Retriever`.
 * **Key Touchpoints:**
   - `packages/vector-kb-core/pyproject.toml` `[NEW]`
+  - `packages/vector-kb-core/README.md` `[NEW]`
   - `packages/vector-kb-core/src/vector_kb_core/__init__.py` `[NEW]`
   - `packages/vector-kb-core/src/vector_kb_core/models.py` `[NEW]`
   - `packages/vector-kb-core/src/vector_kb_core/retriever.py` `[NEW]`
@@ -266,6 +267,7 @@ flowchart LR
   Extract the LangGraph state machine from `backend/app/services/query_answering_workflow.py` into a reusable library `akvo-rag-core`. The workflow engine is stateless and accepts history, prompt configuration, and a `Retriever` instance per invocation.
 * **Key Touchpoints:**
   - `packages/akvo-rag-core/pyproject.toml` `[NEW]`
+  - `packages/akvo-rag-core/README.md` `[NEW]`
   - `packages/akvo-rag-core/src/akvo_rag_core/models.py` `[NEW]`
   - `packages/akvo-rag-core/src/akvo_rag_core/engine.py` `[NEW]`
   - `packages/akvo-rag-core/src/akvo_rag_core/workflow.py` `[NEW]`
@@ -617,6 +619,7 @@ flowchart LR
   4. Datastores: PostgreSQL, Redis, ChromaDB, MinIO.
 * **Key Touchpoints:**
   - `docker-compose.yml` `[MODIFY]`
+  - `.env.example` `[NEW]`
   - `k8s/partner-namespace/` `[NEW]`
 * **User Acceptance Criteria (UAC):**
   - Developers can run the entire platform locally with `docker compose up -d`.
@@ -894,7 +897,7 @@ A core requirement is ensuring that the **standalone Akvo-RAG web application, i
 │  │ • Chat Streaming & Playground   │   │ • Imported directly via Python package   │    │
 │  │ • Prompt Version Management UI  │   │ • Runs inside WhatsApp webhook process   │    │
 │  │ • User / App / API Key Auth     │   │                                          │    │
-│  │ • Standalone REST /api/jobs     │   │                                          │    │
+│  │ • Standalone REST /api/chat     │   │                                          │    │
 │  │                                 │   │                                          │    │
 │  │ * 100% Functional Standalone    │   │ * Zero extra microservices deployed      │    │
 │  └─────────────────────────────────┘   └──────────────────────────────────────────┘    │
@@ -993,6 +996,24 @@ To guarantee that WhatsApp webhooks or live conversations never hang or crash if
      )
      ```
    - WhatsApp message sends cleanly to the user; conversation state remains uncorrupted.
+
+### 8.6 Unified Environment Variables Contract (`.env.example`)
+
+Both Standalone Mode 1 (`akvo-rag`) and Host Partner Mode 2 (`xxxconnect`) share the following unified configuration variables:
+
+| Variable Name | Required By | Example / Default | Description |
+|---|---|---|---|
+| `OPENAI_API_KEY` | Mode 1 & Mode 2 | `sk-proj-...` | OpenAI API key for LLM generation and query embeddings |
+| `DEFAULT_EMBEDDING_MODEL` | Mode 1 & Mode 2 | `text-embedding-3-small` | Embedding model for query vectors and document indexing |
+| `DEFAULT_CHAT_MODEL` | Mode 1 & Mode 2 | `gpt-4o-mini` | Default LLM for intent classification and answer generation |
+| `CHROMA_HOST` | Mode 1 & Mode 2 | `chromadb` | ChromaDB service hostname in the local/Kubernetes namespace |
+| `CHROMA_PORT` | Mode 1 & Mode 2 | `8000` | ChromaDB HTTP service port |
+| `MINIO_ENDPOINT` | Ingestion Worker & Mode 1 | `minio:9000` | MinIO / S3 object storage endpoint |
+| `MINIO_ACCESS_KEY` | Ingestion Worker & Mode 1 | `minioadmin` | Object storage access key |
+| `MINIO_SECRET_KEY` | Ingestion Worker & Mode 1 | `minioadmin` | Object storage secret key |
+| `MINIO_BUCKET_NAME` | Ingestion Worker & Mode 1 | `documents` | S3 bucket name for raw uploaded PDF files |
+| `DATABASE_URL` | Mode 1 & Ingestion Worker | `postgresql+asyncpg://postgres:postgres@postgres:5432/akvo_rag` | PostgreSQL 17 async connection string |
+| `REDIS_URL` | Mode 1, Mode 2 & Ingestion | `redis://redis:6379/0` | Redis broker URL for task queues and caching |
 
 ---
 
