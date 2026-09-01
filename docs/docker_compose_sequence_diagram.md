@@ -16,23 +16,23 @@ You can copy the code snippets directly into the [Mermaid Live Editor](https://d
 sequenceDiagram
     autonumber
     actor Admin as Admin / Developer
-    
+
     box rgb(240, 248, 255) Akvo-RAG Web Application
         participant WebUI as Next.js Web Frontend<br/>(Playground & Prompt Editor)
         participant Backend as FastAPI Backend<br/>(In-Process Core Engine)
     end
-    
+
     box rgb(255, 250, 240) Background Ingestion Worker
         participant IngWorker as Ingestion Worker<br/>(PDF Parse, Chunk, Embed)
     end
-    
+
     box rgb(245, 245, 245) Datastores & Storage
         participant PG as PostgreSQL 17<br/>(Users, Prompts, KB Metadata)
         participant Chroma as ChromaDB<br/>(Vector Collections)
         participant MinIO as MinIO (S3)<br/>(Raw Document Files)
         participant Redis as Redis<br/>(Ingestion Queue)
     end
-    
+
     box rgb(245, 255, 245) External Services
         participant OpenAI as OpenAI API<br/>(LLM & Embeddings)
     end
@@ -43,7 +43,7 @@ sequenceDiagram
         Admin->>WebUI: 1. Send Test Prompt in Playground UI
         WebUI->>Backend: 2. SSE Stream Request (POST /api/chat/stream)
         Backend->>PG: 3. Load Selected Prompt Version from DB
-        
+
         critical Direct In-Memory RAG Execution (akvo-rag-core + vector-kb-core)
             Backend->>OpenAI: 4. Generate Query Embedding (text-embedding-3-small)
             OpenAI-->>Backend: Return 1536-dim Query Vector
@@ -52,7 +52,7 @@ sequenceDiagram
             Backend->>OpenAI: 6. Stream Answer with Citations & Context (gpt-4o-mini)
             OpenAI-->>Backend: Token Stream
         end
-        
+
         Backend-->>WebUI: 7. Server-Sent Events (SSE Stream)
         WebUI-->>Admin: 8. Live Real-Time Token Output & Citations in UI
     end
@@ -66,7 +66,7 @@ sequenceDiagram
         Backend->>PG: 12. Create Record (Status: PROCESSING)
         Backend->>Redis: 13. Enqueue process_document(doc_id)
         Backend-->>WebUI: 14. 202 Accepted (Shows "Processing" in UI)
-        
+
         Redis->>IngWorker: 15. Ingestion Worker Picks Up Task
         IngWorker->>MinIO: 16. Fetch Raw PDF
         IngWorker->>OpenAI: 17. Compute Chunk Embeddings
@@ -98,21 +98,21 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     actor Farmer as Farmer / WhatsApp User
-    
-    box rgb(240, 248, 255) Host App Container (AgriConnect / WASHConnect)
+
+    box rgb(240, 248, 255) Host App Container AgriConnect / WASHConnect
         participant HostAPI as Host FastAPI<br/>(WhatsApp Webhook & In-Process RAG)
     end
-    
+
     box rgb(255, 250, 240) Host App Celery Worker
         participant OutboundWorker as App Worker<br/>(Outbound WhatsApp Dispatcher)
     end
-    
+
     box rgb(245, 245, 245) Datastores & Storage
         participant PG as PostgreSQL 17<br/>(Partner Data, KB Metadata)
         participant Chroma as ChromaDB<br/>(Vector Collections)
         participant Redis as Redis<br/>(Task Broker)
     end
-    
+
     box rgb(245, 255, 245) External Services
         participant WhatsApp as WhatsApp Cloud API
         participant OpenAI as OpenAI API
@@ -123,7 +123,7 @@ sequenceDiagram
         Farmer->>WhatsApp: 1. User sends message: "How do I prune Hass avocados?"
         WhatsApp->>HostAPI: 2. Webhook Event (POST /whatsapp/webhook)
         HostAPI->>PG: 3. Fetch Farmer Profile & Active KBs (kb_ids: [1, 2])
-        
+
         critical In-Memory Execution via akvo-rag-core & vector-kb-core
             HostAPI->>OpenAI: 4. Generate Embedding for Query
             OpenAI-->>HostAPI: Return 1536-dim Vector
@@ -132,10 +132,10 @@ sequenceDiagram
             HostAPI->>OpenAI: 6. LLM Completion (Grounding + Strict Citations)
             OpenAI-->>HostAPI: Return Grounded Agronomy Answer
         end
-        
+
         HostAPI->>Redis: 7. Enqueue Outbound Reply Task
         HostAPI-->>WhatsApp: 8. 200 OK (Webhook Acknowledged in < 1s)
-        
+
         Redis->>OutboundWorker: 9. Outbound Worker Consumes Reply Task
         OutboundWorker->>WhatsApp: 10. Send Formatted WhatsApp Message
         WhatsApp->>Farmer: 11. Farmer receives answer on phone with citations
