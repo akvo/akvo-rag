@@ -92,53 +92,82 @@ sequenceDiagram
 
 ## 2. Mode 2 Sequence Diagram: Embedded `xxxconnect` (AgriConnect / WASHConnect)
 
-> **Use Case:** Production partner deployments serving farmers and citizens over WhatsApp with sub-second response times and zero internal network hops.
+> **Use Case:** Production partner deployments serving farmers and citizens over WhatsApp with sub-second response times, zero internal network hops, and in-process `akvo-rag-core` + `vector-kb-core` execution.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Farmer as Farmer / WhatsApp User
+    actor Admin as Sector Admin / Agronomist
 
     box rgb(240, 248, 255) Host App Container AgriConnect / WASHConnect
-        participant HostAPI as Host FastAPI<br/>(WhatsApp Webhook & In-Process RAG)
+        participant HostAPI as Host FastAPI<br/>(WhatsApp Webhook & Business Logic)
+        participant RAGCore as akvo-rag-core<br/>(In-Process LangGraph & Prompts)
+        participant VKB as vector-kb-core<br/>(In-Process ChromaRetriever)
     end
 
-    box rgb(255, 250, 240) Host App Celery Worker
-        participant OutboundWorker as App Worker<br/>(Outbound WhatsApp Dispatcher)
+    box rgb(255, 250, 240) Background Celery Workers
+        participant AppWorker as Host App Worker<br/>(Outbound WhatsApp Dispatcher)
+        participant IngWorker as vector-kb Ingestion Worker<br/>(PDF Parse, Chunk, Embed)
     end
 
-    box rgb(245, 245, 245) Datastores & Storage
-        participant PG as PostgreSQL 17<br/>(Partner Data, KB Metadata)
-        participant Chroma as ChromaDB<br/>(Vector Collections)
-        participant Redis as Redis<br/>(Task Broker)
+    box rgb(245, 245, 245) Datastores & Storage (Docker Compose)
+        participant PG as PostgreSQL 17<br/>(Host DB + Prompts + KB Metadata)
+        participant Chroma as ChromaDB<br/>(Vector Collections: kb_id)
+        participant MinIO as MinIO (S3)<br/>(Raw Sector PDFs)
+        participant Redis as Redis<br/>(Task Queues & Broker)
     end
 
-    box rgb(245, 255, 245) External Services
+    box rgb(245, 255, 245) External APIs
         participant WhatsApp as WhatsApp Cloud API
-        participant OpenAI as OpenAI API
+        participant OpenAI as OpenAI API<br/>(Embeddings & Chat Models)
     end
 
+    %% FLOW A: LIVE IN-PROCESS CONVERSATIONAL TURN
     rect rgb(230, 242, 255)
-        note over Farmer, OpenAI: Production Live WhatsApp Conversational Turn
-        Farmer->>WhatsApp: 1. User sends message: "How do I prune Hass avocados?"
+        note over Farmer, OpenAI: FLOW A: Real-Time WhatsApp Turn (In-Process Execution)
+        Farmer->>WhatsApp: 1. "How do I manage Avocado root rot?"
         WhatsApp->>HostAPI: 2. Webhook Event (POST /whatsapp/webhook)
-        HostAPI->>PG: 3. Fetch Farmer Profile & Active KBs (kb_ids: [1, 2])
+        HostAPI->>PG: 3. Fetch Farmer Profile & Active Sector KBs (e.g. kb_ids: [1, 2])
+        PG-->>HostAPI: Farmer Profile & KB Settings
 
-        critical In-Memory Execution via akvo-rag-core & vector-kb-core
-            HostAPI->>OpenAI: 4. Generate Embedding for Query
-            OpenAI-->>HostAPI: Return 1536-dim Vector
-            HostAPI->>Chroma: 5. Direct Parallel Vector Search (ChromaRetriever)
-            Chroma-->>HostAPI: Return Top-K Ranked Agronomy Chunks
-            HostAPI->>OpenAI: 6. LLM Completion (Grounding + Strict Citations)
-            OpenAI-->>HostAPI: Return Grounded Agronomy Answer
-        end
+        HostAPI->>RAGCore: 4. In-Process Call: await rag_engine.run(request, retriever=VKB)
+        RAGCore->>RAGCore: 5. Compose Multi-Tier Prompt (Base + Sector + Partner Overlays)
 
-        HostAPI->>Redis: 7. Enqueue Outbound Reply Task
-        HostAPI-->>WhatsApp: 8. 200 OK (Webhook Acknowledged in < 1s)
+        RAGCore->>VKB: 6. Direct Function Call: retriever.retrieve(query, kb_ids=[1, 2])
+        VKB->>OpenAI: 7. Get Query Embedding (text-embedding-3-small)
+        OpenAI-->>VKB: 1536-dim Query Vector
+        VKB->>Chroma: 8. Direct Vector Search across kb_1 & kb_2
+        Chroma-->>VKB: Return Top-K Ranked Context Chunks
+        VKB-->>RAGCore: Return List[RetrievedChunk]
 
-        Redis->>OutboundWorker: 9. Outbound Worker Consumes Reply Task
-        OutboundWorker->>WhatsApp: 10. Send Formatted WhatsApp Message
-        WhatsApp->>Farmer: 11. Farmer receives answer on phone with citations
+        RAGCore->>OpenAI: 9. LLM Answer Generation with Grounding & Citations (gpt-4o-mini)
+        OpenAI-->>RAGCore: Generated Answer with strict [citation:N] references
+        RAGCore-->>HostAPI: Return RAGResponse(answer, citations, grounded=True)
+
+        HostAPI->>Redis: 10. Enqueue Outbound Message Task (outbound_messages)
+        HostAPI-->>WhatsApp: 11. 200 OK (Immediate Webhook Ack in < 1s)
+
+        Redis->>AppWorker: 12. App Worker Consumes Outbound Task
+        AppWorker->>WhatsApp: 13. Send Formatted WhatsApp Message with Citations
+        WhatsApp->>Farmer: 14. Farmer receives verified agronomy advice
+    end
+
+    %% FLOW B: SECTOR KB DOCUMENT INGESTION
+    rect rgb(255, 243, 230)
+        note over Admin, OpenAI: FLOW B: Sector Knowledge Base Document Ingestion
+        Admin->>HostAPI: 15. Upload Sector PDF Manual (POST /admin/kb/{id}/documents)
+        HostAPI->>MinIO: 16. Store Raw PDF (Bucket: documents/)
+        HostAPI->>PG: 17. Insert Document Record (Status: PROCESSING)
+        HostAPI->>Redis: 18. Enqueue Ingestion Task (process_document)
+        HostAPI-->>Admin: 19. 202 Accepted (Upload Successful)
+
+        Redis->>IngWorker: 20. vector-kb Ingestion Worker Picks Up Task
+        IngWorker->>MinIO: 21. Download Raw PDF
+        IngWorker->>OpenAI: 22. Generate Chunk Embeddings
+        OpenAI-->>IngWorker: Return Chunk Vectors
+        IngWorker->>Chroma: 23. Upsert Vectors into Collection (kb_id)
+        IngWorker->>PG: 24. Save Chunks & Set Status = INDEXED
     end
 ```
 
@@ -146,9 +175,9 @@ sequenceDiagram
 
 | Service Name | Container Image / Source | Role in Embedded Mode 2 | Ports |
 |---|---|---|---|
-| `app` | `xxxconnect/backend` | FastAPI WhatsApp webhook handler with embedded core libraries | `8000:8000` |
+| `app` | `xxxconnect/backend` | FastAPI WhatsApp webhook handler with embedded `akvo-rag-core` and `vector-kb-core` | `8000:8000` |
 | `app-worker` | `xxxconnect` Celery Worker | Outbound WhatsApp message dispatcher with automatic retries | Internal |
-| `ingestion-worker` | `vector-kb` Celery Worker | Background sector document parser & embedder | Internal |
+| `ingestion-worker` | `vector-kb` Celery Worker | Background sector document parser & embedder (from `vector-kb` repository) | Internal |
 | `postgres` | `postgres:17-alpine` | Partner CRM data, farmer profiles, and KB metadata | `5432:5432` |
 | `chromadb` | `chromadb/chroma:latest` | Vector collections for partner domain manuals | `8000:8000` |
 | `minio` | `minio/minio:latest` | Object storage for partner PDFs | `9000:9000` |
