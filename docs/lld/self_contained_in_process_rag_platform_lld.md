@@ -4,7 +4,7 @@
 - **Document Identifier:** `LLD-001`
 - **Target Systems:** `akvo-rag` + `vector-knowledge-base-mcp-server` + Host Application (`agriconnect` / `washconnect`)
 - **Author / Roles:** System Architect, Technical Project Manager, Tech Leads
-- **Status:** APPROVED / IN-PROGRESS
+- **Status:** DISCONTINUED - Replaced by `docs/lld/container_based_rag_platform_lld.md`
 - **Date:** 2026-08-31
 
 ---
@@ -29,12 +29,12 @@ flowchart TB
         direction TB
         CA["Channel Adapter (WhatsApp / Web)"]
         PIPE["Conversation Pipeline (Dedupe, Onboard, Intent)"]
-        
+
         subgraph CorePackages["In-Process Python Libraries"]
             RAGC["akvo-rag-core<br/>(LangGraph Workflow, Prompt Resolver)"]
             RET["vector-kb-core<br/>(ChromaRetriever, Direct Search)"]
         end
-        
+
         PIPE --> RAGC
         RAGC --> RET
     end
@@ -139,7 +139,7 @@ flowchart LR
 #### `TASK-VKB-101`: Scaffold `vector-kb-core` Package & Typed Interfaces
 * **Repository:** `vector-knowledge-base-mcp-server`
 * **Vibe-Coding Estimate:** `2.0 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   Extract the retrieval interfaces into an installable Python package `vector-kb-core`. This package will be directly imported by `akvo-rag-core` and host applications. Define strongly typed immutable data structures (`RetrievedChunk`, `QueryFilter`, `KBMetadata`) and the abstract base class `Retriever`.
 * **Key Touchpoints:**
   - `packages/vector-kb-core/pyproject.toml` `[NEW]`
@@ -194,7 +194,7 @@ flowchart LR
 #### `TASK-VKB-102`: Implement `ChromaRetriever` with Direct Similarity Search
 * **Repository:** `vector-knowledge-base-mcp-server`
 * **Vibe-Coding Estimate:** `3.0 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   Implement the concrete `ChromaRetriever` class inside `vector-kb-core`. It connects directly to ChromaDB, computes query embeddings using OpenAI or local embedding providers, queries multiple `kb_{id}` collections concurrently via `asyncio.gather`, merges and sorts the chunks by similarity score, and returns structured `List[RetrievedChunk]`. Base64 encoding/decoding is completely eliminated.
 * **Key Touchpoints:**
   - `packages/vector-kb-core/src/vector_kb_core/chroma_retriever.py` `[NEW]`
@@ -222,12 +222,12 @@ flowchart LR
 
           tasks = [self._search_kb(kb_id, query_vector, top_k) for kb_id in kb_ids]
           results_nested = await asyncio.gather(*tasks, return_exceptions=True)
-          
+
           all_chunks: List[RetrievedChunk] = []
           for r in results_nested:
               if isinstance(r, list):
                   all_chunks.extend(r)
-          
+
           all_chunks.sort(key=lambda x: x.score, reverse=True)
           if score_threshold is not None:
               all_chunks = [c for c in all_chunks if c.score >= score_threshold]
@@ -245,7 +245,7 @@ flowchart LR
 #### `TASK-VKB-103`: Unit & Integration Test Suite for `vector-kb-core`
 * **Repository:** `vector-knowledge-base-mcp-server`
 * **Vibe-Coding Estimate:** `1.5 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   Implement unit tests with `pytest` and mock ChromaDB/OpenAI clients to verify similarity score sorting, multi-KB result merging, top-k truncation, and threshold filtering.
 * **Key Touchpoints:**
   - `packages/vector-kb-core/tests/test_retriever.py` `[NEW]`
@@ -263,7 +263,7 @@ flowchart LR
 #### `TASK-RAG-201`: Scaffold `akvo-rag-core` Package & LangGraph Engine
 * **Repository:** `akvo-rag`
 * **Vibe-Coding Estimate:** `3.5 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   Extract the LangGraph state machine from `backend/app/services/query_answering_workflow.py` into a reusable library `akvo-rag-core`. The workflow engine is stateless and accepts history, prompt configuration, and a `Retriever` instance per invocation.
 * **Key Touchpoints:**
   - `packages/akvo-rag-core/pyproject.toml` `[NEW]`
@@ -319,7 +319,7 @@ flowchart LR
 #### `TASK-RAG-202`: Direct `Retriever` Integration (Delete FastMCP Client & Update Legacy Tests)
 * **Repository:** `akvo-rag`
 * **Vibe-Coding Estimate:** `2.5 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   Replace `FastMCPClientService` and streaming HTTP transport with direct in-memory calls to `vector_kb_core.Retriever` inside the `retrieve_node` of the LangGraph state machine. Delete obsolete network transport code. Update existing unit tests in `backend/tests/` that mocked `FastMCPClientService` to instead assert against the direct `Retriever` interface.
 * **Key Touchpoints:**
   - `packages/akvo-rag-core/src/akvo_rag_core/nodes/retrieve.py` `[NEW]`
@@ -353,7 +353,7 @@ flowchart LR
 #### `TASK-RAG-203`: Short-Circuit `ScopingAgent` on Default RAG Path
 * **Repository:** `akvo-rag`
 * **Vibe-Coding Estimate:** `1.5 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   In the legacy system, `ScopingAgent` made an extra LLM round trip to pick a tool, which failed schema validation and fell back to `query_knowledge_base`. This task removes `scoping_node` from the primary path and transitions directly from `contextualize` to `retrieve`.
 * **Key Touchpoints:**
   - `packages/akvo-rag-core/src/akvo_rag_core/workflow.py` `[MODIFY]`
@@ -382,7 +382,7 @@ flowchart LR
 #### `TASK-RAG-204`: Remove Startup MCP Discovery & Purge Domain Leaks
 * **Repository:** `akvo-rag`
 * **Vibe-Coding Estimate:** `1.5 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   1. Remove blocking startup network discovery scripts from `backend/entrypoint.sh` and delete `mcp_discovery_manager.py` and `mcp_discovery.json`.
   2. In `chat_job_service.py:52`, remove `if role in ["farmer", "extension_officer"]: role = "user"` and replace with generic role mapping.
   3. Remove crop-calendar tool definitions from `mcp_servers_config.py`.
@@ -402,7 +402,7 @@ flowchart LR
 #### `TASK-RAG-205`: Multi-Tier Prompt Resolver & Prompt Reactivity Integration Test
 * **Repository:** `akvo-rag`
 * **Vibe-Coding Estimate:** `3.0 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   1. Implement a flexible `PromptResolver` that composes system prompts using a three-tier hierarchy:
      - **Platform Base:** Citation discipline, ungrounded fallback format (`"Information is missing on..."`).
      - **Sector Base:** Sector-wide rules (e.g. WASH public-health safety gates or Agronomy advice guidelines).
@@ -443,7 +443,7 @@ flowchart LR
 #### `TASK-RAG-206`: PostgreSQL Database Adapter & Unified Data Migration Tools (MySQL + Vector-KB PG)
 * **Repository:** `akvo-rag`
 * **Vibe-Coding Estimate:** `2.0 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   1. Update `backend/app/database/` and Alembic configuration in `akvo-rag` to natively connect to PostgreSQL 17 via `asyncpg` (`postgresql+asyncpg://...`), phasing out MySQL 8 dialect dependencies.
   2. Implement an automated, idempotent Python CLI migration script `backend/app/scripts/migrate_legacy_to_postgres.py` that reads:
      - Akvo-RAG legacy records from MySQL (`users`, `apps`, `api_keys`, `prompt_definitions`, `prompt_versions`, `system_settings`, `chats`, `chat_messages`).
@@ -475,7 +475,7 @@ flowchart LR
   async def migrate_akvo_rag_mysql(mysql_url: str, pg_url: str):
       mysql_engine = create_async_engine(mysql_url)
       pg_engine = create_async_engine(pg_url)
-      
+
       async with AsyncSession(mysql_engine) as mysql_session, AsyncSession(pg_engine) as pg_session:
           for model in AKVO_RAG_MODELS:
               res = await mysql_session.execute(select(model))
@@ -515,7 +515,7 @@ flowchart LR
 #### `TASK-VKB-301`: Add KB Embedding Model & Dimension Guard
 * **Repository:** `vector-knowledge-base-mcp-server`
 * **Vibe-Coding Estimate:** `2.5 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   Add `embedding_model` (e.g. `text-embedding-3-small`) and `dimension` (e.g. `1536`) to the `knowledge_bases` database table and Chroma metadata. Enforce model verification at retrieval and ingestion time.
 * **Key Touchpoints:**
   - `main/app/models/knowledge_base.py` `[MODIFY]`
@@ -531,7 +531,7 @@ flowchart LR
 #### `TASK-VKB-302`: Enrich Documents & Chunks with Public-Sector Metadata
 * **Repository:** `vector-knowledge-base-mcp-server`
 * **Vibe-Coding Estimate:** `2.0 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   Extend `Document` and `DocumentChunk` models to capture public-sector metadata (`doc_version`, `issuing_authority`, `effective_date`, `doc_type`, `jurisdiction`). Ensure chunk metadata stores these fields in ChromaDB and returns them in `RetrievedChunk.metadata`.
 * **Key Touchpoints:**
   - `main/app/models/document.py` `[MODIFY]`
@@ -548,7 +548,7 @@ flowchart LR
 #### `TASK-VKB-303`: Package Dedicated Background Ingestion Worker & Upload Task Contract
 * **Repository:** `vector-knowledge-base-mcp-server`
 * **Vibe-Coding Estimate:** `2.0 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   1. Package the document processing service into a dedicated background Celery worker container (`ingestion-worker`). It listens to the Redis ingestion queue, downloads raw PDFs from MinIO, parses pages/OCR, writes chunk records to PostgreSQL 17, and creates Chroma vectors using `vector-kb-core`.
   2. Define the standard Celery upload task contract `process_document(document_id: str, kb_id: int)` published by Admin APIs in both Standalone Akvo-RAG (Mode 1) and Partner Host Apps (Mode 2).
 * **Key Touchpoints:**
@@ -570,7 +570,7 @@ flowchart LR
 #### `TASK-INT-401`: Build `EmbeddedAIService` Adapter in Host Application
 * **Repository:** Host App (`agriconnect` / new `washconnect`)
 * **Vibe-Coding Estimate:** `3.5 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   Create `EmbeddedAIService` in the host application that satisfies the AI service interface by importing `akvo-rag-core` and `vector-kb-core` directly. In `routers/whatsapp.py`, replace the legacy `create_chat_job(...)` HTTP callback pattern with direct in-memory invocation.
 * **Key Touchpoints:**
   - `host_app/backend/services/embedded_ai_service.py` `[NEW]`
@@ -624,7 +624,7 @@ flowchart LR
 #### `TASK-INT-402`: Unified Single-Namespace Docker Compose Setup
 * **Repository:** Root Workspace / Manifests
 * **Vibe-Coding Estimate:** `2.0 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   Provide a single, streamlined `docker-compose.yml` for local development and single-namespace Kubernetes manifests containing:
   1. `app`: Host app (FastAPI + embedded RAG/Vector packages + Next.js frontend)
   2. `app-worker`: Host Celery worker (outbound WhatsApp messages and retries)
@@ -645,7 +645,7 @@ flowchart LR
 #### `TASK-QA-501`: Golden Set Evaluation, Legacy Test Gate & CI Pipeline
 * **Repository:** `akvo-rag/backend`
 * **Vibe-Coding Estimate:** `3.5 hours`
-* **Detailed Description:**  
+* **Detailed Description:**
   1. **Legacy Test Baseline & Regression Gate:** Run and maintain the full existing test suite (`backend/test-unit.sh`, `backend/test.sh`). Ensure all existing unit and endpoint tests continue passing without regression after removing FastMCP and refactoring to the direct `Retriever` interface.
   2. **Golden Dataset Accuracy Benchmark:** Run the automated headless evaluation harness (`headless_evaluation.py`) against a golden benchmark dataset of Agronomy and WASH queries to measure faithfulness, answer relevancy, and latency.
   3. **CI Pipeline Automation:** Configure GitHub Actions to execute both the legacy test suite and golden benchmark in CI.
@@ -765,7 +765,7 @@ When deploying a new host app namespace (e.g. `washconnect`):
 
 ### 6.6 Structured Logging & Observability Specification
 
-In the legacy architecture, debugging a single farmer query failure required cross-referencing logs across 3 namespaces, HTTP headers, and Celery task IDs. 
+In the legacy architecture, debugging a single farmer query failure required cross-referencing logs across 3 namespaces, HTTP headers, and Celery task IDs.
 
 In Option C, because the entire query-answering workflow runs in-process, end-to-end observability is achieved through **Unified Structured JSON Logging** bound to a single `trace_id`.
 
@@ -1035,7 +1035,7 @@ Both Standalone Mode 1 (`akvo-rag`) and Host Partner Mode 2 (`xxxconnect`) share
 
 ### 9.1 Why `ScopingAgent` is Removed from the Default Path Today
 
-In the legacy implementation (`backend/app/services/scoping_agent.py`), the `ScopingAgent` invoked an LLM to decide which MCP server and tool to call based on `mcp_discovery.json`. 
+In the legacy implementation (`backend/app/services/scoping_agent.py`), the `ScopingAgent` invoked an LLM to decide which MCP server and tool to call based on `mcp_discovery.json`.
 
 #### The Flaws in the Legacy Design:
 1. **Predetermined Outcome:** Partner applications (e.g. AgriConnect) already specify the target `knowledge_base_ids` explicitly in the request (`knowledge_base_ids: [1, 2]`), which instructed the scoping LLM: `"Use ONLY the provided knowledge_base_ids and do NOT choose new IDs"`.
@@ -1066,12 +1066,12 @@ flowchart TD
     subgraph FutureRouting["Future Routing Architecture (When Scale Requires)"]
         direction TB
         Q["User Query"] --> Intent{"Intent & Pre-Filter"}
-        
+
         Intent -->|"Standard Query (1-3 KBs)"| DirectRet["Direct Vector Retrieval<br/>(Parallel Chroma Search)"]
-        
+
         Intent -->|"Large Corpus (20+ KBs)"| KBR["Future 1: Semantic KB Router<br/>(Embedding / Metadata Filter)"]
         KBR --> DirectRet
-        
+
         Intent -->|"Dynamic Operational Query"| ToolRouter{"Future 2: Native Tool Calling"}
         ToolRouter -->|"MIS / Meter / Sensor"| LangGraphTools["LangGraph ToolNode<br/>(Standard OpenAI Tools API)"]
         ToolRouter -->|"External MCP"| MCPClient["Future 3: Dynamic MCP Client<br/>(Standardized FastMCP Client)"]
