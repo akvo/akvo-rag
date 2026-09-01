@@ -79,7 +79,7 @@ flowchart LR
         R2 --> R3["TASK-RAG-203<br/>Bypass ScopingAgent"]
         R3 --> R4["TASK-RAG-204<br/>Purge Startup MCP & Leaks"]
         R4 --> R5["TASK-RAG-205<br/>Multi-Tier Prompt Resolver"]
-        R5 --> R6["TASK-RAG-206<br/>PostgreSQL Adapter & MySQL ETL"]
+        R5 --> R6["TASK-RAG-206<br/>Unified Data Migration CLI & Script"]
     end
 
     subgraph P3["Phase 3: Ingestion Worker"]
@@ -118,7 +118,7 @@ flowchart LR
 | `TASK-RAG-203` | Short-Circuit `ScopingAgent` on Default RAG Path | `akvo-rag` | **1.5 hrs** | 1.0 day |
 | `TASK-RAG-204` | Remove Startup MCP Discovery & Purge Domain Leaks | `akvo-rag` | **1.5 hrs** | 1.0 day |
 | `TASK-RAG-205` | Multi-Tier Prompt Resolver & Prompt Reactivity Integration Test | `akvo-rag` | **3.0 hrs** | 2.5 days |
-| `TASK-RAG-206` | PostgreSQL Database Adapter & Automated MySQL Data Migration CLI | `akvo-rag` | **2.0 hrs** | 1.5 days |
+| `TASK-RAG-206` | PostgreSQL Database Adapter & Unified Data Migration CLI/Scripts (MySQL + Vector-KB PG) | `akvo-rag` | **2.0 hrs** | 1.5 days |
 | **Phase 3** | **Ingestion Worker & Metadata Hardening** | | | |
 | `TASK-VKB-301` | Add KB Embedding Model & Dimension Guard | `vector-kb-mcp-server` | **2.5 hrs** | 1.5 days |
 | `TASK-VKB-302` | Enrich Documents & Chunks with Public-Sector Metadata | `vector-kb-mcp-server` | **2.0 hrs** | 1.5 days |
@@ -440,58 +440,71 @@ flowchart LR
 
 ---
 
-#### `TASK-RAG-206`: PostgreSQL Database Adapter & Automated MySQL Data Migration CLI
+#### `TASK-RAG-206`: PostgreSQL Database Adapter & Unified Data Migration Tools (MySQL + Vector-KB PG)
 * **Repository:** `akvo-rag`
 * **Vibe-Coding Estimate:** `2.0 hours`
 * **Detailed Description:**  
-  1. Update `backend/app/database/` and Alembic configuration to natively connect to PostgreSQL 17 via `asyncpg` (`postgresql+asyncpg://...`), phasing out MySQL 8 dialect dependencies.
-  2. Implement an automated, idempotent CLI migration script `backend/app/scripts/migrate_mysql_to_postgres.py` that reads legacy records from MySQL (`users`, `apps`, `api_keys`, `prompt_definitions`, `prompt_versions`, `system_settings`, `chats`, `chat_messages`) and batch-inserts them into the consolidated PostgreSQL 17 database.
-  3. Enforce automated data integrity checks: assert 100% row count parity between source and destination tables, and verify that user password hashes (bcrypt) and API key hashes authenticate cleanly against PostgreSQL.
-  4. Ensure Standalone Product Mode (Mode 1) boots against PostgreSQL with zero MySQL dependencies.
+  1. Update `backend/app/database/` and Alembic configuration in `akvo-rag` to natively connect to PostgreSQL 17 via `asyncpg` (`postgresql+asyncpg://...`), phasing out MySQL 8 dialect dependencies.
+  2. Implement an automated, idempotent Python CLI migration script `backend/app/scripts/migrate_legacy_to_postgres.py` that reads:
+     - Akvo-RAG legacy records from MySQL (`users`, `apps`, `api_keys`, `prompt_definitions`, `prompt_versions`, `system_settings`, `chats`, `chat_messages`).
+     - Vector-KB legacy records from legacy PostgreSQL (`knowledge_bases`, `documents`, `document_chunks`).
+     - Batch-inserts both cleanly into the consolidated PostgreSQL 17 database.
+  3. Implement a fast native bash helper `backend/app/scripts/migrate_vector_kb_postgres.sh` utilizing native `pg_dump` and `psql` to stream vector-kb metadata across database instances in $< 5$ seconds.
+  4. Enforce automated data integrity checks: assert 100% row count parity and exact primary key ID retention (`kb_id=1`, `kb_id=2`), and verify that user password hashes (bcrypt) and API keys authenticate cleanly against PostgreSQL.
+  5. Ensure Standalone Product Mode (Mode 1) boots against PostgreSQL with zero MySQL dependencies.
 * **Key Touchpoints:**
   - `backend/app/database/session.py` `[MODIFY]`
-  - `backend/app/scripts/migrate_mysql_to_postgres.py` `[NEW]`
+  - `backend/app/scripts/migrate_legacy_to_postgres.py` `[NEW]`
+  - `backend/app/scripts/migrate_vector_kb_postgres.sh` `[NEW]`
   - `backend/alembic/env.py` `[MODIFY]`
   - `docker-compose.dev.yml` & `docker-compose.yml` `[MODIFY]`
 * **Code Specification:**
   ```python
-  # backend/app/scripts/migrate_mysql_to_postgres.py
+  # backend/app/scripts/migrate_legacy_to_postgres.py
   import asyncio
   import logging
   from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-  from sqlalchemy import select, text
+  from sqlalchemy import select
   from app.models.user import User
   from app.models.app import App
   from app.models.api_key import ApiKey
   from app.models.prompt import PromptDefinition, PromptVersion
 
-  TABLES_TO_MIGRATE = [User, App, ApiKey, PromptDefinition, PromptVersion]
+  AKVO_RAG_MODELS = [User, App, ApiKey, PromptDefinition, PromptVersion]
 
-  async def migrate_data(mysql_url: str, pg_url: str):
+  async def migrate_akvo_rag_mysql(mysql_url: str, pg_url: str):
       mysql_engine = create_async_engine(mysql_url)
       pg_engine = create_async_engine(pg_url)
       
       async with AsyncSession(mysql_engine) as mysql_session, AsyncSession(pg_engine) as pg_session:
-          for model in TABLES_TO_MIGRATE:
+          for model in AKVO_RAG_MODELS:
               res = await mysql_session.execute(select(model))
               records = res.scalars().all()
               logging.info(f"Extracting {len(records)} rows from {model.__tablename__} (MySQL)...")
-              
               for r in records:
                   await pg_session.merge(r)
               await pg_session.commit()
-              
               pg_count = (await pg_session.execute(select(model))).scalars().all()
               assert len(records) == len(pg_count), f"Mismatch in {model.__tablename__}: {len(records)} vs {len(pg_count)}"
               logging.info(f"Successfully migrated {model.__tablename__}: {len(pg_count)} rows (100% match).")
   ```
+  ```bash
+  #!/usr/bin/env bash
+  # backend/app/scripts/migrate_vector_kb_postgres.sh
+  set -e
+  echo "Streaming Vector-KB tables from legacy PostgreSQL to consolidated PostgreSQL 17..."
+  pg_dump -h "${LEGACY_VKB_PG_HOST:-localhost}" -U "${LEGACY_VKB_PG_USER:-postgres}" -d "${LEGACY_VKB_PG_DB:-vector_kb}" \
+    -t knowledge_bases -t documents -t document_chunks --data-only \
+    | psql -h "${CONSOLIDATED_PG_HOST:-localhost}" -U "${CONSOLIDATED_PG_USER:-postgres}" -d "${CONSOLIDATED_PG_DB:-akvo_rag}"
+  echo "Vector-KB data migration completed successfully in < 5s."
+  ```
 * **User Acceptance Criteria (UAC):**
   - Existing user accounts log into the Next.js Web UI with their existing passwords on PostgreSQL.
-  - All existing API keys authenticate without re-issuance.
+  - All existing API keys and KB IDs (`kb_1`, `kb_2`) authenticate and link without re-issuance or re-indexing.
   - Standalone Akvo-RAG boots up with `docker compose -f docker-compose.dev.yml up` with zero MySQL or RabbitMQ containers.
 * **Technical Acceptance Criteria (TAC):**
-  - Migration script executes in $< 10$ seconds on production datasets.
-  - Row counts across `users`, `apps`, `api_keys`, and `prompts` match 100%.
+  - Migration script and bash tool execute in $< 10$ seconds on production datasets.
+  - Row counts and primary key IDs across `users`, `apps`, `api_keys`, `prompts`, `knowledge_bases`, and `documents` match 100%.
   - User login (`POST /api/auth/login`) and API key auth pass against PostgreSQL.
   - Standalone `docker-compose.dev.yml` boots: `frontend`, `backend`, `ingestion-worker`, `postgres`, `redis`, `chromadb`, `minio`.
 
@@ -834,11 +847,12 @@ To guarantee that currently running production systems (both the Standalone Akvo
 - All new packages (`vector-kb-core`, `akvo-rag-core`) and the `ingestion-worker` container are developed and tested against CI without touching live production pods.
 - Existing Kubernetes deployments (`agriconnect2-namespace`, `agriconnect-rag-namespace`, `kb-mcp-server-namespace`) continue serving users normally.
 
-#### Step 2: Database Initialization & Automated MySQL $\rightarrow$ PostgreSQL ETL (`TASK-RAG-206`)
+#### Step 2: Database Initialization & Unified Legacy Data Migration (`TASK-RAG-206`)
 - **Initialize Target Database:** Run `alembic upgrade head` on the target PostgreSQL 17 instance to instantiate clean schemas.
-- **Run One-Click ETL Script:** Execute `python -m app.scripts.migrate_mysql_to_postgres`:
-  - Migrates `users`, `apps`, `api_keys`, `prompt_definitions`, `prompt_versions`, `system_settings`, `chats`, `chat_messages` from MySQL 8 to PostgreSQL 17 in $< 10$ seconds.
-  - Automatically verifies 100% row count parity.
+- **Run One-Click Migration CLI / Scripts:**
+  - **Akvo-RAG MySQL Data:** Execute `python -m app.scripts.migrate_legacy_to_postgres` to batch-insert `users`, `apps`, `api_keys`, `prompt_definitions`, `prompt_versions`, `system_settings`, `chats`, and `chat_messages` from MySQL 8 to PostgreSQL 17 in $< 10$ seconds.
+  - **Vector-KB PostgreSQL Data:** Execute `backend/app/scripts/migrate_vector_kb_postgres.sh` (or let the Python CLI execute it) to stream `knowledge_bases`, `documents`, and `document_chunks` into the consolidated PostgreSQL instance in $< 5$ seconds with 100% ID retention (`kb_id=1`, `kb_id=2`).
+  - Automatically verifies 100% row count and ID parity across all tables.
 - **Vector & Object Storage Continuity:** ChromaDB vector collections (`kb_{id}`) and MinIO files (`documents/`) remain untouched in their existing storage volumes—zero re-embedding or re-uploading required.
 
 #### Step 3: Standalone Mode 1 Verification (Akvo-RAG Web UI)
