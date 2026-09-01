@@ -109,20 +109,20 @@ flowchart LR
 | Task Code | Title | Target Repository | Vibe-Coding Est. | Traditional Est. |
 |---|---|---|---|---|
 | **Phase 1** | **`vector-kb-core` Package Extraction** | | | |
-| `TASK-VKB-101` | Scaffold `vector-kb-core` Package & Typed Interfaces | `vector-kb-mcp-server` | **2.0 hrs** | 1.5 days |
+| `TASK-VKB-101` | Scaffold `vector-kb-core` Package, Typed Interfaces & Structured Logging | `vector-kb-mcp-server` | **2.0 hrs** | 1.5 days |
 | `TASK-VKB-102` | Implement `ChromaRetriever` with Direct Similarity Search | `vector-kb-mcp-server` | **3.0 hrs** | 2.5 days |
 | `TASK-VKB-103` | Unit & Integration Test Suite for `vector-kb-core` | `vector-kb-mcp-server` | **1.5 hrs** | 1.0 day |
 | **Phase 2** | **`akvo-rag-core` Package Extraction** | | | |
-| `TASK-RAG-201` | Scaffold `akvo-rag-core` Package & LangGraph Engine | `akvo-rag` | **3.5 hrs** | 3.0 days |
-| `TASK-RAG-202` | Direct `Retriever` Integration (Delete FastMCP Client) | `akvo-rag` | **2.5 hrs** | 2.0 days |
+| `TASK-RAG-201` | Scaffold `akvo-rag-core` Package, LangGraph Engine & Structured Logging | `akvo-rag` | **3.5 hrs** | 3.0 days |
+| `TASK-RAG-202` | Direct `Retriever` Integration (Delete FastMCP Client & Update Legacy Tests) | `akvo-rag` | **2.5 hrs** | 2.0 days |
 | `TASK-RAG-203` | Short-Circuit `ScopingAgent` on Default RAG Path | `akvo-rag` | **1.5 hrs** | 1.0 day |
 | `TASK-RAG-204` | Remove Startup MCP Discovery & Purge Domain Leaks | `akvo-rag` | **1.5 hrs** | 1.0 day |
-| `TASK-RAG-205` | Multi-Tier Prompt Resolver & Reactivity Integration Test | `akvo-rag` | **3.0 hrs** | 2.5 days |
+| `TASK-RAG-205` | Multi-Tier Prompt Resolver & Prompt Reactivity Integration Test | `akvo-rag` | **3.0 hrs** | 2.5 days |
 | `TASK-RAG-206` | PostgreSQL Database Adapter & Automated MySQL Data Migration CLI | `akvo-rag` | **2.0 hrs** | 1.5 days |
 | **Phase 3** | **Ingestion Worker & Metadata Hardening** | | | |
 | `TASK-VKB-301` | Add KB Embedding Model & Dimension Guard | `vector-kb-mcp-server` | **2.5 hrs** | 1.5 days |
 | `TASK-VKB-302` | Enrich Documents & Chunks with Public-Sector Metadata | `vector-kb-mcp-server` | **2.0 hrs** | 1.5 days |
-| `TASK-VKB-303` | Package Dedicated Background Ingestion Worker | `vector-kb-mcp-server` | **2.0 hrs** | 1.0 day |
+| `TASK-VKB-303` | Package Dedicated Background Ingestion Worker & Upload Task Contract | `vector-kb-mcp-server` | **2.0 hrs** | 1.0 day |
 | **Phase 4** | **Host App In-Process Integration** | | | |
 | `TASK-INT-401` | Build `EmbeddedAIService` Adapter in Host Application | Host App (`agriconnect`) | **3.5 hrs** | 2.5 days |
 | `TASK-INT-402` | Unified Single-Namespace Docker Compose & Manifests | Host / Compose | **2.0 hrs** | 1.5 days |
