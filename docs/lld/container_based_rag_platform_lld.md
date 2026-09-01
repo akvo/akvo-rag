@@ -269,37 +269,61 @@ akvo-rag/
 │   ├── app/
 │   │   ├── api/              # FastAPI REST & SSE endpoints
 │   │   ├── core/             # Config & Security
-│   │   ├── models/           # SQLAlchemy Models (Users, Prompts, KBs, Documents)
+│   │   ├── models/           # Core Models (Users, Apps, ApiKeys, Prompts, Chats)
 │   │   ├── services/         # RAG LangGraph & Prompt Services
 │   │   │   └── mcp_queue_dispatcher.py # Dynamic Queue-backed MCP caller
 │   │   └── seeder/           # Seed admin, prompts
-│   ├── alembic/              # Consolidated Alembic migrations
+│   ├── alembic/              # Core Alembic Migrations (version_table = 'alembic_version')
 │   └── mcp_config.json       # Static MCP configuration file
 ├── frontend/                 # Next.js 14 Web Dashboard & Chat Playground
-├── vector-kb-mcp/            # Merged Vector MCP Container (Root-Level)
+├── vector-kb-mcp/            # Merged Vector MCP Container (Self-Contained Microservice)
 │   ├── Dockerfile            # Container build for vector-mcp
 │   ├── requirements.txt      # PDF parsing & ChromaDB dependencies
 │   ├── main.py               # Redis Queue Worker entrypoint
+│   ├── alembic/              # Vector-KB Alembic Migrations (version_table = 'alembic_version_vkb')
+│   ├── models/               # Vector-KB Models (KnowledgeBase, Document, DocumentChunk)
 │   ├── parser/               # PDF, DOCX, OCR extraction
 │   ├── chunker/              # Token chunking & metadata enrichment
 │   └── retriever/            # Direct ChromaDB vector querying
-├── other-mcp/                # (Optional) Future external/internal MCP container
+├── other-mcp/                # (Optional) Future external/internal MCP container (e.g. image-recognition)
 └── docker-compose.yml        # Complete 7-container local composition
 ```
 
 ### 5.2 Discontinuation & Porting Checklist
 1. Copy `vector-knowledge-base-mcp-server/main/app/services/` (document parsers, chunkers, text extractors) directly into `akvo-rag/vector-kb-mcp/`.
-2. Convert the FastMCP HTTP listener into a high-performance **Redis Queue Worker** that listens on `mcp:vector:requests`.
-3. Consolidate `knowledge_bases`, `documents`, and `document_chunks` models into `akvo-rag/backend/app/models/`.
-4. Archive `vector-knowledge-base-mcp-server` repository in GitHub.
+2. Port `knowledge_bases`, `documents`, and `document_chunks` models directly into `akvo-rag/vector-kb-mcp/models/`.
+3. Port existing Vector-KB migrations into `akvo-rag/vector-kb-mcp/alembic/` with `version_table = "alembic_version_vkb"`.
+4. Convert the FastMCP HTTP listener into a high-performance **Redis Queue Worker** (`vector-kb-mcp/main.py`) that listens on `mcp:vector:requests`.
+5. Archive `vector-knowledge-base-mcp-server` repository in GitHub.
 
 ---
 
-## 6. Database Consolidation & Migration (PostgreSQL 17)
+## 6. Database Consolidation & Multi-Tenant Migration (PostgreSQL 17)
 
-### 6.1 Unified Schema Registry
+### 6.1 Service-Owned Schema Ownership & Alembic Version Isolation
 
-All tables live inside a single PostgreSQL 17 database:
+Both `backend` and `vector-kb-mcp` connect to the same consolidated **PostgreSQL 17** database instance, but each service owns its own tables and migration revision tree:
+
+```text
+Consolidated PostgreSQL 17 Database
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│ 1. Core Akvo-RAG Schema (Managed by backend/alembic/ -> version_table: alembic_version)│
+│    • users, apps, api_keys, prompt_definitions, prompt_versions, chats, chat_messages  │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ 2. Vector-KB Schema (Managed by vector-kb-mcp/alembic/ -> version_table: alembic_version_vkb)│
+│    • knowledge_bases, documents, document_chunks                                       │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Why Service-Owned Migrations?
+1. **True Container Autonomy:** `vector-kb-mcp` is 100% self-contained. Schema changes to parsing, chunking, or metadata columns are managed entirely within `vector-kb-mcp/` without modifying `backend/`.
+2. **Pluggable Blueprint for Future MCPs:** Any new MCP (e.g. `image-recognition-mcp` or `weather-mcp`) can follow the exact same pattern with its own `img_` table prefix and `alembic_version_img` table.
+3. **Independent Startup Lifecycle:**
+   - On boot, `akvo-rag-backend` executes: `alembic -c alembic.ini upgrade head`
+   - On boot, `vector-mcp` executes: `alembic -c alembic.ini upgrade head`
+   - Since each uses a dedicated `version_table`, they never conflict or overwrite each other.
+
+### 6.2 Schema Registry
 
 ```mermaid
 erDiagram
@@ -344,9 +368,9 @@ erDiagram
     }
 ```
 
-### 6.2 Automated Legacy Data Migration Script (`migrate_legacy_to_consolidated_postgres.py`)
+### 6.3 Automated Legacy Data Migration Script (`migrate_legacy_to_consolidated_postgres.py`)
 
-A single Python CLI command extracts all data from legacy MySQL 8 and legacy Vector-KB PostgreSQL and populates PostgreSQL 17:
+A single Python CLI command extracts all data from legacy MySQL 8 and legacy Vector-KB PostgreSQL and populates the consolidated PostgreSQL 17 instance:
 
 ```bash
 python -m app.scripts.migrate_legacy_to_consolidated_postgres \
@@ -431,9 +455,9 @@ sequenceDiagram
 | **Phase 1** | **Codebase Consolidation & Monorepo Setup** | | | |
 | `TASK-MONO-101` | Migrate `vector-kb` Parsing & Chunking Code into `vector-kb-mcp/` | `vector-kb-mcp/` | **2.5 hrs** | 2.0 days |
 | `TASK-MONO-102` | Build `vector-mcp` Dockerfile & Redis Worker Entrypoint | `vector-kb-mcp/Dockerfile` | **2.0 hrs** | 1.5 days |
-| **Phase 2** | **Unified Database & Migration Strategy** | | | |
-| `TASK-DB-201` | Consolidate SQLAlchemy Models (`knowledge_bases`, `documents`, `chunks`) | `backend/app/models/` | **2.0 hrs** | 1.5 days |
-| `TASK-DB-202` | Create Unified PostgreSQL 17 Alembic Migrations | `backend/alembic/` | **1.5 hrs** | 1.0 day |
+| **Phase 2** | **Unified Database & Service-Owned Migration Strategy** | | | |
+| `TASK-DB-201` | Port Vector-KB SQLAlchemy Models into `vector-kb-mcp/models/` | `vector-kb-mcp/models/` | **2.0 hrs** | 1.5 days |
+| `TASK-DB-202` | Setup Service-Owned Alembic Migrations (`alembic_version_vkb`) | `vector-kb-mcp/alembic/` | **1.5 hrs** | 1.0 day |
 | `TASK-DB-203` | Automated Data Migration CLI (MySQL + Vector-KB PG $\rightarrow$ PostgreSQL 17) | `backend/app/scripts/` | **2.0 hrs** | 1.5 days |
 | **Phase 3** | **Queue-Backed MCP Dispatcher & `mcp_config`** | | | |
 | `TASK-MCP-301` | Implement `mcp_config.json` Schema & Parser | `backend/app/core/` | **1.0 hr** | 1.0 day |
