@@ -42,7 +42,7 @@ Based on architectural reviews and management directives, the RAG platform is tr
 
 ### Core Architectural Decisions:
 1. **Discontinuation of Standalone `vector-knowledge-base-mcp-server` Repo:**
-   - All document ingestion, chunking, OpenAI embeddings, and ChromaDB retrieval code is migrated directly into `akvo-rag/services/vector_kb_mcp/`.
+   - All document ingestion, chunking, OpenAI embeddings, and ChromaDB retrieval code is migrated directly into `akvo-rag/vector-kb-mcp/`.
 2. **Container-Based Microservice Isolation:**
    - `akvo-rag-backend`, `akvo-rag-frontend`, `vector-mcp`, and any `other_mcp` (e.g. image recognition, weather) run as dedicated, isolated Docker containers within the same Docker Compose / Kubernetes network.
 3. **Replacement of HTTP/SSE MCP Calls with High-Speed Redis Queue Request-Reply:**
@@ -124,7 +124,7 @@ The Docker Compose file (`docker-compose.yml`) defines 7 primary containers:
 |---|---|---|---|---|
 | **`frontend`** | `akvo-rag/frontend` (Next.js 14) | Admin Web Dashboard, Prompt Editor, Chat Playground UI | `3000:3000` | Code bind mount |
 | **`backend`** | `akvo-rag/backend` (FastAPI) | Core API, Auth, LangGraph RAG Workflow, `mcp_config` Dispatcher | `8000:8000` | Code bind mount |
-| **`vector-mcp`** | `akvo-rag/services/vector_kb_mcp` | Vector similarity search worker and PDF document ingestion worker | Internal | Code bind mount |
+| **`vector-mcp`** | `akvo-rag/vector-kb-mcp` | Vector similarity search worker and PDF document ingestion worker | Internal | Code bind mount |
 | **`postgres`** | `postgres:17-alpine` | Unified relational database for users, prompts, KB metadata, and document chunks | `5432:5432` | `postgres_data:/var/lib/postgresql/data` |
 | **`chromadb`** | `chromadb/chroma:latest` | Vector database storing embeddings per knowledge base collection | `8000:8000` | `chroma_data:/chroma/chroma` |
 | **`minio`** | `minio/minio:latest` | S3-compatible object storage for uploaded PDF files | `9000:9000`, `9001:9001` | `minio_data:/data` |
@@ -265,30 +265,30 @@ class MCPQueueDispatcher:
 
 ```text
 akvo-rag/
-├── backend/
+├── backend/                  # FastAPI Core Backend & LangGraph RAG
 │   ├── app/
-│   │   ├── api/                  # FastAPI REST & SSE endpoints
-│   │   ├── core/                 # Config & Security
-│   │   ├── models/               # SQLAlchemy Models (Users, Prompts, KBs, Documents)
-│   │   ├── services/             # RAG LangGraph & Prompt Services
+│   │   ├── api/              # FastAPI REST & SSE endpoints
+│   │   ├── core/             # Config & Security
+│   │   ├── models/           # SQLAlchemy Models (Users, Prompts, KBs, Documents)
+│   │   ├── services/         # RAG LangGraph & Prompt Services
 │   │   │   └── mcp_queue_dispatcher.py # Dynamic Queue-backed MCP caller
-│   │   └── seeder/               # Seed admin, prompts
-│   ├── alembic/                  # Consolidated Alembic migrations
-│   └── mcp_config.json           # Static MCP configuration file
-├── frontend/                     # Next.js 14 Web Dashboard & Chat Playground
-├── services/
-│   └── vector_kb_mcp/            # Merged from vector-knowledge-base-mcp-server
-│       ├── Dockerfile            # Container build for vector-mcp
-│       ├── requirements.txt      # PDF parsing & ChromaDB dependencies
-│       ├── main.py               # Redis Queue Worker entrypoint
-│       ├── parser/               # PDF, DOCX, OCR extraction
-│       ├── chunker/              # Token chunking & metadata enrichment
-│       └── retriever/            # Direct ChromaDB vector querying
-└── docker-compose.yml            # Complete 7-container local composition
+│   │   └── seeder/           # Seed admin, prompts
+│   ├── alembic/              # Consolidated Alembic migrations
+│   └── mcp_config.json       # Static MCP configuration file
+├── frontend/                 # Next.js 14 Web Dashboard & Chat Playground
+├── vector-kb-mcp/            # Merged Vector MCP Container (Root-Level)
+│   ├── Dockerfile            # Container build for vector-mcp
+│   ├── requirements.txt      # PDF parsing & ChromaDB dependencies
+│   ├── main.py               # Redis Queue Worker entrypoint
+│   ├── parser/               # PDF, DOCX, OCR extraction
+│   ├── chunker/              # Token chunking & metadata enrichment
+│   └── retriever/            # Direct ChromaDB vector querying
+├── other-mcp/                # (Optional) Future external/internal MCP container
+└── docker-compose.yml        # Complete 7-container local composition
 ```
 
 ### 5.2 Discontinuation & Porting Checklist
-1. Copy `vector-knowledge-base-mcp-server/main/app/services/` (document parsers, chunkers, text extractors) into `akvo-rag/services/vector_kb_mcp/`.
+1. Copy `vector-knowledge-base-mcp-server/main/app/services/` (document parsers, chunkers, text extractors) directly into `akvo-rag/vector-kb-mcp/`.
 2. Convert the FastMCP HTTP listener into a high-performance **Redis Queue Worker** that listens on `mcp:vector:requests`.
 3. Consolidate `knowledge_bases`, `documents`, and `document_chunks` models into `akvo-rag/backend/app/models/`.
 4. Archive `vector-knowledge-base-mcp-server` repository in GitHub.
@@ -429,8 +429,8 @@ sequenceDiagram
 | Task Code | Title | Component / Path | Vibe-Coding Est. | Traditional Est. |
 |---|---|---|---|---|
 | **Phase 1** | **Codebase Consolidation & Monorepo Setup** | | | |
-| `TASK-MONO-101` | Migrate `vector-kb` Parsing & Chunking Code into `services/vector_kb_mcp/` | `services/vector_kb_mcp/` | **2.5 hrs** | 2.0 days |
-| `TASK-MONO-102` | Build `vector-mcp` Dockerfile & Redis Worker Entrypoint | `services/vector_kb_mcp/Dockerfile` | **2.0 hrs** | 1.5 days |
+| `TASK-MONO-101` | Migrate `vector-kb` Parsing & Chunking Code into `vector-kb-mcp/` | `vector-kb-mcp/` | **2.5 hrs** | 2.0 days |
+| `TASK-MONO-102` | Build `vector-mcp` Dockerfile & Redis Worker Entrypoint | `vector-kb-mcp/Dockerfile` | **2.0 hrs** | 1.5 days |
 | **Phase 2** | **Unified Database & Migration Strategy** | | | |
 | `TASK-DB-201` | Consolidate SQLAlchemy Models (`knowledge_bases`, `documents`, `chunks`) | `backend/app/models/` | **2.0 hrs** | 1.5 days |
 | `TASK-DB-202` | Create Unified PostgreSQL 17 Alembic Migrations | `backend/alembic/` | **1.5 hrs** | 1.0 day |
@@ -441,10 +441,10 @@ sequenceDiagram
 | `TASK-MCP-303` | Integrate `MCPQueueDispatcher` into LangGraph RAG Engine | `backend/app/services/` | **2.5 hrs** | 2.0 days |
 | **Phase 4** | **Document Ingestion & MinIO Storage** | | | |
 | `TASK-ING-401` | Integrate MinIO Client for Document Uploads in FastAPI Backend | `backend/app/services/` | **1.5 hrs** | 1.0 day |
-| `TASK-ING-402` | Build Celery/Redis Async Ingestion Consumer in `vector-mcp` | `services/vector_kb_mcp/` | **2.0 hrs** | 1.5 days |
+| `TASK-ING-402` | Build Celery/Redis Async Ingestion Consumer in `vector-mcp` | `vector-kb-mcp/` | **2.0 hrs** | 1.5 days |
 | **Phase 5** | **Docker Compose Orchestration & Extensibility Verification** | | | |
 | `TASK-OPS-501` | Author Unified `docker-compose.yml` for All 7 Services | Root `docker-compose.yml` | **2.0 hrs** | 1.5 days |
-| `TASK-OPS-502` | Create Mock External MCP Container (e.g. `mock-image-mcp`) & Verify Config Plug-in | `services/mock_mcp/` | **1.5 hrs** | 1.0 day |
+| `TASK-OPS-502` | Create Mock External MCP Container (e.g. `mock-image-mcp`) & Verify Config Plug-in | `mock-image-mcp/` | **1.5 hrs** | 1.0 day |
 | `TASK-OPS-503` | End-to-End Golden Set Accuracy & Legacy Test Gate | `backend/RAG_evaluation/` | **2.5 hrs** | 2.0 days |
 | **TOTAL** | | | **26.0 hrs (~3.5 working days)** | **20.0 days** |
 
