@@ -116,7 +116,7 @@ flowchart LR
 | `TASK-RAG-202` | Direct `Retriever` Integration (Delete FastMCP Client) | `akvo-rag` | **2.5 hrs** | 2.0 days |
 | `TASK-RAG-203` | Short-Circuit `ScopingAgent` on Default RAG Path | `akvo-rag` | **1.5 hrs** | 1.0 day |
 | `TASK-RAG-204` | Remove Startup MCP Discovery & Purge Domain Leaks | `akvo-rag` | **1.5 hrs** | 1.0 day |
-| `TASK-RAG-205` | Multi-Tier Prompt Resolver (Base + Sector + Partner) | `akvo-rag` | **2.5 hrs** | 2.0 days |
+| `TASK-RAG-205` | Multi-Tier Prompt Resolver & Reactivity Integration Test | `akvo-rag` | **3.0 hrs** | 2.5 days |
 | **Phase 3** | **Ingestion Worker & Metadata Hardening** | | | |
 | `TASK-VKB-301` | Add KB Embedding Model & Dimension Guard | `vector-kb-mcp-server` | **2.5 hrs** | 1.5 days |
 | `TASK-VKB-302` | Enrich Documents & Chunks with Public-Sector Metadata | `vector-kb-mcp-server` | **2.0 hrs** | 1.5 days |
@@ -125,8 +125,8 @@ flowchart LR
 | `TASK-INT-401` | Build `EmbeddedAIService` Adapter in Host Application | Host App (`agriconnect`) | **3.5 hrs** | 2.5 days |
 | `TASK-INT-402` | Unified Single-Namespace Docker Compose & Manifests | Host / Compose | **2.0 hrs** | 1.5 days |
 | **Phase 5** | **Verification, QA & Golden Set Harness** | | | |
-| `TASK-QA-501` | Automated Golden Dataset Evaluation & CI Pipeline | `akvo-rag` | **3.0 hrs** | 2.0 days |
-| **TOTAL** | | | **33.0 hrs (~4.1 working days)** | **25.5 days** |
+| `TASK-QA-501` | Golden Set Evaluation, Legacy Test Gate & CI Pipeline | `akvo-rag` | **3.5 hrs** | 2.5 days |
+| **TOTAL** | | | **34.0 hrs (~4.25 working days)** | **26.5 days** |
 
 ---
 
@@ -144,6 +144,7 @@ flowchart LR
   - `packages/vector-kb-core/src/vector_kb_core/__init__.py` `[NEW]`
   - `packages/vector-kb-core/src/vector_kb_core/models.py` `[NEW]`
   - `packages/vector-kb-core/src/vector_kb_core/retriever.py` `[NEW]`
+  - `packages/vector-kb-core/src/vector_kb_core/logging.py` `[NEW]`
 * **Code Specification:**
   ```python
   # packages/vector-kb-core/src/vector_kb_core/models.py
@@ -182,6 +183,7 @@ flowchart LR
 * **Technical Acceptance Criteria (TAC):**
   - `pyproject.toml` configures package build using `hatchling` or `setuptools`.
   - Zero dependencies on FastAPI, Celery, or FastMCP in `vector-kb-core`.
+  - Emits structured contextual log records with `trace_id`, `event`, and duration via standard Python `logging`.
   - Type annotations pass `mypy --strict`.
 
 ---
@@ -265,6 +267,7 @@ flowchart LR
   - `packages/akvo-rag-core/src/akvo_rag_core/models.py` `[NEW]`
   - `packages/akvo-rag-core/src/akvo_rag_core/engine.py` `[NEW]`
   - `packages/akvo-rag-core/src/akvo_rag_core/workflow.py` `[NEW]`
+  - `packages/akvo-rag-core/src/akvo_rag_core/logging.py` `[NEW]`
 * **Code Specification:**
   ```python
   # packages/akvo-rag-core/src/akvo_rag_core/models.py
@@ -303,18 +306,20 @@ flowchart LR
 * **Technical Acceptance Criteria (TAC):**
   - `akvo-rag-core` does not import or depend on SQLAlchemy, MySQL, Celery, or RabbitMQ.
   - Preserves citation discipline (citations stripped if `[citation:N]` is omitted by the LLM).
+  - Emits structured JSON event logs (`rag.query.received`, `rag.retrieval.complete`, `rag.generation.complete`) with `trace_id` and timing metrics.
 
 ---
 
-#### `TASK-RAG-202`: Direct `Retriever` Integration (Delete FastMCP Client)
+#### `TASK-RAG-202`: Direct `Retriever` Integration (Delete FastMCP Client & Update Legacy Tests)
 * **Repository:** `akvo-rag`
 * **Vibe-Coding Estimate:** `2.5 hours`
 * **Detailed Description:**  
-  Replace `FastMCPClientService` and streaming HTTP transport with direct in-memory calls to `vector_kb_core.Retriever` inside the `retrieve_node` of the LangGraph state machine. Delete obsolete network transport code.
+  Replace `FastMCPClientService` and streaming HTTP transport with direct in-memory calls to `vector_kb_core.Retriever` inside the `retrieve_node` of the LangGraph state machine. Delete obsolete network transport code. Update existing unit tests in `backend/tests/` that mocked `FastMCPClientService` to instead assert against the direct `Retriever` interface.
 * **Key Touchpoints:**
   - `packages/akvo-rag-core/src/akvo_rag_core/nodes/retrieve.py` `[NEW]`
   - `backend/mcp_clients/fastmcp_client_service.py` `[DELETE]`
   - `backend/mcp_clients/rest_mcp_client_service.py` `[DELETE]`
+  - `backend/tests/unit/test_retrieval_service.py` `[MODIFY]`
 * **Code Specification:**
   ```python
   # packages/akvo-rag-core/src/akvo_rag_core/nodes/retrieve.py
@@ -335,6 +340,7 @@ flowchart LR
 * **Technical Acceptance Criteria (TAC):**
   - FastMCP transport code is deleted.
   - Direct retrieval node passes `List[RetrievedChunk]` straight to the generation node.
+  - All existing unit tests pass (`backend/test-unit.sh`) with updated mock interfaces.
 
 ---
 
@@ -387,17 +393,19 @@ flowchart LR
 
 ---
 
-#### `TASK-RAG-205`: Multi-Tier Prompt Resolver (Base + Sector + Partner)
+#### `TASK-RAG-205`: Multi-Tier Prompt Resolver & Prompt Reactivity Integration Test
 * **Repository:** `akvo-rag`
-* **Vibe-Coding Estimate:** `2.5 hours`
+* **Vibe-Coding Estimate:** `3.0 hours`
 * **Detailed Description:**  
-  Implement a flexible `PromptResolver` that composes system prompts using a three-tier hierarchy:
-  1. **Platform Base:** Citation discipline, ungrounded fallback format (`"Information is missing on..."`).
-  2. **Sector Base:** Sector-wide rules (e.g. WASH public-health safety gates or Agronomy advice guidelines).
-  3. **Partner Overlay:** Partner name, tone, custom local instructions.
+  1. Implement a flexible `PromptResolver` that composes system prompts using a three-tier hierarchy:
+     - **Platform Base:** Citation discipline, ungrounded fallback format (`"Information is missing on..."`).
+     - **Sector Base:** Sector-wide rules (e.g. WASH public-health safety gates or Agronomy advice guidelines).
+     - **Partner Overlay:** Partner name, tone, custom local instructions.
+  2. Implement an automated integration test (`test_prompt_reactivity.py`) verifying that updating/activating a prompt version via API immediately reflects in subsequent chat responses in Mode 1 without server restarts.
 * **Key Touchpoints:**
   - `packages/akvo-rag-core/src/akvo_rag_core/prompts.py` `[NEW]`
   - `backend/app/services/prompt_service.py` `[MODIFY]`
+  - `backend/tests/integration/test_prompt_reactivity.py` `[NEW]`
 * **Code Specification:**
   ```python
   # packages/akvo-rag-core/src/akvo_rag_core/prompts.py
@@ -419,8 +427,10 @@ flowchart LR
   ```
 * **User Acceptance Criteria (UAC):**
   - Sector modules (e.g. WASH) can inject strict safety constraints without changing platform code.
+  - Changes to system prompts in the Next.js UI / API immediately alter chat playground responses in real time.
 * **Technical Acceptance Criteria (TAC):**
   - Unit tests verify prompt hierarchy, variable interpolation, and strict citation rule preservation.
+  - `backend/tests/integration/test_prompt_reactivity.py` passes: updates a prompt definition version, sends a chat request, and asserts output conforms to the updated instruction.
 
 ---
 
@@ -547,24 +557,26 @@ flowchart LR
 
 ---
 
-### Phase 5: Verification, Quality Assurance & Evaluation
-
-#### `TASK-QA-501`: Automated Golden Dataset Evaluation & CI Pipeline
-* **Repository:** `akvo-rag/backend/RAG_evaluation`
-* **Vibe-Coding Estimate:** `3.0 hours`
+#### `TASK-QA-501`: Golden Set Evaluation, Legacy Test Gate & CI Pipeline
+* **Repository:** `akvo-rag/backend`
+* **Vibe-Coding Estimate:** `3.5 hours`
 * **Detailed Description:**  
-  Run the automated headless evaluation harness (`headless_evaluation.py`) against a golden test dataset of Agronomy and WASH scenarios to benchmark accuracy, faithfulness, citation precision, and latency.
+  1. **Legacy Test Baseline & Regression Gate:** Run and maintain the full existing test suite (`backend/test-unit.sh`, `backend/test.sh`). Ensure all existing unit and endpoint tests continue passing without regression after removing FastMCP and refactoring to the direct `Retriever` interface.
+  2. **Golden Dataset Accuracy Benchmark:** Run the automated headless evaluation harness (`headless_evaluation.py`) against a golden benchmark dataset of Agronomy and WASH queries to measure faithfulness, answer relevancy, and latency.
+  3. **CI Pipeline Automation:** Configure GitHub Actions to execute both the legacy test suite and golden benchmark in CI.
 * **Key Touchpoints:**
+  - `backend/tests/unit/` `[VERIFY GREEN]`
   - `backend/RAG_evaluation/headless_evaluation.py` `[MODIFY]`
   - `backend/RAG_evaluation/datasets/golden_benchmark.json` `[NEW]`
   - `.github/workflows/rag_evaluation.yml` `[NEW]`
 * **User Acceptance Criteria (UAC):**
-  - Automated CI verifies that the in-process engine produces identical or superior answer quality compared to the legacy distributed architecture.
+  - Automated CI verifies that all existing unit/endpoint tests pass and the in-process engine produces identical or superior answer quality compared to the legacy distributed architecture.
 * **Technical Acceptance Criteria (TAC):**
+  - All existing unit tests pass cleanly: `pytest backend/tests/unit -v`.
   - Faithfulness score $\ge 0.85$.
   - Answer relevancy score $\ge 0.85$.
   - Zero ungrounded answers produce fake citations.
-  - Automated test runs in Docker via `./dev.sh exec backend python -m RAG_evaluation.run_evaluation`.
+  - Automated CI workflow runs both `pytest tests/unit` and `python -m RAG_evaluation.run_evaluation`.
 
 ---
 
@@ -665,6 +677,46 @@ When deploying a new host app namespace (e.g. `washconnect`):
 3. **No Cross-Repo Migration Leakage:**
    - Host apps do **not** need to copy or maintain document chunking database schemas.
    - `akvo-rag` does **not** need to absorb the document chunk migrations from `vector-kb`.
+
+### 6.6 Structured Logging & Observability Specification
+
+In the legacy architecture, debugging a single farmer query failure required cross-referencing logs across 3 namespaces, HTTP headers, and Celery task IDs. 
+
+In Option C, because the entire query-answering workflow runs in-process, end-to-end observability is achieved through **Unified Structured JSON Logging** bound to a single `trace_id`.
+
+#### 1. Standard JSON Log Schema
+All core packages (`akvo-rag-core`, `vector-kb-core`) emit JSON logs via standard Python `logging`:
+
+```json
+{
+  "timestamp": "2026-09-01T09:30:00.123Z",
+  "level": "INFO",
+  "logger": "akvo_rag_core.workflow",
+  "trace_id": "8f3b6c2a-9e1d-4f0a-b2c3-d4e5f6a7b8c9",
+  "event": "rag.retrieval.complete",
+  "query_preview": "How to manage avocado root rot?",
+  "kb_ids": [1, 2],
+  "top_k": 4,
+  "chunks_found": 4,
+  "top_score": 0.884,
+  "latency_ms": 64.2
+}
+```
+
+#### 2. Workflow Event Lifecycle
+
+| Event Name | Emitter | Key Logged Attributes | Purpose |
+|---|---|---|---|
+| `rag.query.received` | `akvo-rag-core` | `trace_id`, `query`, `history_length`, `kb_ids` | Records incoming query entry point |
+| `rag.intent.classified` | `akvo-rag-core` | `trace_id`, `intent`, `latency_ms` | Verifies intent router decision (knowledge vs conversational) |
+| `rag.contextualize.complete` | `akvo-rag-core` | `trace_id`, `rewritten_query`, `latency_ms` | Shows rewritten query for multi-turn conversations |
+| `vector_kb.search.start` | `vector-kb-core` | `trace_id`, `kb_ids`, `top_k` | Marks start of ChromaDB similarity search |
+| `vector_kb.search.complete` | `vector-kb-core` | `trace_id`, `chunks_found`, `top_score`, `latency_ms` | Direct vector search performance metric |
+| `rag.generation.complete` | `akvo-rag-core` | `trace_id`, `prompt_tokens`, `completion_tokens`, `latency_ms` | LLM token usage and latency tracking |
+| `rag.citations.filtered` | `akvo-rag-core` | `trace_id`, `raw_citations`, `valid_citations`, `grounded` | Enforces citation validity audit trail |
+
+#### 3. Error Logging & Triage
+When an exception occurs (e.g. ChromaDB connection failure, OpenAI rate limit, ungrounded query), the logger emits an `ERROR` event containing `trace_id`, `error_type`, `error_message`, and `stack_trace`. Developers can query `trace_id: "<id>"` in CloudWatch/Loki to inspect the entire execution graph in a single view.
 
 ---
 
