@@ -65,7 +65,7 @@ This section provides 4 comprehensive, color-coded Mermaid sequence diagrams cov
 ---
 
 ### 2.1 Mode 1: `akvo-rag` + `vector-kb-mcp` Only (Base RAG Platform)
-*Standalone deployment with Next.js web playground, FastAPI RAG backend, and internal queue-backed vector retrieval.*
+*Standalone deployment with Next.js web playground, FastAPI RAG backend, document ingestion, and internal queue-backed vector retrieval.*
 
 ```mermaid
 sequenceDiagram
@@ -101,7 +101,7 @@ sequenceDiagram
         Backend->>PG: 2. Load Prompt Template (alembic_version)
         
         critical Queue Request-Reply (< 5ms)
-            Backend->>Redis: 3. RPUSH mcp:vector:requests { correlation_id, query, kb_ids }
+            Backend->>Redis: 3. RPUSH mcp:vector:requests { tool: "query_knowledge_base", correlation_id, query, kb_ids }
             Redis->>VectorMCP: 4. BLPOP mcp:vector:requests
             VectorMCP->>OpenAI: 5. Generate Query Vector (text-embedding-3-small)
             OpenAI-->>VectorMCP: Return Vector
@@ -116,27 +116,42 @@ sequenceDiagram
         Backend-->>User: 10. Stream / Return RAGResponse
     end
 
-    %% FLOW 2: DOCUMENT INGESTION
+    %% FLOW 2: GET DOCUMENT LIST
+    rect rgb(255, 255, 240)
+        note over User, VectorMCP: FLOW 2: Get Document List in Knowledge Base
+        User->>Backend: 11. GET /api/v1/knowledge-bases/1/documents
+        Backend->>Redis: 12. RPUSH mcp:vector:requests { tool: "list_documents", kb_id: 1, correlation_id: "xyz" }
+        Redis->>VectorMCP: 13. BLPOP mcp:vector:requests
+        VectorMCP->>PG: 14. SELECT * FROM vkb_documents WHERE kb_id = 1
+        VectorMCP->>Redis: 15. RPUSH mcp:vector:responses:xyz { documents: [...] }
+        Redis-->>Backend: 16. BLPOP Return Document List (< 5ms)
+        Backend-->>User: 17. 200 OK [ { id, title, status, doc_version, effective_date }, ... ]
+    end
+
+    %% FLOW 3: DOCUMENT INGESTION
     rect rgb(240, 255, 240)
-        note over User, OpenAI: FLOW 2: Asynchronous PDF Document Ingestion
-        User->>Backend: 11. Upload PDF (POST /api/v1/kb/{id}/documents)
-        Backend->>MinIO: 12. Save PDF in Bucket: documents/
-        Backend->>Redis: 13. RPUSH document_ingestion { document_id, kb_id }
-        Backend-->>User: 14. 202 Accepted
+        note over User, OpenAI: FLOW 3: Asynchronous PDF Document Ingestion
+        User->>Backend: 18. Upload PDF (POST /api/v1/knowledge-bases/1/documents/upload)
+        Backend->>MinIO: 19. Save Raw PDF in Bucket: documents/
+        Backend->>PG: 20. Insert Document Row (Status: PROCESSING)
+        Backend->>Redis: 21. RPUSH document_ingestion { document_id, kb_id: 1 }
+        Backend-->>User: 22. 202 Accepted { document_id, status: "PROCESSING" }
         
-        Redis->>VectorMCP: 15. Ingest Task Consumed
-        VectorMCP->>MinIO: 16. Fetch Raw PDF
-        VectorMCP->>OpenAI: 17. Batch Compute Chunk Embeddings
+        Redis->>VectorMCP: 23. Ingest Task Consumed from document_ingestion
+        VectorMCP->>MinIO: 24. Fetch Raw PDF
+        VectorMCP->>VectorMCP: 25. Parse Pages, OCR & Chunk Text
+        VectorMCP->>OpenAI: 26. Batch Compute Chunk Embeddings (1536-dim)
         OpenAI-->>VectorMCP: Chunk Vectors
-        VectorMCP->>Chroma: 18. Upsert Vectors to kb_{id}
-        VectorMCP->>VectorMCP: 19. Update Status = INDEXED (alembic_version_vkb)
+        VectorMCP->>Chroma: 27. Upsert Vectors to kb_1
+        VectorMCP->>PG: 28. Save Chunk Records & Update Status = INDEXED (alembic_version_vkb)
+        User->>Backend: 29. Poll Document Status -> Shows "INDEXED"
     end
 ```
 
 ---
 
 ### 2.2 Mode 2: `akvo-rag` + `vector-kb-mcp` + `other-mcp` (Multi-MCP Extended Platform)
-*Standalone deployment dynamically executing multiple MCPs (Vector + Image Recognition) via `mcp_config.json`.*
+*Standalone deployment dynamically executing multiple MCPs (Vector + Image Recognition) via `mcp_config.json`, plus document management.*
 
 ```mermaid
 sequenceDiagram
@@ -156,7 +171,7 @@ sequenceDiagram
     end
     
     box rgb(245, 255, 245) Pluggable MCP Tier
-        participant VectorMCP as vector-kb-mcp<br/>(Vector Retrieval)
+        participant VectorMCP as vector-kb-mcp<br/>(Vector Retrieval & Ingestion)
         participant OtherMCP as other-mcp<br/>(image_recognition / weather)
     end
     
@@ -190,19 +205,42 @@ sequenceDiagram
         OpenAI-->>Backend: Grounded Answer
         Backend-->>User: 9. Return Multimodal RAG Response
     end
+
+    %% FLOW 2: DOCUMENT INGESTION & LISTING
+    rect rgb(240, 255, 240)
+        note over User, MinIO: FLOW 2: Document Ingestion & Listing
+        User->>Backend: 10. POST /api/v1/knowledge-bases/1/documents/upload (Multipart PDF)
+        Backend->>MinIO: 11. Save PDF in documents/
+        Backend->>Redis: 12. RPUSH document_ingestion { document_id, kb_id: 1 }
+        Backend-->>User: 13. 202 Accepted
+        
+        Redis->>VectorMCP: 14. Ingestion Worker processes PDF
+        VectorMCP->>MinIO: 15. Fetch File
+        VectorMCP->>OpenAI: 16. Batch Embeddings
+        VectorMCP->>Chroma: 17. Upsert to Chroma
+        VectorMCP->>VectorMCP: 18. Update Status = INDEXED
+        
+        User->>Backend: 19. GET /api/v1/knowledge-bases/1/documents
+        Backend->>Redis: 20. RPUSH mcp:vector:requests { tool: "list_documents", kb_id: 1 }
+        Redis->>VectorMCP: 21. Query vkb_documents
+        VectorMCP->>Redis: 22. Return Documents
+        Redis-->>Backend: 23. Return Documents List
+        Backend-->>User: 24. 200 OK [ { id, title, status }, ... ]
+    end
 ```
 
 ---
 
 ### 2.3 Mode 3: Host (`xxxconnect`) + `akvo-rag` + `vector-kb-mcp`
-*Embedded WhatsApp CRM integration: Meta Cloud API webhook, FastAPI RAG REST invocation, queue vector search, and async outbound message dispatching.*
+*Embedded WhatsApp CRM integration: Meta Cloud API webhook, FastAPI RAG REST invocation, queue vector search, and partner document management.*
 
 ```mermaid
 sequenceDiagram
     autonumber
     
-    box rgb(240, 248, 255) WhatsApp Farmers
+    box rgb(240, 248, 255) WhatsApp Farmers & Host Admin
         actor Farmer as Farmer / Citizen<br/>(WhatsApp Mobile App)
+        actor HostAdmin as Extension Officer / Admin<br/>(Host Web Portal)
         participant WA as Meta WhatsApp Cloud API<br/>(graph.facebook.com:443)
     end
     
@@ -212,27 +250,28 @@ sequenceDiagram
     end
     
     box rgb(255, 250, 240) Akvo-RAG Microservice
-        participant Backend as akvo-rag-backend<br/>(FastAPI POST /api/chat)
-        participant Redis as Redis Queue<br/>(Request-Reply Broker)
-        participant VectorMCP as vector-kb-mcp<br/>(Vector Retrieval)
+        participant Backend as akvo-rag-backend<br/>(FastAPI API Gateway :8000)
+        participant Redis as Redis Queue<br/>(Request-Reply Broker :6379)
+        participant VectorMCP as vector-kb-mcp<br/>(Vector Retrieval & Ingestion)
     end
     
     box rgb(245, 245, 245) Datastores & AI APIs
-        participant Chroma as ChromaDB<br/>(Vector Store)
+        participant Chroma as ChromaDB<br/>(Vector Store :8000)
+        participant MinIO as MinIO<br/>(PDF Storage :9000)
         participant OpenAI as OpenAI API<br/>(LLM Generation)
     end
 
-    %% INBOUND WHATSAPP
+    %% FLOW 1: INBOUND WHATSAPP CHAT
     rect rgb(230, 242, 255)
-        note over Farmer, OpenAI: Host Inbound Flow & Sub-Second RAG Generation
-        Farmer->>WA: 1. WhatsApp Text Message ('How to treat avocado root rot?')
+        note over Farmer, OpenAI: FLOW 1: Host Inbound Flow & Sub-Second RAG Generation
+        Farmer->>WA: 1. WhatsApp Text Message ("How to treat avocado root rot?")
         WA->>HostApp: 2. Webhook Event (POST /whatsapp/webhook)
         HostApp-->>WA: 3. 200 OK (Immediate Webhook Ack in < 1s)
         
-        HostApp->>Backend: 4. POST /api/chat { query, kb_ids: [1] } (Intra-cluster REST: ~5ms)
+        HostApp->>Backend: 4. POST /api/v1/chat { query, kb_ids: [1] } (Intra-cluster REST: ~5ms)
         
-        critical Akvo-RAG Internal Queue Retrieval
-            Backend->>Redis: 5. RPUSH mcp:vector:requests { correlation_id, query, kb_ids }
+        critical Akvo-RAG Internal Queue Retrieval (< 5ms)
+            Backend->>Redis: 5. RPUSH mcp:vector:requests { tool: "query_knowledge_base", correlation_id, query, kb_ids }
             Redis->>VectorMCP: 6. BLPOP Request
             VectorMCP->>Chroma: 7. Cosine Search on Avocado Manuals (kb_1)
             Chroma-->>VectorMCP: Agronomy Context Chunks
@@ -248,19 +287,45 @@ sequenceDiagram
         HostWorker->>WA: 13. POST /v18.0/messages { to: Farmer, text: answer }
         WA->>Farmer: 14. Deliver WhatsApp Response to Farmer
     end
+
+    %% FLOW 2: HOST DOCUMENT MANAGEMENT
+    rect rgb(240, 255, 240)
+        note over HostAdmin, OpenAI: FLOW 2: Host Partner Document Upload & KB Listing
+        HostAdmin->>HostApp: 15. Upload New National Farming Standard PDF
+        HostApp->>Backend: 16. POST /api/v1/knowledge-bases/1/documents/upload (Multipart PDF)
+        Backend->>MinIO: 17. Save Raw File to documents/avocado_standard_2024.pdf
+        Backend->>Redis: 18. RPUSH document_ingestion { document_id: "doc-50", kb_id: 1 }
+        Backend-->>HostApp: 19. 202 Accepted { document_id: "doc-50", status: "PROCESSING" }
+        
+        Redis->>VectorMCP: 20. Ingestion Consumer pulls task
+        VectorMCP->>MinIO: 21. Download PDF
+        VectorMCP->>VectorMCP: 22. Parse & Chunk Text
+        VectorMCP->>OpenAI: 23. Compute Vectors (1536-dim)
+        VectorMCP->>Chroma: 24. Upsert to Chroma Collection kb_1
+        VectorMCP->>VectorMCP: 25. Mark Document Status = INDEXED
+        
+        HostAdmin->>HostApp: 26. View Updated Document List
+        HostApp->>Backend: 27. GET /api/v1/knowledge-bases/1/documents
+        Backend->>Redis: 28. RPUSH mcp:vector:requests { tool: "list_documents", kb_id: 1 }
+        Redis->>VectorMCP: 29. Query vkb_documents
+        VectorMCP->>Redis: 30. Return Documents Array
+        Redis-->>Backend: 31. Return Documents List
+        Backend-->>HostApp: 32. 200 OK [ { id: "doc-50", title: "avocado_standard_2024.pdf", status: "INDEXED" }, ... ]
+    end
 ```
 
 ---
 
 ### 2.4 Mode 4: Host (`xxxconnect`) + `akvo-rag` + `vector-kb-mcp` + `other-mcp`
-*Full multimodal WhatsApp Turn: Farmer uploads crop disease photo + text query; system concurrently invokes Vector MCP (manuals) & Vision MCP (leaf diagnosis).*
+*Full multimodal WhatsApp Turn: Farmer uploads crop disease photo + text query; system concurrently invokes Vector MCP (manuals) & Vision MCP (leaf diagnosis), plus document lifecycle.*
 
 ```mermaid
 sequenceDiagram
     autonumber
     
-    box rgb(240, 248, 255) WhatsApp Farmers
+    box rgb(240, 248, 255) WhatsApp Farmers & Host Admin
         actor Farmer as Farmer / Citizen<br/>(WhatsApp Mobile App)
+        actor HostAdmin as Extension Officer / Admin<br/>(Host Web Portal)
         participant WA as Meta WhatsApp Cloud API<br/>(graph.facebook.com:443)
     end
     
@@ -270,25 +335,26 @@ sequenceDiagram
     end
     
     box rgb(255, 250, 240) Akvo-RAG Microservice
-        participant Backend as akvo-rag-backend<br/>(FastAPI POST /api/chat)
-        participant Redis as Redis Queue<br/>(Request-Reply Broker)
-        participant VectorMCP as vector-kb-mcp<br/>(Vector Retrieval)
+        participant Backend as akvo-rag-backend<br/>(FastAPI API Gateway :8000)
+        participant Redis as Redis Queue<br/>(Request-Reply Broker :6379)
+        participant VectorMCP as vector-kb-mcp<br/>(Vector Retrieval & Ingestion)
         participant OtherMCP as other-mcp<br/>(image_recognition)
     end
     
     box rgb(245, 245, 245) Datastores & AI APIs
-        participant Chroma as ChromaDB<br/>(Vector Store)
+        participant Chroma as ChromaDB<br/>(Vector Store :8000)
+        participant MinIO as MinIO<br/>(PDF Storage :9000)
         participant OpenAI as OpenAI API<br/>(LLM Generation)
     end
 
-    %% INBOUND MULTIMODAL WHATSAPP
+    %% FLOW 1: INBOUND MULTIMODAL WHATSAPP
     rect rgb(230, 242, 255)
-        note over Farmer, OpenAI: Host Multimodal Turn (Photo + Text Advice)
-        Farmer->>WA: 1. Send Photo of Diseased Leaf + Text ('What is attacking my crop?')
+        note over Farmer, OpenAI: FLOW 1: Host Multimodal Turn (Photo + Text Advice)
+        Farmer->>WA: 1. Send Photo of Diseased Leaf + Text ("What is attacking my crop?")
         WA->>HostApp: 2. Webhook Event with media_url
         HostApp-->>WA: 3. 200 OK Ack
         
-        HostApp->>Backend: 4. POST /api/chat { query, image_url: media_url, kb_ids: [1] }
+        HostApp->>Backend: 4. POST /api/v1/chat { query, image_url: media_url, kb_ids: [1] }
         
         par Parallel Queue Dispatch
             Backend->>Redis: 5a. RPUSH mcp:vector:requests { correlation_id_1, query, kb_ids }
@@ -299,7 +365,7 @@ sequenceDiagram
         and
             Backend->>Redis: 5b. RPUSH mcp:image:requests { correlation_id_2, image_url }
             Redis->>OtherMCP: 6b. Run Pest/Disease Vision Classifier
-            OtherMCP-->>OtherMCP: 7b. Identify 'Anthracnose Fungal Lesions (96% conf)'
+            OtherMCP-->>OtherMCP: 7b. Identify "Anthracnose Fungal Lesions (96% conf)"
             OtherMCP->>Redis: 8b. Reply Vision Diagnosis
         end
         
@@ -311,6 +377,29 @@ sequenceDiagram
         HostApp->>HostWorker: 12. Enqueue Outbound WhatsApp Task
         HostWorker->>WA: 13. POST Formatted WhatsApp Message
         WA->>Farmer: 14. Farmer receives verified diagnosis and treatment steps
+    end
+
+    %% FLOW 2: HOST INGESTION & DOCUMENT LISTING
+    rect rgb(240, 255, 240)
+        note over HostAdmin, OpenAI: FLOW 2: Host Partner Ingestion & Document Verification
+        HostAdmin->>HostApp: 15. Upload Pest Identification Manual PDF
+        HostApp->>Backend: 16. POST /api/v1/knowledge-bases/1/documents/upload
+        Backend->>MinIO: 17. Store Raw File in documents/
+        Backend->>Redis: 18. RPUSH document_ingestion { document_id: "doc-88", kb_id: 1 }
+        Backend-->>HostApp: 19. 202 Accepted { document_id: "doc-88", status: "PROCESSING" }
+        
+        Redis->>VectorMCP: 20. Process Document & Extract Chunks
+        VectorMCP->>OpenAI: 21. Compute Embeddings
+        VectorMCP->>Chroma: 22. Index in Chroma Collection kb_1
+        VectorMCP->>VectorMCP: 23. Update Status = INDEXED
+        
+        HostAdmin->>HostApp: 24. Fetch Knowledge Base Document List
+        HostApp->>Backend: 25. GET /api/v1/knowledge-bases/1/documents
+        Backend->>Redis: 26. RPUSH mcp:vector:requests { tool: "list_documents", kb_id: 1 }
+        Redis->>VectorMCP: 27. Query vkb_documents
+        VectorMCP->>Redis: 28. Return Documents Array
+        Redis-->>Backend: 29. Return Documents List
+        Backend-->>HostApp: 30. 200 OK [ { id: "doc-88", title: "Pest Manual.pdf", status: "INDEXED" }, ... ]
     end
 ```
 
