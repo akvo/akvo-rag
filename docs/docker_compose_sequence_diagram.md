@@ -1,0 +1,166 @@
+# Docker Compose Setup & Container Interaction Sequence Diagrams (Option C)
+
+This document provides the complete **Mermaid Sequence Diagrams** illustrating the containers, volumes, background workers, and real-time interactions for **both deployment modes** in Option C:
+1. **Mode 1: Standalone `akvo-rag` + `vector-kb`** (With Next.js UI, Chat Playground SSE streaming, Prompt Editor, and PDF Uploads).
+2. **Mode 2: Embedded `xxxconnect` (AgriConnect / WASHConnect)** (In-process WhatsApp Bot with Celery Outbound Worker).
+
+You can copy the code snippets directly into the [Mermaid Live Editor](https://dedenbangkit.github.io/mermaid-live-editor/) to view and export high-resolution PNG/SVG images.
+
+---
+
+## 1. Mode 1 Sequence Diagram: Standalone `akvo-rag` + `vector-kb`
+
+> **Use Case:** Used by Product Admins, Prompt Engineers, and Developers for prompt lifecycle management, live chat playground testing, and managing Knowledge Bases.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as Admin / Developer
+    
+    box rgb(240, 248, 255) Akvo-RAG Web Application
+        participant WebUI as Next.js Web Frontend<br/>(Playground & Prompt Editor)
+        participant Backend as FastAPI Backend<br/>(In-Process Core Engine)
+    end
+    
+    box rgb(255, 250, 240) Background Ingestion Worker
+        participant IngWorker as Ingestion Worker<br/>(PDF Parse, Chunk, Embed)
+    end
+    
+    box rgb(245, 245, 245) Datastores & Storage
+        participant PG as PostgreSQL 17<br/>(Users, Prompts, KB Metadata)
+        participant Chroma as ChromaDB<br/>(Vector Collections)
+        participant MinIO as MinIO (S3)<br/>(Raw Document Files)
+        participant Redis as Redis<br/>(Ingestion Queue)
+    end
+    
+    box rgb(245, 255, 245) External Services
+        participant OpenAI as OpenAI API<br/>(LLM & Embeddings)
+    end
+
+    %% FLOW A: PLAYGROUND LIVE CHAT
+    rect rgb(230, 242, 255)
+        note over Admin, OpenAI: FLOW A: Next.js Chat Playground & Prompt Testing (In-Process)
+        Admin->>WebUI: 1. Send Test Prompt in Playground UI
+        WebUI->>Backend: 2. SSE Stream Request (POST /api/chat/stream)
+        Backend->>PG: 3. Load Selected Prompt Version from DB
+        
+        critical Direct In-Memory RAG Execution (akvo-rag-core + vector-kb-core)
+            Backend->>OpenAI: 4. Generate Query Embedding (text-embedding-3-small)
+            OpenAI-->>Backend: Return 1536-dim Query Vector
+            Backend->>Chroma: 5. Query Target KB Collection (In-Process ChromaRetriever)
+            Chroma-->>Backend: Return Matched Document Chunks (Cosine Similarity)
+            Backend->>OpenAI: 6. Stream Answer with Citations & Context (gpt-4o-mini)
+            OpenAI-->>Backend: Token Stream
+        end
+        
+        Backend-->>WebUI: 7. Server-Sent Events (SSE Stream)
+        WebUI-->>Admin: 8. Live Real-Time Token Output & Citations in UI
+    end
+
+    %% FLOW B: KB PDF UPLOAD
+    rect rgb(255, 243, 230)
+        note over Admin, OpenAI: FLOW B: Knowledge Base Document Ingestion
+        Admin->>WebUI: 9. Upload Sector PDF Manual
+        WebUI->>Backend: 10. POST /api/v1/knowledge-bases/{id}/documents
+        Backend->>MinIO: 11. Save Raw PDF File (Bucket: documents/)
+        Backend->>PG: 12. Create Record (Status: PROCESSING)
+        Backend->>Redis: 13. Enqueue process_document(doc_id)
+        Backend-->>WebUI: 14. 202 Accepted (Shows "Processing" in UI)
+        
+        Redis->>IngWorker: 15. Ingestion Worker Picks Up Task
+        IngWorker->>MinIO: 16. Fetch Raw PDF
+        IngWorker->>OpenAI: 17. Compute Chunk Embeddings
+        IngWorker->>Chroma: 18. Store Vectors in Collection (kb_id)
+        IngWorker->>PG: 19. Save Chunks & Set Status = INDEXED
+        WebUI->>Backend: 20. Poll/Refresh KB List -> Shows "Indexed"
+    end
+```
+
+### Mode 1 Docker Compose Containers (`akvo-rag/docker-compose.dev.yml`)
+
+| Service Name | Container Image / Source | Role in Standalone Mode 1 | Ports |
+|---|---|---|---|
+| `frontend` | `akvo-rag/frontend` (Next.js 14) | Admin Web Dashboard, Prompt Editor & Chat Playground | `3000:3000` |
+| `backend` | `akvo-rag/backend` (FastAPI) | Auth, Admin REST APIs, and in-process RAG engine | `8000:8000` |
+| `ingestion-worker` | `vector-kb` Celery Worker | Background PDF chunking and Chroma embedding | Internal |
+| `postgres` | `postgres:17-alpine` | Users, prompt versions, apps, document records | `5432:5432` |
+| `chromadb` | `chromadb/chroma:latest` | Vector collections (`kb_{id}`) | `8000:8000` |
+| `minio` | `minio/minio:latest` | Object storage for uploaded PDF files | `9000:9000`, `9001:9001` |
+| `redis` | `redis:7-alpine` | Task queue broker for document ingestion | `6379:6379` |
+
+---
+
+## 2. Mode 2 Sequence Diagram: Embedded `xxxconnect` (AgriConnect / WASHConnect)
+
+> **Use Case:** Production partner deployments serving farmers and citizens over WhatsApp with sub-second response times and zero internal network hops.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Farmer as Farmer / WhatsApp User
+    
+    box rgb(240, 248, 255) Host App Container (AgriConnect / WASHConnect)
+        participant HostAPI as Host FastAPI<br/>(WhatsApp Webhook & In-Process RAG)
+    end
+    
+    box rgb(255, 250, 240) Host App Celery Worker
+        participant OutboundWorker as App Worker<br/>(Outbound WhatsApp Dispatcher)
+    end
+    
+    box rgb(245, 245, 245) Datastores & Storage
+        participant PG as PostgreSQL 17<br/>(Partner Data, KB Metadata)
+        participant Chroma as ChromaDB<br/>(Vector Collections)
+        participant Redis as Redis<br/>(Task Broker)
+    end
+    
+    box rgb(245, 255, 245) External Services
+        participant WhatsApp as WhatsApp Cloud API
+        participant OpenAI as OpenAI API
+    end
+
+    rect rgb(230, 242, 255)
+        note over Farmer, OpenAI: Production Live WhatsApp Conversational Turn
+        Farmer->>WhatsApp: 1. User sends message: "How do I prune Hass avocados?"
+        WhatsApp->>HostAPI: 2. Webhook Event (POST /whatsapp/webhook)
+        HostAPI->>PG: 3. Fetch Farmer Profile & Active KBs (kb_ids: [1, 2])
+        
+        critical In-Memory Execution via akvo-rag-core & vector-kb-core
+            HostAPI->>OpenAI: 4. Generate Embedding for Query
+            OpenAI-->>HostAPI: Return 1536-dim Vector
+            HostAPI->>Chroma: 5. Direct Parallel Vector Search (ChromaRetriever)
+            Chroma-->>HostAPI: Return Top-K Ranked Agronomy Chunks
+            HostAPI->>OpenAI: 6. LLM Completion (Grounding + Strict Citations)
+            OpenAI-->>HostAPI: Return Grounded Agronomy Answer
+        end
+        
+        HostAPI->>Redis: 7. Enqueue Outbound Reply Task
+        HostAPI-->>WhatsApp: 8. 200 OK (Webhook Acknowledged in < 1s)
+        
+        Redis->>OutboundWorker: 9. Outbound Worker Consumes Reply Task
+        OutboundWorker->>WhatsApp: 10. Send Formatted WhatsApp Message
+        WhatsApp->>Farmer: 11. Farmer receives answer on phone with citations
+    end
+```
+
+### Mode 2 Docker Compose Containers (`xxxconnect/docker-compose.yml`)
+
+| Service Name | Container Image / Source | Role in Embedded Mode 2 | Ports |
+|---|---|---|---|
+| `app` | `xxxconnect/backend` | FastAPI WhatsApp webhook handler with embedded core libraries | `8000:8000` |
+| `app-worker` | `xxxconnect` Celery Worker | Outbound WhatsApp message dispatcher with automatic retries | Internal |
+| `ingestion-worker` | `vector-kb` Celery Worker | Background sector document parser & embedder | Internal |
+| `postgres` | `postgres:17-alpine` | Partner CRM data, farmer profiles, and KB metadata | `5432:5432` |
+| `chromadb` | `chromadb/chroma:latest` | Vector collections for partner domain manuals | `8000:8000` |
+| `minio` | `minio/minio:latest` | Object storage for partner PDFs | `9000:9000` |
+| `redis` | `redis:7-alpine` | Celery broker for outbound WhatsApp & ingestion | `6379:6379` |
+
+---
+
+## 3. Key Architectural Benefits of Option C
+
+1. **Exact Parity Between Modes:**
+   - Both Mode 1 (Standalone Web UI) and Mode 2 (Embedded Host App) execute the **identical in-process engine** (`akvo-rag-core` + `vector-kb-core`), ensuring that prompt behavior in the playground matches WhatsApp production 100%.
+2. **Zero Internal HTTP / FastMCP Latency:**
+   - Vector retrieval is performed via direct in-memory Python function calls to ChromaDB (`< 100ms`), completely eliminating the 4 internal HTTP hops and FastMCP SSE streaming bottlenecks.
+3. **Resilient Circuit Breaker:**
+   - If ChromaDB or OpenAI experiences transient downtime, the in-process engine safely catches exceptions and returns a graceful fallback message without crashing WhatsApp turns or leaving users hanging.
