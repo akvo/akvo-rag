@@ -457,6 +457,25 @@ class MCPQueueDispatcher:
         return json.loads(data)
 ```
 
+### 4.4 Scoping Agent Removal & Latency Optimization
+
+In the legacy system, `ScopingAgent` (`backend/app/services/scoping_agent.py`) invoked an LLM to choose which MCP tool or Knowledge Base ID to call. This introduced major drawbacks:
+1. **Redundant LLM Call:** Added **1.5s–3.0s of latency** and extra OpenAI API cost per user question.
+2. **Discarded Output:** Partner applications (e.g. `AgriConnect`, Next.js UI) already explicitly send the target `knowledge_base_ids: [1, 2]` in the request payload.
+
+#### Deterministic Direct Graph Routing
+In the new Container-Based Option C LangGraph workflow, `scoping_node` is **removed from the default path**. The execution flow transitions directly:
+$$\text{Classify Intent Node} \longrightarrow \text{Contextualize Node} \longrightarrow \text{Queue Vector Retrieval (Redis RPC)} \longrightarrow \text{Grounded Answer Node}$$
+
+This eliminates 1 full LLM roundtrip per question while maintaining 100% retrieval accuracy.
+
+### 4.5 Legacy Code Purge & Clean Deletion Plan
+
+To ensure zero technical debt, the following legacy components will be completely deleted from `akvo-rag`:
+1. **Legacy FastMCP HTTP Client:** `backend/mcp_clients/fastmcp_client_service.py` & `mcp_discovery_manager.py` (Replaced by `MCPQueueDispatcher`).
+2. **Legacy Celery & RabbitMQ Infrastructure:** `backend/app/celery_app.py`, `backend/app/tasks/upload_task.py`, and `backend/app/tasks/chat_task.py` (Replaced by Native Async Redis Workers).
+3. **Hardcoded MCP Configs:** `backend/mcp_clients/mcp_servers_config.py` (Replaced by `mcp_config.json`).
+
 ---
 
 ## 5. Repository Consolidation Plan (`vector-kb` $\rightarrow$ `akvo-rag`)
@@ -653,24 +672,24 @@ sequenceDiagram
 | Task Code | Title | Component / Path | Vibe-Coding Est. | Traditional Est. |
 |---|---|---|---|---|
 | **Phase 1** | **Codebase Consolidation & Monorepo Setup** | | | |
-| `TASK-MONO-101` | Migrate `vector-kb` Parsing & Chunking Code into `vector-kb-mcp/` | `vector-kb-mcp/` | **2.5 hrs** | 2.0 days |
-| `TASK-MONO-102` | Build `vector-kb-mcp` Dockerfile & Redis Worker Entrypoint | `vector-kb-mcp/Dockerfile` | **2.0 hrs** | 1.5 days |
+| `TASK-MONO-101` | Migrate `vector-kb` Parsing, Chunking & 1536-dim Embedding Guard into `vector-kb-mcp/` | `vector-kb-mcp/` | **2.5 hrs** | 2.0 days |
+| `TASK-MONO-102` | Build `vector-kb-mcp` Dockerfile & Native Async Redis Worker Entrypoint | `vector-kb-mcp/Dockerfile` | **2.0 hrs** | 1.5 days |
 | **Phase 2** | **Unified Database & Service-Owned Migration Strategy** | | | |
 | `TASK-DB-201` | Port Vector-KB SQLAlchemy Models into `vector-kb-mcp/models/` | `vector-kb-mcp/models/` | **2.0 hrs** | 1.5 days |
 | `TASK-DB-202` | Setup Service-Owned Alembic Migrations (`alembic_version_vkb`) | `vector-kb-mcp/alembic/` | **1.5 hrs** | 1.0 day |
-| `TASK-DB-203` | Automated Data Migration CLI (MySQL + Vector-KB PG $\rightarrow$ PostgreSQL 17) | `backend/app/scripts/` | **2.0 hrs** | 1.5 days |
-| **Phase 3** | **Queue-Backed MCP Dispatcher & `mcp_config`** | | | |
-| `TASK-MCP-301` | Implement `mcp_config.json` Schema & Parser | `backend/app/core/` | **1.0 hr** | 1.0 day |
+| `TASK-DB-203` | PostgreSQL Adapter (`asyncpg`) & Automated Legacy Data Migration CLI | `backend/app/scripts/` | **2.0 hrs** | 1.5 days |
+| **Phase 3** | **Queue-Backed MCP Dispatcher, Scoping Removal & FastMCP Purge** | | | |
+| `TASK-MCP-301` | Implement `mcp_config.json` Declarative Schema & Static Parser | `backend/app/core/` | **1.0 hr** | 1.0 day |
 | `TASK-MCP-302` | Build `MCPQueueDispatcher` (Redis Request-Reply with Correlation ID) | `backend/app/services/` | **3.0 hrs** | 2.5 days |
-| `TASK-MCP-303` | Integrate `MCPQueueDispatcher` into LangGraph RAG Engine | `backend/app/services/` | **2.5 hrs** | 2.0 days |
-| **Phase 4** | **Document Ingestion & MinIO Storage** | | | |
-| `TASK-ING-401` | Integrate MinIO Client for Document Uploads in FastAPI Backend | `backend/app/services/` | **1.5 hrs** | 1.0 day |
-| `TASK-ING-402` | Build Native Async Redis Ingestion Worker in `vector-kb-mcp` | `vector-kb-mcp/` | **2.0 hrs** | 1.5 days |
-| **Phase 5** | **Docker Compose Orchestration & Extensibility Verification** | | | |
-| `TASK-OPS-501` | Author Unified `docker-compose.yml` for All 7 Services | Root `docker-compose.yml` | **2.0 hrs** | 1.5 days |
-| `TASK-OPS-502` | Create Mock External MCP Container (e.g. `mock-image-mcp`) & Verify Config Plug-in | `mock-image-mcp/` | **1.5 hrs** | 1.0 day |
-| `TASK-OPS-503` | End-to-End Golden Set Accuracy & Legacy Test Gate | `backend/RAG_evaluation/` | **2.5 hrs** | 2.0 days |
-| **TOTAL** | | | **26.0 hrs (~3.5 working days)** | **20.0 days** |
+| `TASK-MCP-303` | Integrate `MCPQueueDispatcher` into LangGraph RAG Engine & Purge Legacy FastMCP Client | `backend/app/services/` | **2.0 hrs** | 1.5 days |
+| `TASK-MCP-304` | Remove `ScopingAgent` Redundant LLM Call & Route Directly to Vector Queue | `backend/app/services/` | **1.5 hrs** | 1.0 day |
+| **Phase 4** | **Document Ingestion, MinIO Storage & Celery Deletion** | | | |
+| `TASK-ING-401` | Integrate MinIO S3 Client in FastAPI & Purge Legacy Celery/RabbitMQ Code | `backend/app/services/` | **1.5 hrs** | 1.0 day |
+| `TASK-ING-402` | Build Native Async Redis Ingestion Consumer in `vector-kb-mcp` | `vector-kb-mcp/` | **2.0 hrs** | 1.5 days |
+| **Phase 5** | **Docker Compose Orchestration & Verification** | | | |
+| `TASK-OPS-501` | Author Unified `docker-compose.yml` with Healthchecks for All 7 Services | Root `docker-compose.yml` | **2.0 hrs** | 1.5 days |
+| `TASK-OPS-502` | End-to-End Golden Set Accuracy & Legacy Test Gate (Faithfulness $\ge 0.85$) | `backend/RAG_evaluation/` | **2.5 hrs** | 2.0 days |
+| **TOTAL** | | | **25.5 hrs (~3.5 working days)** | **20.0 days** |
 
 ---
 
