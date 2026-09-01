@@ -478,7 +478,7 @@ To ensure zero technical debt, the following legacy components will be completel
 
 ---
 
-## 5. Repository Consolidation Plan (`vector-kb` $\rightarrow$ `akvo-rag`)
+## 5. Repository Consolidation Plan (`vector-knowledge-base-mcp-server` $\rightarrow$ `akvo-rag`)
 
 ### 5.1 Monorepo Folder Structure
 
@@ -510,10 +510,10 @@ akvo-rag/
 
 ### 5.2 Discontinuation & Porting Checklist
 1. Copy `vector-knowledge-base-mcp-server/main/app/services/` (document parsers, chunkers, text extractors) directly into `akvo-rag/vector-kb-mcp/`.
-2. Port `knowledge_bases`, `documents`, and `document_chunks` models directly into `akvo-rag/vector-kb-mcp/models/`.
+2. Port `knowledge_bases`, `documents`, and `document_chunks` models directly from `vector-knowledge-base-mcp-server` into `akvo-rag/vector-kb-mcp/models/`.
 3. Port existing Vector-KB migrations into `akvo-rag/vector-kb-mcp/alembic/` with `version_table = "alembic_version_vkb"`.
 4. Convert the FastMCP HTTP listener into a high-performance **Redis Queue Worker** (`vector-kb-mcp/main.py`) that listens on `mcp:vector:requests`.
-5. Archive `vector-knowledge-base-mcp-server` repository in GitHub.
+5. Archive `vector-knowledge-base-mcp-server` repository in GitHub upon cutover.
 
 ---
 
@@ -589,7 +589,7 @@ erDiagram
 
 ### 6.3 Automated Legacy Data Migration Script (`migrate_legacy_to_consolidated_postgres.py`)
 
-A single Python CLI command extracts all data from legacy MySQL 8 and legacy Vector-KB PostgreSQL and populates the consolidated PostgreSQL 17 instance:
+A single Python CLI command extracts all data from legacy MySQL 8 and legacy `vector-knowledge-base-mcp-server` PostgreSQL and populates the consolidated PostgreSQL 17 instance:
 
 ```bash
 python -m app.scripts.migrate_legacy_to_consolidated_postgres \
