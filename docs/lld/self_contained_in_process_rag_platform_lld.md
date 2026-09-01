@@ -79,6 +79,7 @@ flowchart LR
         R2 --> R3["TASK-RAG-203<br/>Bypass ScopingAgent"]
         R3 --> R4["TASK-RAG-204<br/>Purge Startup MCP & Leaks"]
         R4 --> R5["TASK-RAG-205<br/>Multi-Tier Prompt Resolver"]
+        R5 --> R6["TASK-RAG-206<br/>PostgreSQL Adapter & MySQL ETL"]
     end
 
     subgraph P3["Phase 3: Ingestion Worker"]
@@ -117,6 +118,7 @@ flowchart LR
 | `TASK-RAG-203` | Short-Circuit `ScopingAgent` on Default RAG Path | `akvo-rag` | **1.5 hrs** | 1.0 day |
 | `TASK-RAG-204` | Remove Startup MCP Discovery & Purge Domain Leaks | `akvo-rag` | **1.5 hrs** | 1.0 day |
 | `TASK-RAG-205` | Multi-Tier Prompt Resolver & Reactivity Integration Test | `akvo-rag` | **3.0 hrs** | 2.5 days |
+| `TASK-RAG-206` | PostgreSQL Database Adapter & Automated MySQL Data Migration CLI | `akvo-rag` | **2.0 hrs** | 1.5 days |
 | **Phase 3** | **Ingestion Worker & Metadata Hardening** | | | |
 | `TASK-VKB-301` | Add KB Embedding Model & Dimension Guard | `vector-kb-mcp-server` | **2.5 hrs** | 1.5 days |
 | `TASK-VKB-302` | Enrich Documents & Chunks with Public-Sector Metadata | `vector-kb-mcp-server` | **2.0 hrs** | 1.5 days |
@@ -126,7 +128,7 @@ flowchart LR
 | `TASK-INT-402` | Unified Single-Namespace Docker Compose & Manifests | Host / Compose | **2.0 hrs** | 1.5 days |
 | **Phase 5** | **Verification, QA & Golden Set Harness** | | | |
 | `TASK-QA-501` | Golden Set Evaluation, Legacy Test Gate & CI Pipeline | `akvo-rag` | **3.5 hrs** | 2.5 days |
-| **TOTAL** | | | **34.0 hrs (~4.25 working days)** | **26.5 days** |
+| **TOTAL** | | | **36.0 hrs (~4.5 working days)** | **28.0 days** |
 
 ---
 
@@ -431,6 +433,62 @@ flowchart LR
 * **Technical Acceptance Criteria (TAC):**
   - Unit tests verify prompt hierarchy, variable interpolation, and strict citation rule preservation.
   - `backend/tests/integration/test_prompt_reactivity.py` passes: updates a prompt definition version, sends a chat request, and asserts output conforms to the updated instruction.
+
+---
+
+#### `TASK-RAG-206`: PostgreSQL Database Adapter & Automated MySQL Data Migration CLI
+* **Repository:** `akvo-rag`
+* **Vibe-Coding Estimate:** `2.0 hours`
+* **Detailed Description:**  
+  1. Update `backend/app/database/` and Alembic configuration to natively connect to PostgreSQL 17 via `asyncpg` (`postgresql+asyncpg://...`), phasing out MySQL 8 dialect dependencies.
+  2. Implement an automated, idempotent CLI migration script `backend/app/scripts/migrate_mysql_to_postgres.py` that reads legacy records from MySQL (`users`, `apps`, `api_keys`, `prompt_definitions`, `prompt_versions`, `system_settings`, `chats`, `chat_messages`) and batch-inserts them into the consolidated PostgreSQL 17 database.
+  3. Enforce automated data integrity checks: assert 100% row count parity between source and destination tables, and verify that user password hashes (bcrypt) and API key hashes authenticate cleanly against PostgreSQL.
+  4. Ensure Standalone Product Mode (Mode 1) boots against PostgreSQL with zero MySQL dependencies.
+* **Key Touchpoints:**
+  - `backend/app/database/session.py` `[MODIFY]`
+  - `backend/app/scripts/migrate_mysql_to_postgres.py` `[NEW]`
+  - `backend/alembic/env.py` `[MODIFY]`
+  - `backend/docker-compose.yml` `[MODIFY]`
+* **Code Specification:**
+  ```python
+  # backend/app/scripts/migrate_mysql_to_postgres.py
+  import asyncio
+  import logging
+  from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+  from sqlalchemy import select, text
+  from app.models.user import User
+  from app.models.app import App
+  from app.models.api_key import ApiKey
+  from app.models.prompt import PromptDefinition, PromptVersion
+
+  TABLES_TO_MIGRATE = [User, App, ApiKey, PromptDefinition, PromptVersion]
+
+  async def migrate_data(mysql_url: str, pg_url: str):
+      mysql_engine = create_async_engine(mysql_url)
+      pg_engine = create_async_engine(pg_url)
+      
+      async with AsyncSession(mysql_engine) as mysql_session, AsyncSession(pg_engine) as pg_session:
+          for model in TABLES_TO_MIGRATE:
+              res = await mysql_session.execute(select(model))
+              records = res.scalars().all()
+              logging.info(f"Extracting {len(records)} rows from {model.__tablename__} (MySQL)...")
+              
+              for r in records:
+                  await pg_session.merge(r)
+              await pg_session.commit()
+              
+              pg_count = (await pg_session.execute(select(model))).scalars().all()
+              assert len(records) == len(pg_count), f"Mismatch in {model.__tablename__}: {len(records)} vs {len(pg_count)}"
+              logging.info(f"Successfully migrated {model.__tablename__}: {len(pg_count)} rows (100% match).")
+  ```
+* **User Acceptance Criteria (UAC):**
+  - Existing user accounts log into the Next.js Web UI with their existing passwords on PostgreSQL.
+  - All existing API keys authenticate without re-issuance.
+  - Standalone Akvo-RAG boots up on PostgreSQL 17 with zero MySQL container requirements.
+* **Technical Acceptance Criteria (TAC):**
+  - Migration script executes in $< 10$ seconds on production datasets.
+  - Row counts across `users`, `apps`, `api_keys`, and `prompts` match 100%.
+  - User login (`POST /api/auth/login`) and API key auth pass against PostgreSQL.
 
 ---
 
@@ -756,19 +814,35 @@ flowchart TB
 
 ### 7.2 Zero-Downtime Migration & Rollout Strategy
 
-1. **Dual-Mode Coexistence (B/C Hybrid):**
-   - The standalone service mode (`akvo-rag/backend` FastAPI wrapper) remains available during the transition. Existing deployments continue serving live users without disruption while the in-process packages are validated.
-2. **Database Consolidation & Data Migration:**
-   - **Prompts & App Registry:** Migrate `prompt_definitions` and `prompt_versions` from MySQL to the target PostgreSQL 17 instance via an automated Alembic migration script.
-   - **Knowledge Bases & Documents:** Schema metadata from the legacy vector-kb PostgreSQL is merged into the single PostgreSQL database.
-   - **ChromaDB Collections:** Existing vector collections (`kb_{id}`) in ChromaDB remain unchanged and binary-compatible. Zero re-embedding of existing documents is required.
-   - **MinIO Files:** Object storage bucket paths (`documents/`) remain intact.
-3. **Traffic Cutover:**
-   - In AgriConnect, switch the AI driver configuration from `EXTERNAL_AI_SERVICE` (HTTP/Celery) to `EMBEDDED_AI_SERVICE` (In-process `akvo-rag-core`).
-   - Incoming WhatsApp questions immediately execute in-memory with sub-second retrieval.
-4. **Decommissioning Legacy Workloads:**
-   - Once all traffic is routed through the in-process pipeline, decommission the duplicate `agriconnect-rag-namespace`.
-   - Tear down the 2 legacy RabbitMQ brokers, the legacy MySQL database, and 2 Flower dashboards.
+To guarantee that currently running production systems (both the Standalone Akvo-RAG Web UI and live WhatsApp partner instances) experience zero service interruption:
+
+#### Step 1: Pre-Migration Validation in Isolation (Phases 1–3)
+- All new packages (`vector-kb-core`, `akvo-rag-core`) and the `ingestion-worker` container are developed and tested against CI without touching live production pods.
+- Existing Kubernetes deployments (`agriconnect2-namespace`, `agriconnect-rag-namespace`, `kb-mcp-server-namespace`) continue serving users normally.
+
+#### Step 2: Database Initialization & Automated MySQL $\rightarrow$ PostgreSQL ETL (`TASK-RAG-206`)
+- **Initialize Target Database:** Run `alembic upgrade head` on the target PostgreSQL 17 instance to instantiate clean schemas.
+- **Run One-Click ETL Script:** Execute `python -m app.scripts.migrate_mysql_to_postgres`:
+  - Migrates `users`, `apps`, `api_keys`, `prompt_definitions`, `prompt_versions`, `system_settings`, `chats`, `chat_messages` from MySQL 8 to PostgreSQL 17 in $< 10$ seconds.
+  - Automatically verifies 100% row count parity.
+- **Vector & Object Storage Continuity:** ChromaDB vector collections (`kb_{id}`) and MinIO files (`documents/`) remain untouched in their existing storage volumes—zero re-embedding or re-uploading required.
+
+#### Step 3: Standalone Mode 1 Verification (Akvo-RAG Web UI)
+- Boot the updated Standalone Akvo-RAG Web App connected to PostgreSQL 17.
+- **Verification Gates:**
+  1. Admins log in using their existing email & passwords (bcrypt hashes authenticate identically).
+  2. Registered `apps` and `api_keys` authenticate against `/api/chat` and `/api/prompts`.
+  3. Next.js Chat Playground queries existing ChromaDB collections in-process with sub-100ms response times.
+
+#### Step 4: Traffic Cutover for Host Applications (Mode 2)
+- In the host application (`agriconnect`), update the AI adapter configuration to `EMBEDDED_AI_SERVICE` (direct in-process `akvo-rag-core` + `vector-kb-core`).
+- Incoming WhatsApp questions immediately execute in-memory with sub-second retrieval and zero external HTTP hops.
+
+#### Step 5: Decommissioning Legacy Infrastructure
+- Once traffic metrics confirm 100% of queries flow through the in-process pipeline, safely terminate legacy workloads:
+  - Decommission duplicate `agriconnect-rag-namespace` pods.
+  - Tear down legacy MySQL 8 container/Cloud SQL instance.
+  - Decommission legacy RabbitMQ brokers and Celery Flower dashboards.
 
 ### 7.3 Infrastructure & Operational Impact Summary
 
