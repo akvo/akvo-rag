@@ -56,6 +56,10 @@ Based on architectural reviews and management directives, the RAG platform is tr
    - MinIO provides dedicated S3-compatible document storage.
    - ChromaDB serves as the dedicated vector database.
 
+> [!IMPORTANT]
+> **HOST APPLICATION STABILITY MANDATE (Zero Regressions for AgriConnect & CoM):**
+> All endpoints currently used by **AgriConnect** or **CoM Tenant** (e.g. `/api/v1/chat`, `/api/v1/knowledge-bases`, `/api/v1/knowledge-bases/{id}/documents`, `/api/v1/knowledge-bases/{id}/documents/upload`) MUST remain **100% available and backwards-compatible** with identical request and response schemas. Small configuration adjustments in the AgriConnect repo are fine, but breaking API alterations are strictly avoided to ensure uninterrupted service across live deployments.
+
 ---
 
 ## 2. System Architecture Blueprint
@@ -755,6 +759,10 @@ sequenceDiagram
 ```
 
 ### 7.3 Host Application API Contract & Backwards Compatibility (AgriConnect & CoM)
+
+> [!IMPORTANT]
+> **CRITICAL HOST API STABILITY & ZERO-REGRESSION POLICY:**
+> All endpoints currently utilized by **AgriConnect** or **CoM Tenant** (host applications) MUST remain completely available and 100% backwards-compatible. Minor configuration or parameter changes in the AgriConnect repo are acceptable, but we strictly steer clear of major or breaking API revisions to ensure seamless continuity for live sector operations.
 
 To ensure **zero breaking changes or regressions** for partner applications (e.g. `AgriConnect`, `CoM`, or external Web UIs), `akvo-rag-backend` preserves the exact REST/SSE API contract. Partner applications continue calling the same routes with the same request/response payloads:
 
