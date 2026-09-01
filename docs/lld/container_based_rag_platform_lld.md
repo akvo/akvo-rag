@@ -839,10 +839,10 @@ sequenceDiagram
 | **Phase 3** | **Queue-Backed MCP Dispatcher, Scoping Removal & FastMCP Purge** | | | |
 | `TASK-MCP-301` | Implement `mcp_config.json` Declarative Schema & Static Parser | `backend/app/core/` | **1.0 hr** | 1.0 day |
 | `TASK-MCP-302` | Build `MCPQueueDispatcher` (Redis Request-Reply with Correlation ID) | `backend/app/services/` | **3.0 hrs** | 2.5 days |
-| `TASK-MCP-303` | Integrate `MCPQueueDispatcher` into LangGraph RAG Engine & Purge Legacy FastMCP Client | `backend/app/services/` | **2.0 hrs** | 1.5 days |
+| `TASK-MCP-303` | Integrate `MCPQueueDispatcher` into RAG Graph & Host REST Endpoints (`apps.py`, `knowledge_base.py`) | `backend/app/` | **2.0 hrs** | 1.5 days |
 | `TASK-MCP-304` | Remove `ScopingAgent` Redundant LLM Call & Route Directly to Vector Queue | `backend/app/services/` | **1.5 hrs** | 1.0 day |
 | `TASK-MCP-305` | Dynamic Prompt Resolver (`PromptService`) with PostgreSQL 17 Overlays | `backend/app/services/` | **1.5 hrs** | 1.0 day |
-| `TASK-TEST-306` | Backend Unit & Integration Test Suite (Dispatcher, RAG Graph, Config Parser, Session) | `backend/tests/` | **2.0 hrs** | 1.5 days |
+| `TASK-TEST-306` | Backend Unit & Integration Test Suite (Dispatcher, RAG Graph, Host Endpoints, Session) | `backend/tests/` | **2.0 hrs** | 1.5 days |
 | **Phase 4** | **Document Ingestion, MinIO Storage & Celery Deletion** | | | |
 | `TASK-ING-401` | Integrate MinIO S3 Client in FastAPI & Purge Legacy Celery/RabbitMQ Code | `backend/app/services/` | **1.5 hrs** | 1.0 day |
 | `TASK-ING-402` | Build Native Async Redis Ingestion Consumer in `vector-kb-mcp` | `vector-kb-mcp/` | **2.0 hrs** | 1.5 days |
@@ -909,7 +909,7 @@ sequenceDiagram
 * **Target Path:** `vector-kb-mcp/`
 * **Vibe-Coding Estimate:** `2.0 hours`
 * **Detailed Description:**  
-  Build the container runtime for `vector-kb-mcp`. Implement the main Redis event loop (`main.py`) that uses `BLPOP` to listen for tool requests on `mcp:vector:requests`, executes `ChromaRetriever.search()`, and returns results via `RPUSH` to `mcp:vector:responses:{correlation_id}` with TTL expiry.
+  Build the container runtime for `vector-kb-mcp`. Implement the main Redis event loop (`main.py`) that uses `BLPOP` to listen for tool requests on `mcp:vector:requests`, dispatches to the corresponding handler (`query_knowledge_base`, `list_knowledge_bases`, `get_knowledge_base`, `create_knowledge_base`, `update_knowledge_base`, `delete_knowledge_base`, `list_documents`, `get_document`, `get_processing_tasks`), and returns results via `RPUSH` to `mcp:vector:responses:{correlation_id}` with TTL expiry.
 * **Key Touchpoints:**
   - `vector-kb-mcp/Dockerfile` `[NEW]`
   - `vector-kb-mcp/main.py` `[NEW]`
@@ -921,10 +921,25 @@ sequenceDiagram
   import asyncio
   import redis.asyncio as redis
   from retriever.chroma_retriever import ChromaRetriever
+  from services.kb_service import KnowledgeBaseService
 
   async def mcp_worker_loop():
       r = redis.from_url(REDIS_URL, decode_responses=True)
       retriever = ChromaRetriever(...)
+      kb_service = KnowledgeBaseService(...)
+
+      TOOL_HANDLERS = {
+          "query_knowledge_base": lambda args: retriever.search(**args),
+          "list_knowledge_bases": lambda args: kb_service.list_kbs(**args),
+          "get_knowledge_base": lambda args: kb_service.get_kb(**args),
+          "create_knowledge_base": lambda args: kb_service.create_kb(**args),
+          "update_knowledge_base": lambda args: kb_service.update_kb(**args),
+          "delete_knowledge_base": lambda args: kb_service.delete_kb(**args),
+          "list_documents": lambda args: kb_service.list_documents(**args),
+          "get_document": lambda args: kb_service.get_document(**args),
+          "get_processing_tasks": lambda args: kb_service.get_tasks(**args),
+      }
+
       while True:
           item = await r.blpop("mcp:vector:requests", timeout=0)
           if not item:
@@ -933,20 +948,21 @@ sequenceDiagram
           msg = json.loads(raw_payload)
           correlation_id = msg["correlation_id"]
           response_queue = msg["response_queue"]
+          tool_name = msg.get("tool_name", "query_knowledge_base")
           args = msg.get("arguments", {})
 
-          chunks = await retriever.search(
-              query=args["query"],
-              kb_ids=args["kb_ids"],
-              top_k=args.get("top_k", 4),
-              score_threshold=args.get("score_threshold")
-          )
-          payload = {"status": "ok", "data": [c.__dict__ for c in chunks]}
+          handler = TOOL_HANDLERS.get(tool_name)
+          if handler:
+              result = await handler(args)
+              payload = {"status": "ok", "data": result}
+          else:
+              payload = {"status": "error", "error": f"Unknown tool: {tool_name}"}
+
           await r.rpush(response_queue, json.dumps(payload))
           await r.expire(response_queue, 60)
   ```
 * **User Acceptance Criteria (UAC):**
-  - Worker starts up cleanly, registers with Redis, and replies to vector queries in $< 5\text{ms}$ queue latency.
+  - Worker starts up cleanly, registers with Redis, and handles both vector queries and document/KB management requests in $< 5\text{ms}$ queue latency.
 * **Technical Acceptance Criteria (TAC):**
   - Dockerfile uses lightweight `python:3.11-slim`.
   - Handles SIGTERM/SIGINT gracefully without dropping in-flight requests.
@@ -1051,7 +1067,7 @@ sequenceDiagram
 * **Target Path:** `backend/app/core/` & `backend/mcp_config.json`
 * **Vibe-Coding Estimate:** `1.0 hour`
 * **Detailed Description:**  
-  Define the declarative static MCP registry schema in `backend/mcp_config.json`. Implement a type-safe parser (`backend/app/core/mcp_config.py`) that loads server definitions, tool schemas, request/reply queue names, and timeout values at FastAPI startup.
+  Define the declarative static MCP registry schema in `backend/mcp_config.json`. Configure vector tool definitions (`query_knowledge_base`, `list_knowledge_bases`, `get_knowledge_base`, `create_knowledge_base`, `update_knowledge_base`, `delete_knowledge_base`, `list_documents`, `get_document`, `get_processing_tasks`). Implement a type-safe parser (`backend/app/core/mcp_config.py`) that loads server definitions, tool schemas, request/reply queue names, and timeout values at FastAPI startup.
 * **Key Touchpoints:**
   - `backend/mcp_config.json` `[NEW]`
   - `backend/app/core/mcp_config.py` `[NEW]`
@@ -1083,20 +1099,23 @@ sequenceDiagram
 
 ---
 
-#### `TASK-MCP-303`: Integrate `MCPQueueDispatcher` into LangGraph RAG Engine & Purge Legacy FastMCP Client
-* **Target Path:** `backend/app/services/` & `backend/mcp_clients/`
+#### `TASK-MCP-303`: Integrate `MCPQueueDispatcher` into RAG Graph & Host REST Endpoints (`apps.py`, `knowledge_base.py`)
+* **Target Path:** `backend/app/` & `backend/mcp_clients/`
 * **Vibe-Coding Estimate:** `2.0 hours`
 * **Detailed Description:**  
-  Refactor the LangGraph workflow (`query_answering_workflow.py`) to execute retrieval tool calls via `MCPQueueDispatcher.call_tool("vector", "query_knowledge_base", ...)`. Delete legacy FastMCP HTTP transport files and startup discovery managers.
+  Refactor both the LangGraph workflow (`query_answering_workflow.py`) and FastAPI routers (`backend/app/api/api_v1/knowledge_base.py` and `backend/app/api/api_v1/apps.py`) to execute retrieval and KB/document management via `MCPQueueDispatcher.call_tool("vector", ...)`. Guarantee 100% backwards compatibility for all endpoints in Section 7.3 used by **AgriConnect** and **CoM Tenant** (`/api/v1/chat`, `/api/v1/knowledge-bases`, `/api/v1/knowledge-bases/{id}/documents`, etc.). Purge legacy FastMCP HTTP transport files and discovery managers.
 * **Key Touchpoints:**
+  - `backend/app/api/api_v1/knowledge_base.py` `[MODIFY]` (replaces `KnowledgeBaseMCPEndpointService` with `MCPQueueDispatcher`)
+  - `backend/app/api/api_v1/apps.py` `[MODIFY]` (replaces `KnowledgeBaseMCPEndpointService` with `MCPQueueDispatcher`)
   - `backend/app/services/query_answering_workflow.py` `[MODIFY]`
+  - `backend/mcp_clients/kb_mcp_endpoint_service.py` `[DELETE]`
   - `backend/mcp_clients/fastmcp_client_service.py` `[DELETE]`
   - `backend/mcp_clients/mcp_discovery_manager.py` `[DELETE]`
   - `backend/mcp_clients/mcp_servers_config.py` `[DELETE]`
 * **User Acceptance Criteria (UAC):**
-  - Live chat queries return grounded answers with citations without making any HTTP hops to vector services.
+  - All public endpoints called by AgriConnect and CoM continue to return identical JSON structures with zero breaking changes or regressions.
 * **Technical Acceptance Criteria (TAC):**
-  - Deletion of ~900 lines of legacy HTTP reconnect/retry/discovery code.
+  - Deletion of ~900 lines of legacy HTTP reconnect/retry/discovery code in `backend/mcp_clients/`.
 
 ---
 
@@ -1130,18 +1149,19 @@ sequenceDiagram
 
 ---
 
-#### `TASK-TEST-306`: Backend Unit & Integration Test Suite (Dispatcher, RAG Graph, Config Parser, Session)
+#### `TASK-TEST-306`: Backend Unit & Integration Test Suite (Dispatcher, RAG Graph, Host Endpoints, Session)
 * **Target Path:** `backend/tests/`
 * **Vibe-Coding Estimate:** `2.0 hours`
 * **Detailed Description:**  
-  Implement unit and integration tests verifying `MCPQueueDispatcher` Redis RPC request-reply, timeout handling, `mcp_config.json` validation, PostgreSQL 17 session handling, and LangGraph workflow execution with direct vector queue retrieval.
+  Implement unit and integration tests verifying `MCPQueueDispatcher` Redis RPC request-reply, timeout handling, `mcp_config.json` validation, PostgreSQL 17 session handling, LangGraph workflow execution, and **100% backwards-compatibility of Section 7.3 host endpoints** (`/api/v1/chat`, `/api/v1/knowledge-bases`, `/api/v1/knowledge-bases/{id}/documents`, `/api/v1/knowledge-bases/{id}/documents/upload`).
 * **Key Touchpoints:**
   - `backend/tests/services/test_mcp_queue_dispatcher.py` `[NEW]`
   - `backend/tests/core/test_mcp_config.py` `[NEW]`
+  - `backend/tests/api/test_host_api_backwards_compatibility.py` `[NEW]`
   - `backend/tests/services/test_query_answering_workflow.py` `[MODIFY]`
   - `backend/tests/services/test_prompt_service.py` `[MODIFY]`
 * **User Acceptance Criteria (UAC):**
-  - All backend unit and integration tests run and pass cleanly via `pytest tests/unit -v`.
+  - All backend unit and integration tests (including host API contract assertions) run and pass cleanly via `pytest tests/ -v`.
 * **Technical Acceptance Criteria (TAC):**
   - Mock Redis and mock OpenAI clients ensure tests run deterministically offline in $< 10\text{s}$.
 
@@ -1153,15 +1173,15 @@ sequenceDiagram
 * **Target Path:** `backend/app/services/` & `backend/app/tasks/`
 * **Vibe-Coding Estimate:** `1.5 hours`
 * **Detailed Description:**  
-  Integrate MinIO S3 client for saving uploaded PDF files into bucket `documents/`. Enqueue processing tasks directly to Redis queue `document_ingestion`. Delete legacy `celery_app.py`, RabbitMQ configurations, and `backend/app/tasks/`.
+  Integrate MinIO S3 client for saving uploaded PDF files into bucket `documents/`. Update the `upload_kb_documents` endpoint in `backend/app/api/api_v1/knowledge_base.py` to stream multipart files to MinIO, create `PROCESSING` document records in PostgreSQL 17, and enqueue processing tasks directly to Redis queue `document_ingestion`. Delete legacy `celery_app.py`, RabbitMQ configurations, and `backend/app/tasks/`.
 * **Key Touchpoints:**
   - `backend/app/services/minio_service.py` `[NEW]`
-  - `backend/app/api/api_v1/knowledge_bases.py` `[MODIFY]`
+  - `backend/app/api/api_v1/knowledge_base.py` `[MODIFY]`
   - `backend/app/celery_app.py` `[DELETE]`
   - `backend/app/tasks/upload_task.py` `[DELETE]`
   - `backend/app/tasks/chat_task.py` `[DELETE]`
 * **User Acceptance Criteria (UAC):**
-  - Admin document upload saves raw PDF to MinIO, creates `vkb_documents` record, and enqueues task to Redis.
+  - Host document upload (`POST /api/v1/knowledge-bases/{id}/documents/upload`) streams raw PDF to MinIO, creates `vkb_documents` record, and enqueues task to Redis.
 * **Technical Acceptance Criteria (TAC):**
   - Celery and RabbitMQ completely eliminated from `backend/requirements.txt` and codebase.
 
