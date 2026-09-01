@@ -305,10 +305,12 @@ flowchart LR
   ```
 * **User Acceptance Criteria (UAC):**
   - Host applications can execute a complete RAG question-answering workflow in-process via `await rag_engine.run(request)`.
+  - If ChromaDB or LLM calls fail or time out, the engine gracefully degrades and returns a safe fallback message without crashing the host application or WhatsApp webhook.
 * **Technical Acceptance Criteria (TAC):**
   - `akvo-rag-core` does not import or depend on SQLAlchemy, MySQL, Celery, or RabbitMQ.
   - Preserves citation discipline (citations stripped if `[citation:N]` is omitted by the LLM).
   - Emits structured JSON event logs (`rag.query.received`, `rag.retrieval.complete`, `rag.generation.complete`) with `trace_id` and timing metrics.
+  - Implements fallback circuit breaker: catches downstream connection/timeout exceptions, logs an `ERROR` event with `trace_id`, and returns `RAGResponse(answer="We are temporarily unable to access the reference manuals. Please try again shortly.", grounded=False)`.
 
 ---
 
@@ -448,7 +450,7 @@ flowchart LR
   - `backend/app/database/session.py` `[MODIFY]`
   - `backend/app/scripts/migrate_mysql_to_postgres.py` `[NEW]`
   - `backend/alembic/env.py` `[MODIFY]`
-  - `backend/docker-compose.yml` `[MODIFY]`
+  - `docker-compose.dev.yml` & `docker-compose.yml` `[MODIFY]`
 * **Code Specification:**
   ```python
   # backend/app/scripts/migrate_mysql_to_postgres.py
@@ -484,11 +486,12 @@ flowchart LR
 * **User Acceptance Criteria (UAC):**
   - Existing user accounts log into the Next.js Web UI with their existing passwords on PostgreSQL.
   - All existing API keys authenticate without re-issuance.
-  - Standalone Akvo-RAG boots up on PostgreSQL 17 with zero MySQL container requirements.
+  - Standalone Akvo-RAG boots up with `docker compose -f docker-compose.dev.yml up` with zero MySQL or RabbitMQ containers.
 * **Technical Acceptance Criteria (TAC):**
   - Migration script executes in $< 10$ seconds on production datasets.
   - Row counts across `users`, `apps`, `api_keys`, and `prompts` match 100%.
   - User login (`POST /api/auth/login`) and API key auth pass against PostgreSQL.
+  - Standalone `docker-compose.dev.yml` boots: `frontend`, `backend`, `ingestion-worker`, `postgres`, `redis`, `chromadb`, `minio`.
 
 ---
 
@@ -527,20 +530,23 @@ flowchart LR
 
 ---
 
-#### `TASK-VKB-303`: Package Dedicated Background Ingestion Worker
+#### `TASK-VKB-303`: Package Dedicated Background Ingestion Worker & Upload Task Contract
 * **Repository:** `vector-knowledge-base-mcp-server`
 * **Vibe-Coding Estimate:** `2.0 hours`
 * **Detailed Description:**  
-  Package the document processing service into a lightweight background Celery worker container (`ingestion-worker`). It listens to the Redis ingestion queue, processes uploaded files, writes raw files to MinIO, and creates Chroma vectors using `vector-kb-core`.
+  1. Package the document processing service into a dedicated background Celery worker container (`ingestion-worker`). It listens to the Redis ingestion queue, downloads raw PDFs from MinIO, parses pages/OCR, writes chunk records to PostgreSQL 17, and creates Chroma vectors using `vector-kb-core`.
+  2. Define the standard Celery upload task contract `process_document(document_id: str, kb_id: int)` published by Admin APIs in both Standalone Akvo-RAG (Mode 1) and Partner Host Apps (Mode 2).
 * **Key Touchpoints:**
   - `Dockerfile.ingestion` `[NEW]`
   - `main/app/tasks/document_tasks.py` `[MODIFY]`
   - `docker-compose.yml` `[MODIFY]`
 * **User Acceptance Criteria (UAC):**
   - Large document uploads process asynchronously in the background without degrading conversational query latency.
+  - Document upload status in Web UI updates from `PROCESSING` $\rightarrow$ `INDEXED` upon task completion.
 * **Technical Acceptance Criteria (TAC):**
   - Ingestion worker runs independently as a Docker container consuming from Redis.
   - Container entrypoint script executes `alembic upgrade head` on startup to ensure KB & document tables exist in PostgreSQL.
+  - Task `process_document` catches parsing errors and updates document `status="FAILED"` with `error_message` in PostgreSQL.
 
 ---
 
@@ -557,6 +563,10 @@ flowchart LR
   - `host_app/backend/requirements.txt` `[MODIFY]`
 * **Code Specification:**
   ```python
+  # host_app/backend/requirements.txt (Standard Git URI installation)
+  # akvo-rag-core @ git+https://github.com/akvo/akvo-rag.git@v1.0.0#subdirectory=packages/akvo-rag-core
+  # vector-kb-core @ git+https://github.com/akvo/vector-knowledge-base-mcp-server.git@v1.0.0#subdirectory=packages/vector-kb-core
+
   # host_app/backend/services/embedded_ai_service.py
   from akvo_rag_core import RAGWorkflowEngine, RAGRequest, ChatMessage, PromptResolver
   from vector_kb_core import ChromaRetriever
@@ -591,6 +601,7 @@ flowchart LR
   - The 3 silent answer-loss paths (failed background callbacks) are eliminated.
 * **Technical Acceptance Criteria (TAC):**
   - Zero network calls to `POST /api/jobs` or `POST /api/callback/ai`.
+  - Packages install cleanly in host Docker image via `requirements.txt` Git URL or wheel.
   - Question answering executes end-to-end in-memory.
 
 ---
@@ -893,10 +904,95 @@ A core requirement is ensuring that the **standalone Akvo-RAG web application, i
 1. **Standalone Product Mode (Mode 1):**
    - The Next.js frontend (`frontend/`) and FastAPI backend (`backend/app/main.py`) remain fully operational.
    - The FastAPI backend delegates its internal RAG chat endpoints and WebSocket streaming to `akvo-rag-core`.
-   - Admins and developers can run `docker compose up` in `akvo-rag` to access the prompt versioning UI, knowledge base tester, chat playground, and app registry.
+   - Admins and developers can run `docker compose -f docker-compose.dev.yml up` in `akvo-rag` to access the prompt versioning UI, knowledge base tester, chat playground, and app registry.
 2. **Embedded Library Mode (Mode 2):**
    - Partner applications (such as AgriConnect or WASHConnect) import `akvo-rag-core` and `vector-kb-core` directly in memory.
    - This eliminates the need to deploy duplicate copies of the Web UI or separate MySQL/RabbitMQ infrastructure in partner namespaces.
+
+### 8.2 Document Upload & KB Management in Standalone Mode 1
+
+In Standalone Mode 1, the Akvo-RAG FastAPI backend manages Knowledge Base creation and document ingestion without requiring intermediate HTTP microservice hops:
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│ STANDALONE MODE 1: DOCUMENT UPLOAD & INGESTION ARCHITECTURE            │
+│                                                                        │
+│  Next.js Admin UI                                                      │
+│        │                                                               │
+│        ▼ (Multipart File Upload)                                       │
+│  Akvo-RAG FastAPI Backend (POST /api/v1/knowledge-bases/{id}/documents)│
+│        ├── 1. Save Raw File ────────► MinIO Bucket (documents/)        │
+│        ├── 2. Create DB Record ─────► PostgreSQL 17 (status: PROCESSING)
+│        └── 3. Enqueue Task ─────────► Redis Queue                      │
+│                                            │                           │
+│                                            ▼                           │
+│                                 ingestion-worker Container             │
+│                                 (from vector-kb codebase)              │
+│                                            ├── Parse PDF & OCR         │
+│                                            ├── Insert Chunks ──► Postgres
+│                                            └── Compute Embeddings ──► Chroma
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### 8.3 Package Distribution & Installation for Partner Apps (`xxxconnect`)
+
+Partner applications (`agriconnect`, `washconnect`, `healthconnect`) can install the in-process core packages via two standard mechanisms:
+
+1. **Local Development Mode (Editable Install):**
+   ```bash
+   pip install -e /path/to/akvo-rag/packages/akvo-rag-core
+   pip install -e /path/to/vector-knowledge-base-mcp-server/packages/vector-kb-core
+   ```
+2. **Production Container Mode (`requirements.txt` with Git URI / Tag):**
+   ```text
+   # Partner App requirements.txt
+   akvo-rag-core @ git+https://github.com/akvo/akvo-rag.git@v1.0.0#subdirectory=packages/akvo-rag-core
+   vector-kb-core @ git+https://github.com/akvo/vector-knowledge-base-mcp-server.git@v1.0.0#subdirectory=packages/vector-kb-core
+   ```
+
+### 8.4 1-Day Partner Onboarding Configuration Schema
+
+To launch a brand new partner (e.g. `washconnect`) from scratch in under 1 day, the host application only needs to declare a single declarative configuration file:
+
+```python
+# washconnect/config/rag_config.py
+from pydantic import BaseModel
+from typing import List, Optional
+
+class PartnerRAGConfig(BaseModel):
+    sector: str = "wash"
+    partner_name: str = "Kenya Water Trust"
+    sector_overlay: str = (
+        "Adhere strictly to the WHO Guidelines for Drinking-water Quality 4th Edition. "
+        "Always recommend contacting a certified water technician for biological contamination."
+    )
+    partner_overlay: Optional[str] = "Service Region: Kisumu County. Hotlines: 0800-WATER."
+    default_kb_ids: List[int] = [1, 2] # 1: Water Standards, 2: Pump Maintenance
+    top_k: int = 4
+    score_threshold: float = 0.65
+
+# Instantiation in Host App:
+# ai_service = EmbeddedAIService(config=PartnerRAGConfig())
+```
+
+### 8.5 Graceful Degradation & Timeout Circuit Breaker
+
+To guarantee that WhatsApp webhooks or live conversations never hang or crash if downstream dependencies (ChromaDB or OpenAI) experience transient failure:
+
+1. **Timeout Envelope:** In-process retrieval is bounded to a strict 5.0-second timeout; LLM generation is bounded to 15.0 seconds.
+2. **Safe Fallback Response:** If an unhandled exception or timeout occurs:
+   - Emits structured `ERROR` log containing `trace_id`, exception type, and stack trace.
+   - Returns structured `RAGResponse`:
+     ```python
+     RAGResponse(
+         answer="I am temporarily unable to access the knowledge manuals. Please try again shortly.",
+         citations=[],
+         grounded=False,
+         intent="knowledge",
+         trace_id=trace_id
+     )
+     ```
+   - WhatsApp message sends cleanly to the user; conversation state remains uncorrupted.
 
 ---
 
