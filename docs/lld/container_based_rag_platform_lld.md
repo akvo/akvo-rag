@@ -823,14 +823,15 @@ sequenceDiagram
 
 ---
 
-## 8. Master Task Matrix & Implementation Phases
+## 8. Master Task Matrix & Implementation Phases (Developer-First Sequence)
 
 | Task Code | Title | Component / Path | Vibe-Coding Est. | Traditional Est. |
 |---|---|---|---|---|
-| **Phase 1** | **Codebase Consolidation & Monorepo Setup** | | | |
-| `TASK-MONO-101` | Migrate `vector-kb` Parsing, Chunking & Chroma Direct Search into `vector-kb-mcp/` | `vector-kb-mcp/` | **2.5 hrs** | 2.0 days |
-| `TASK-MONO-102` | Build `vector-kb-mcp` Dockerfile & Native Async Redis Worker Entrypoint | `vector-kb-mcp/Dockerfile` | **2.0 hrs** | 1.5 days |
-| `TASK-TEST-103` | Unit & Integration Test Suite for `vector-kb-mcp` (Parser, Chunker, Retriever & Redis Worker) | `vector-kb-mcp/tests/` | **1.5 hrs** | 1.0 day |
+| **Phase 1** | **Environment Orchestration, Monorepo Setup & Vector Microservice** | | | |
+| `TASK-OPS-101` | Author Unified `docker-compose.yml` & Local Infrastructure (`postgres:17`, `redis:7`, `chromadb`, `minio`) | Root `docker-compose.yml` | **2.0 hrs** | 1.5 days |
+| `TASK-MONO-102` | Migrate `vector-kb` Parsing, Chunking & Chroma Direct Search into `vector-kb-mcp/` | `vector-kb-mcp/` | **2.5 hrs** | 2.0 days |
+| `TASK-MONO-103` | Build `vector-kb-mcp` Dockerfile & Native Async Redis Worker Entrypoint | `vector-kb-mcp/Dockerfile` | **2.0 hrs** | 1.5 days |
+| `TASK-TEST-104` | Unit & Integration Test Suite for `vector-kb-mcp` (Parser, Chunker, Retriever & Redis Worker) | `vector-kb-mcp/tests/` | **1.5 hrs** | 1.0 day |
 | **Phase 2** | **Unified Database, Schema Isolation & Metadata Hardening** | | | |
 | `TASK-DB-201` | Port Vector-KB SQLAlchemy Models into `vector-kb-mcp/models/` | `vector-kb-mcp/models/` | **1.5 hrs** | 1.0 day |
 | `TASK-DB-202` | Enrich `KnowledgeBase` & `Document` Models with Metadata & 1536-dim Embedding Guard | `vector-kb-mcp/models/` | **1.5 hrs** | 1.0 day |
@@ -846,19 +847,34 @@ sequenceDiagram
 | **Phase 4** | **Document Ingestion, MinIO Storage & Celery Deletion** | | | |
 | `TASK-ING-401` | Integrate MinIO S3 Client in FastAPI & Purge Legacy Celery/RabbitMQ Code | `backend/app/services/` | **1.5 hrs** | 1.0 day |
 | `TASK-ING-402` | Build Native Async Redis Ingestion Consumer in `vector-kb-mcp` | `vector-kb-mcp/` | **2.0 hrs** | 1.5 days |
-| **Phase 5** | **Docker Compose Orchestration & Quality Gates** | | | |
-| `TASK-OPS-501` | Author Unified `docker-compose.yml` with Healthchecks for All 7 Services | Root `docker-compose.yml` | **2.0 hrs** | 1.5 days |
-| `TASK-OPS-502` | End-to-End Golden Set Accuracy & Legacy Test Gate (Faithfulness $\ge 0.85$) | `backend/RAG_evaluation/` | **2.5 hrs** | 2.0 days |
-| `TASK-DOC-503` | Comprehensive Developer Onboarding & Architecture Documentation Alignment | `docs/` & `README.md` | **1.5 hrs** | 1.0 day |
-| **TOTAL** | | | **31.5 hrs (~4.0 working days)** | **24.5 days** |
+| **Phase 5** | **Quality Gates, Golden Set Evaluation & Developer Onboarding** | | | |
+| `TASK-OPS-501` | End-to-End Golden Set Accuracy & Legacy Test Gate (Faithfulness $\ge 0.85$) | `backend/RAG_evaluation/` | **2.5 hrs** | 2.0 days |
+| `TASK-DOC-502` | Comprehensive Developer Onboarding & Architecture Documentation Alignment | `docs/` & `README.md` | **1.5 hrs** | 1.0 day |
+| **TOTAL** | | | **32.0 hrs (~4.0 working days)** | **24.5 days** |
 
 ---
 
 ## 9. Detailed Task Specifications & Acceptance Criteria
 
-### Phase 1: Codebase Consolidation & Monorepo Setup
+### Phase 1: Environment Orchestration, Monorepo Setup & Vector Microservice
 
-#### `TASK-MONO-101`: Migrate `vector-kb` Parsing, Chunking & Chroma Direct Search into `vector-kb-mcp/`
+#### `TASK-OPS-101`: Author Unified `docker-compose.yml` & Local Infrastructure (`postgres:17`, `redis:7`, `chromadb`, `minio`)
+* **Target Path:** Root `docker-compose.yml` & `.env.example`
+* **Vibe-Coding Estimate:** `2.0 hours`
+* **Detailed Description:**  
+  Author the unified 7-container Docker Compose file (`frontend`, `backend`, `vector-kb-mcp`, `postgres`, `redis`, `chromadb`, `minio`) as the foundation of the development environment. Include strict healthchecks (`pg_isready`, `redis-cli ping`, ChromaDB heartbeat), volumes, code bind-mounts for hot-reloading, and `.env.example`. This allows developers to run `docker compose up -d postgres redis chromadb minio` immediately on Day 1 to back all subsequent implementation phases.
+* **Key Touchpoints:**
+  - `docker-compose.yml` `[NEW / OVERWRITE]`
+  - `.env.example` `[MODIFY]`
+* **User Acceptance Criteria (UAC):**
+  - Executing `docker compose up -d` starts core infrastructure services (`postgres`, `redis`, `chromadb`, `minio`) with healthy status in $< 30\text{s}$.
+* **Technical Acceptance Criteria (TAC):**
+  - Volume definitions persist `postgres_data`, `redis_data`, `chroma_data`, and `minio_data`.
+  - Service definitions support independent container spinning (`docker compose up -d postgres redis`).
+
+---
+
+#### `TASK-MONO-102`: Migrate `vector-kb` Parsing, Chunking & Chroma Direct Search into `vector-kb-mcp/`
 * **Target Path:** `vector-kb-mcp/`
 * **Vibe-Coding Estimate:** `2.5 hours`
 * **Detailed Description:**  
@@ -905,7 +921,7 @@ sequenceDiagram
 
 ---
 
-#### `TASK-MONO-102`: Build `vector-kb-mcp` Dockerfile & Native Async Redis Worker Entrypoint
+#### `TASK-MONO-103`: Build `vector-kb-mcp` Dockerfile & Native Async Redis Worker Entrypoint
 * **Target Path:** `vector-kb-mcp/`
 * **Vibe-Coding Estimate:** `2.0 hours`
 * **Detailed Description:**  
@@ -969,18 +985,18 @@ sequenceDiagram
 
 ---
 
-#### `TASK-TEST-103`: Unit & Integration Test Suite for `vector-kb-mcp`
+#### `TASK-TEST-104`: Unit & Integration Test Suite for `vector-kb-mcp`
 * **Target Path:** `vector-kb-mcp/tests/`
 * **Vibe-Coding Estimate:** `1.5 hours`
 * **Detailed Description:**  
-  Implement a complete test suite for `vector-kb-mcp` validating text extractors, PDF parsers, chunk token boundaries, ChromaRetriever query execution, and the Redis request-reply worker loop using `fakeredis` or test containers.
+  Implement a complete test suite for `vector-kb-mcp` validating text extractors, PDF parsers, chunk token boundaries, ChromaRetriever query execution, and the Redis request-reply worker loop using live test containers (`redis`, `chromadb`) or `fakeredis`.
 * **Key Touchpoints:**
   - `vector-kb-mcp/tests/test_parser.py` `[NEW]`
   - `vector-kb-mcp/tests/test_chunker.py` `[NEW]`
   - `vector-kb-mcp/tests/test_retriever.py` `[NEW]`
   - `vector-kb-mcp/tests/test_redis_worker.py` `[NEW]`
 * **User Acceptance Criteria (UAC):**
-  - All tests execute and pass via `pytest` inside the `vector-kb-mcp` container.
+  - All tests execute and pass via `pytest` inside the running `vector-kb-mcp` container.
 * **Technical Acceptance Criteria (TAC):**
   - Test suite achieves $\ge 85\%$ line coverage across `parser/`, `chunker/`, and `retriever/`.
 
@@ -1202,24 +1218,9 @@ sequenceDiagram
 
 ---
 
-### Phase 5: Docker Compose Orchestration & Quality Gates
+### Phase 5: Quality Gates, Golden Set Evaluation & Developer Onboarding
 
-#### `TASK-OPS-501`: Author Unified `docker-compose.yml` with Healthchecks for All 7 Services
-* **Target Path:** Root `docker-compose.yml`
-* **Vibe-Coding Estimate:** `2.0 hours`
-* **Detailed Description:**  
-  Create the unified 7-container Docker Compose file (`frontend`, `backend`, `vector-kb-mcp`, `postgres`, `redis`, `chromadb`, `minio`). Include strict healthchecks (`pg_isready`, `redis-cli ping`, ChromaDB heartbeat) and `depends_on: { condition: service_healthy }` to eliminate startup race conditions.
-* **Key Touchpoints:**
-  - `docker-compose.yml` `[NEW / OVERWRITE]`
-  - `.env.example` `[MODIFY]`
-* **User Acceptance Criteria (UAC):**
-  - Executing `docker compose up -d --build` starts all 7 containers cleanly and reaches healthy state with zero crashes.
-* **Technical Acceptance Criteria (TAC):**
-  - Volume definitions persist `postgres_data`, `redis_data`, `chroma_data`, and `minio_data`.
-
----
-
-#### `TASK-OPS-502`: End-to-End Golden Set Accuracy & Legacy Test Gate (Faithfulness $\ge 0.85$)
+#### `TASK-OPS-501`: End-to-End Golden Set Accuracy & Legacy Test Gate (Faithfulness $\ge 0.85$)
 * **Target Path:** `backend/RAG_evaluation/`
 * **Vibe-Coding Estimate:** `2.5 hours`
 * **Detailed Description:**  
@@ -1237,7 +1238,7 @@ sequenceDiagram
 
 ---
 
-#### `TASK-DOC-503`: Comprehensive Developer Onboarding & Architecture Documentation Alignment
+#### `TASK-DOC-502`: Comprehensive Developer Onboarding & Architecture Documentation Alignment
 * **Target Path:** `docs/` & `README.md`
 * **Vibe-Coding Estimate:** `1.5 hours`
 * **Detailed Description:**  
