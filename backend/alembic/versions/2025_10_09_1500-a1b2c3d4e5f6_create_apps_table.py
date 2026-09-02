@@ -5,6 +5,7 @@ Revises: 4fa99fd9129b
 Create Date: 2025-10-09 15:00:00.000000
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -29,7 +30,9 @@ def upgrade() -> None:
         sa.Column("domain", sa.String(length=255), nullable=False),
         sa.Column("default_chat_prompt", sa.Text(), nullable=True),
         sa.Column("chat_callback_url", sa.String(length=512), nullable=False),
-        sa.Column("upload_callback_url", sa.String(length=512), nullable=False),
+        sa.Column(
+            "upload_callback_url", sa.String(length=512), nullable=False
+        ),
         sa.Column("access_token", sa.String(length=128), nullable=False),
         sa.Column("callback_token", sa.String(length=255), nullable=True),
         sa.Column("scopes", mysql.JSON(), nullable=False),
@@ -44,7 +47,9 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_apps_id"), "apps", ["id"], unique=False)
     op.create_index(op.f("ix_apps_app_id"), "apps", ["app_id"], unique=True)
-    op.create_index(op.f("ix_apps_client_id"), "apps", ["client_id"], unique=True)
+    op.create_index(
+        op.f("ix_apps_client_id"), "apps", ["client_id"], unique=True
+    )
     op.create_index(
         op.f("ix_apps_access_token"), "apps", ["access_token"], unique=True
     )
