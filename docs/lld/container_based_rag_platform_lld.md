@@ -833,9 +833,9 @@ sequenceDiagram
 | `TASK-TEST-103` | Unit & Integration Test Suite for `vector-kb-mcp` (Parser, Chunker, Retriever & Redis Worker) | `vector-kb-mcp/tests/` | **1.5 hrs** | 1.0 day |
 | **Phase 2** | **Unified Database, Schema Isolation & Metadata Hardening** | | | |
 | `TASK-DB-201` | Port Vector-KB SQLAlchemy Models into `vector-kb-mcp/models/` | `vector-kb-mcp/models/` | **1.5 hrs** | 1.0 day |
-| `TASK-DB-202` | Setup Service-Owned Alembic Migrations (`alembic_version_vkb`) | `vector-kb-mcp/alembic/` | **1.5 hrs** | 1.0 day |
-| `TASK-DB-203` | PostgreSQL Adapter (`asyncpg`) & Automated Legacy Data Migration CLI | `backend/app/scripts/` | **2.0 hrs** | 1.5 days |
-| `TASK-DB-204` | Enrich `KnowledgeBase` & `Document` Models with Metadata & 1536-dim Embedding Guard | `vector-kb-mcp/models/` | **1.5 hrs** | 1.0 day |
+| `TASK-DB-202` | Enrich `KnowledgeBase` & `Document` Models with Metadata & 1536-dim Embedding Guard | `vector-kb-mcp/models/` | **1.5 hrs** | 1.0 day |
+| `TASK-DB-203` | Setup Service-Owned Alembic Migrations (`alembic_version_vkb`) | `vector-kb-mcp/alembic/` | **1.5 hrs** | 1.0 day |
+| `TASK-DB-204` | PostgreSQL Adapter (`asyncpg`) & Automated Legacy Data Migration CLI | `backend/app/scripts/` | **2.0 hrs** | 1.5 days |
 | **Phase 3** | **Queue-Backed MCP Dispatcher, Scoping Removal & FastMCP Purge** | | | |
 | `TASK-MCP-301` | Implement `mcp_config.json` Declarative Schema & Static Parser | `backend/app/core/` | **1.0 hr** | 1.0 day |
 | `TASK-MCP-302` | Build `MCPQueueDispatcher` (Redis Request-Reply with Correlation ID) | `backend/app/services/` | **3.0 hrs** | 2.5 days |
@@ -1005,11 +1005,27 @@ sequenceDiagram
 
 ---
 
-#### `TASK-DB-202`: Setup Service-Owned Alembic Migrations (`alembic_version_vkb`)
+#### `TASK-DB-202`: Enrich `KnowledgeBase` & `Document` Models with Metadata & 1536-dim Embedding Guard
+* **Target Path:** `vector-kb-mcp/models/`
+* **Vibe-Coding Estimate:** `1.5 hours`
+* **Detailed Description:**  
+  Add public-sector and governance metadata fields to `documents` (`doc_version`, `issuing_authority`, `effective_date`, `doc_type`, `jurisdiction`). Add `embedding_model` (default: `text-embedding-3-small`) and `embedding_dim` (default: 1536) to `knowledge_bases` with validation guards that reject query/ingest attempts if dimension mismatch occurs.
+* **Key Touchpoints:**
+  - `vector-kb-mcp/models/knowledge_base.py` `[MODIFY]`
+  - `vector-kb-mcp/models/document.py` `[MODIFY]`
+  - `vector-kb-mcp/models/document_chunk.py` `[MODIFY]`
+* **User Acceptance Criteria (UAC):**
+  - Document citations include issuing authority, effective date, and edition (e.g. *"National Water Standard 2024, Ministry of Water, Section 4"*).
+* **Technical Acceptance Criteria (TAC):**
+  - Database schema includes indices on `(kb_id, status)` and `(document_id, chunk_index)`.
+
+---
+
+#### `TASK-DB-203`: Setup Service-Owned Alembic Migrations (`alembic_version_vkb`)
 * **Target Path:** `vector-kb-mcp/alembic/`
 * **Vibe-Coding Estimate:** `1.5 hours`
 * **Detailed Description:**  
-  Configure a dedicated, service-owned Alembic environment inside `vector-kb-mcp/`. Configure `env.py` and `alembic.ini` with `version_table = "alembic_version_vkb"`. Generate the initial migration script creating `vkb_knowledge_bases`, `vkb_documents`, and `vkb_document_chunks`.
+  Configure a dedicated, service-owned Alembic environment inside `vector-kb-mcp/`. Configure `env.py` and `alembic.ini` with `version_table = "alembic_version_vkb"`. Generate the initial migration script creating `vkb_knowledge_bases`, `vkb_documents`, and `vkb_document_chunks` (including all enriched metadata columns).
 * **Key Touchpoints:**
   - `vector-kb-mcp/alembic.ini` `[NEW]`
   - `vector-kb-mcp/alembic/env.py` `[NEW]`
@@ -1021,7 +1037,7 @@ sequenceDiagram
 
 ---
 
-#### `TASK-DB-203`: PostgreSQL Adapter (`asyncpg`) & Automated Legacy Data Migration CLI
+#### `TASK-DB-204`: PostgreSQL Adapter (`asyncpg`) & Automated Legacy Data Migration CLI
 * **Target Path:** `backend/app/scripts/` & `backend/app/core/`
 * **Vibe-Coding Estimate:** `2.0 hours`
 * **Detailed Description:**  
@@ -1042,22 +1058,6 @@ sequenceDiagram
   - All existing prompt versions, admin users, apps, and knowledge bases migrate into PostgreSQL 17 with 0 data loss.
 * **Technical Acceptance Criteria (TAC):**
   - Idempotent execution (safe to run multiple times with UPSERT logic).
-
----
-
-#### `TASK-DB-204`: Enrich `KnowledgeBase` & `Document` Models with Metadata & 1536-dim Embedding Guard
-* **Target Path:** `vector-kb-mcp/models/`
-* **Vibe-Coding Estimate:** `1.5 hours`
-* **Detailed Description:**  
-  Add public-sector and governance metadata fields to `documents` (`doc_version`, `issuing_authority`, `effective_date`, `doc_type`, `jurisdiction`). Add `embedding_model` (default: `text-embedding-3-small`) and `embedding_dim` (default: 1536) to `knowledge_bases` with validation guards that reject query/ingest attempts if dimension mismatch occurs.
-* **Key Touchpoints:**
-  - `vector-kb-mcp/models/knowledge_base.py` `[MODIFY]`
-  - `vector-kb-mcp/models/document.py` `[MODIFY]`
-  - `vector-kb-mcp/models/document_chunk.py` `[MODIFY]`
-* **User Acceptance Criteria (UAC):**
-  - Document citations include issuing authority, effective date, and edition (e.g. *"National Water Standard 2024, Ministry of Water, Section 4"*).
-* **Technical Acceptance Criteria (TAC):**
-  - Database schema includes indices on `(kb_id, status)` and `(document_id, chunk_index)`.
 
 ---
 
