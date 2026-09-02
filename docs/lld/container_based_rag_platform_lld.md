@@ -828,7 +828,7 @@ sequenceDiagram
 | Task Code | Title | Component / Path | Vibe-Coding Est. | Traditional Est. |
 |---|---|---|---|---|
 | **Phase 1** | **Environment Orchestration, Monorepo Setup & Vector Microservice** | | | |
-| `TASK-OPS-101` | Author Unified `docker-compose.yml` & Local Infrastructure (`postgres:17`, `redis:7`, `chromadb`, `minio`) | Root `docker-compose.yml` | **2.0 hrs** | 1.5 days |
+| `TASK-MONO-101` | Author Unified `docker-compose.yml` & Local Infrastructure (`postgres:17`, `redis:7`, `chromadb`, `minio`) | Root `docker-compose.yml` | **2.0 hrs** | 1.5 days |
 | `TASK-MONO-102` | Migrate `vector-kb` Parsing, Chunking & Chroma Direct Search into `vector-kb-mcp/` | `vector-kb-mcp/` | **2.5 hrs** | 2.0 days |
 | `TASK-MONO-103` | Build `vector-kb-mcp` Dockerfile & Native Async Redis Worker Entrypoint | `vector-kb-mcp/Dockerfile` | **2.0 hrs** | 1.5 days |
 | `TASK-TEST-104` | Unit & Integration Test Suite for `vector-kb-mcp` (Parser, Chunker, Retriever & Redis Worker) | `vector-kb-mcp/tests/` | **1.5 hrs** | 1.0 day |
@@ -858,7 +858,7 @@ sequenceDiagram
 
 ### Phase 1: Environment Orchestration, Monorepo Setup & Vector Microservice
 
-#### `TASK-OPS-101`: Author Unified `docker-compose.yml` & Local Infrastructure (`postgres:17`, `redis:7`, `chromadb`, `minio`)
+#### `TASK-MONO-101`: Author Unified `docker-compose.yml` & Local Infrastructure (`postgres:17`, `redis:7`, `chromadb`, `minio`)
 * **Target Path:** Root `docker-compose.yml` & `.env.example`
 * **Vibe-Coding Estimate:** `2.0 hours`
 * **Detailed Description:**  
