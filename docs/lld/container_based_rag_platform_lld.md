@@ -1054,26 +1054,28 @@ sequenceDiagram
 ---
 
 #### `TASK-DB-204`: PostgreSQL Adapter (`asyncpg`) & Automated Legacy Data Migration CLI
-* **Target Path:** `backend/app/scripts/` & `backend/app/core/`
+* **Target Path:** `backend/app/scripts/` & `vector-kb-mcp/cli/`
 * **Vibe-Coding Estimate:** `2.0 hours`
 * **Detailed Description:**  
-  Update `backend/app/core/config.py` and `backend/app/db/session.py` to connect to PostgreSQL 17 using `asyncpg`. Build an automated CLI ETL script (`migrate_legacy_to_consolidated_postgres.py`) to extract all users, prompts, chats, and vector KB records from legacy MySQL and PostgreSQL instances into the new database.
+  Update `backend/app/core/config.py` and `backend/app/db/session.py` to connect to PostgreSQL 17 using `asyncpg`. Build an automated, idempotent CLI ETL script (`migrate_legacy_to_consolidated_postgres.py`) to migrate legacy MySQL records (`users`, `apps`, `prompts`, `chats`) and standalone PostgreSQL 17 vector KB records (`knowledge_bases`, `documents`, `document_chunks` from legacy `kb_mcp`) into the unified PostgreSQL 17 database (`akvo_rag`).
 * **Key Touchpoints:**
   - `backend/app/core/config.py` `[MODIFY]`
   - `backend/app/db/session.py` `[MODIFY]`
   - `backend/app/scripts/migrate_legacy_to_consolidated_postgres.py` `[NEW]`
+  - `vector-kb-mcp/cli/migrate_legacy_data.py` `[NEW]`
 * **Code Specification:**
   ```python
   # CLI execution command
   python -m app.scripts.migrate_legacy_to_consolidated_postgres \
     --mysql-url "mysql+pymysql://user:pass@mysql:3306/akvo_rag" \
-    --legacy-pg-url "postgresql://user:pass@legacy_vkb:5432/vector_kb" \
-    --target-pg-url "postgresql+asyncpg://postgres:postgres@postgres:5432/akvo_rag"
+    --legacy-pg-url "postgresql://akvo:password@legacy_vkb:5432/kb_mcp" \
+    --target-pg-url "postgresql+asyncpg://postgres:postgres@postgres:5432/akvo_rag" \
+    --batch-size 1000
   ```
 * **User Acceptance Criteria (UAC):**
-  - All existing prompt versions, admin users, apps, and knowledge bases migrate into PostgreSQL 17 with 0 data loss.
+  - All existing prompt versions, admin users, apps, and standalone PostgreSQL knowledge bases migrate into the unified PostgreSQL 17 database with 0 data loss.
 * **Technical Acceptance Criteria (TAC):**
-  - Idempotent execution (safe to run multiple times with UPSERT logic).
+  - Idempotent execution (safe to re-run multiple times with `ON CONFLICT DO NOTHING` / UPSERT logic).
 
 ---
 
