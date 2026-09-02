@@ -70,6 +70,7 @@ script_location = alembic
 prepend_sys_path = .
 version_path_separator = os
 version_table = alembic_version_vkb
+file_template = %%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s
 
 # Logging configuration
 [loggers]
