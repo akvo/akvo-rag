@@ -4,7 +4,7 @@
 > **Task Ref:** `TASK-MONO-101`
 > **Target Branch:** `phase-1/107-rag-improvement-d8-phase-1-environment-orchestration-monorepo-setup-vector-microservice`
 > **Status:** `IMPLEMENTED`
-> **Estimated Effort:** `2.0 hrs (Vibe-Coding) / 1.5 days (Traditional)`
+> **Estimated Effort:** `2 hrs (Vibe-Coding) / 2 days (Traditional)`
 > **Author:** Antigravity Architect / Senior Platform Engineer
 > **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 3, 8, 9)
 
@@ -352,10 +352,10 @@ docker compose down -v
 
 | Subtask ID | Description | Touchpoints | Vibe Est. | Trad. Est. | Confidence |
 |---|---|---|:---:|:---:|:---:|
-| `SUB-101.1` | Author unified `docker-compose.yml` with 7 containers, healthchecks, volumes, and network aliases | `docker-compose.yml` `[OVERWRITE]` | 1.0 hr | 0.8 day | High (95%) |
-| `SUB-101.2` | Update and standardize `.env.example` with zero-credential placeholders | `.env.example` `[MODIFY]` | 0.3 hr | 0.2 day | High (99%) |
-| `SUB-101.3` | Test startup, healthcheck transitions, and datastore connectivity | CLI / Docker daemon | 0.7 hr | 0.5 day | High (95%) |
-| **TOTAL** | | | **2.0 hrs** | **1.5 days** | **High** |
+| `SUB-101.1` | Author unified `docker-compose.yml` with 7 containers, healthchecks, volumes, and network aliases | `docker-compose.yml` `[OVERWRITE]` | 1 hr | 1 day | High (95%) |
+| `SUB-101.2` | Update and standardize `.env.example` with zero-credential placeholders | `.env.example` `[MODIFY]` | 1 hr | 1 day | High (99%) |
+| `SUB-101.3` | Test startup, healthcheck transitions, and datastore connectivity | CLI / Docker daemon | 1 hr | 1 day | High (95%) |
+| **TOTAL** | | | **2 hrs** | **2 days** | **High** |
 
 ---
 
