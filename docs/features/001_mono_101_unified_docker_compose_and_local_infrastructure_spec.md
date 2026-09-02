@@ -22,8 +22,8 @@ Without a unified, healthcheck-aware `docker-compose.yml` deployed on **Day 1**,
 | Dimension | Specification |
 |---|---|
 | **Who** | Backend engineers, ML/AI engineers, and frontend developers working on Akvo-RAG monorepo. |
-| **What** | Author a unified `docker-compose.yml` and `.env.example` orchestrating all 7 services (`postgres`, `redis`, `chromadb`, `minio`, `vector-kb-mcp`, `backend`, `frontend`) with healthchecks and persistent volumes. |
-| **Where** | Workspace root: `docker-compose.yml`, `.env.example`. |
+| **What** | Author unified `docker-compose.yml`, `docker-compose.dev.yml` (with live bind mounts & hot reload), and `.env.example` orchestrating all 7 services (`postgres`, `redis`, `chromadb`, `minio`, `vector-kb-mcp`, `backend`, `frontend`) with healthchecks and persistent volumes. |
+| **Where** | Workspace root: `docker-compose.yml`, `docker-compose.dev.yml`, `.env.example`. |
 | **When** | **Phase 1, Step 1** — foundational prerequisite before writing any microservice code or running database migrations. |
 | **Why** | Provides a reproducible local sandbox, eliminates race conditions on boot via healthchecks, enables independent datastore startup, and guarantees dev-to-prod environment parity. |
 | **How** | Docker Compose v2 specification with declarative healthcheck probes (`pg_isready`, `redis-cli ping`, heartbeat), named bridge network (`akvo_rag_net`), and persistent named volumes. |

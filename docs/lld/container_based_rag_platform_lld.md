@@ -828,7 +828,7 @@ sequenceDiagram
 | Task Code | Title | Component / Path | Vibe-Coding Est. | Traditional Est. |
 |---|---|---|---|---|
 | **Phase 1** | **Environment Orchestration, Monorepo Setup & Vector Microservice** | | | |
-| `TASK-MONO-101` | Author Unified `docker-compose.yml` & Local Infrastructure (`postgres:17`, `redis:7`, `chromadb`, `minio`) | Root `docker-compose.yml` | **2.0 hrs** | 1.5 days |
+| `TASK-MONO-101` | Author Unified `docker-compose.yml`, `docker-compose.dev.yml` & Local Infrastructure (`postgres:17`, `redis:7`, `chromadb`, `minio`) | Root `docker-compose.yml` & `docker-compose.dev.yml` | **2.0 hrs** | 1.5 days |
 | `TASK-MONO-102` | Migrate `vector-kb` Parsing, Chunking & Chroma Direct Search into `vector-kb-mcp/` | `vector-kb-mcp/` | **2.5 hrs** | 2.0 days |
 | `TASK-MONO-103` | Build `vector-kb-mcp` Dockerfile & Native Async Redis Worker Entrypoint | `vector-kb-mcp/Dockerfile` | **2.0 hrs** | 1.5 days |
 | `TASK-TEST-104` | Unit & Integration Test Suite for `vector-kb-mcp` (Parser, Chunker, Retriever & Redis Worker) | `vector-kb-mcp/tests/` | **1.5 hrs** | 1.0 day |
@@ -847,10 +847,11 @@ sequenceDiagram
 | **Phase 4** | **Document Ingestion, MinIO Storage & Celery Deletion** | | | |
 | `TASK-ING-401` | Integrate MinIO S3 Client in FastAPI & Purge Legacy Celery/RabbitMQ Code | `backend/app/services/` | **1.5 hrs** | 1.0 day |
 | `TASK-ING-402` | Build Native Async Redis Ingestion Consumer in `vector-kb-mcp` | `vector-kb-mcp/` | **2.0 hrs** | 1.5 days |
-| **Phase 5** | **Quality Gates, Golden Set Evaluation & Developer Onboarding** | | | |
+| **Phase 5** | **Quality Gates, Golden Set Evaluation, Cleanup & Documentation** | | | |
 | `TASK-OPS-501` | End-to-End Golden Set Accuracy & Legacy Test Gate (Faithfulness $\ge 0.85$) | `backend/RAG_evaluation/` | **2.5 hrs** | 2.0 days |
-| `TASK-DOC-502` | Comprehensive Developer Onboarding & Architecture Documentation Alignment | `docs/` & `README.md` | **1.5 hrs** | 1.0 day |
-| **TOTAL** | | | **32.0 hrs (~4.0 working days)** | **24.5 days** |
+| `TASK-CLEAN-502` | Purge Legacy Files, Dead Code, FastMCP/Celery Artifacts & Unused Dependencies | `backend/`, `vector-kb-mcp/` | **1.0 hr** | 0.5 day |
+| `TASK-DOC-503` | Comprehensive Developer Onboarding & Architecture Documentation Alignment | `docs/` & `README.md` | **1.5 hrs** | 1.0 day |
+| **TOTAL** | | | **33.0 hrs (~4.1 working days)** | **25.0 days** |
 
 ---
 
@@ -1220,7 +1221,7 @@ sequenceDiagram
 
 ---
 
-### Phase 5: Quality Gates, Golden Set Evaluation & Developer Onboarding
+### Phase 5: Quality Gates, Golden Set Evaluation, Cleanup & Documentation
 
 #### `TASK-OPS-501`: End-to-End Golden Set Accuracy & Legacy Test Gate (Faithfulness $\ge 0.85$)
 * **Target Path:** `backend/RAG_evaluation/`
@@ -1240,7 +1241,33 @@ sequenceDiagram
 
 ---
 
-#### `TASK-DOC-502`: Comprehensive Developer Onboarding & Architecture Documentation Alignment
+#### `TASK-CLEAN-502`: Purge Legacy Files, Dead Code, FastMCP/Celery Artifacts & Unused Dependencies
+* **Target Path:** `backend/`, `vector-kb-mcp/`, monorepo root
+* **Vibe-Coding Estimate:** `1.0 hour`
+* **Detailed Description:**  
+  Purge all deprecated legacy files and artifacts across the monorepo:
+  1. Delete legacy `backend/mcp_discovery.json`, `mcp_discovery.json.bak`, `mcp_discovery.json.agriconnect_bak`.
+  2. Delete legacy FastMCP/discovery files: `backend/mcp_clients/fastmcp_client_service.py`, `backend/mcp_clients/mcp_discovery_manager.py`, `backend/mcp_clients/mcp_servers_config.py`, `backend/mcp_clients/rest_mcp_client_service.py`.
+  3. Delete legacy Celery/RabbitMQ files: `backend/app/tasks/celery_app.py`, `backend/app/tasks/chat_task.py`, `backend/entrypoint-celery.sh`.
+  4. Delete deprecated `backend/app/services/scoping_agent.py`.
+  5. Remove unused dependencies from `backend/requirements.txt` (`fastmcp`, `celery`, `pika`, `kombu`, `pymysql`, `mysqlclient`, `mysql-connector-python`).
+  6. Run `flake8` / `ruff` across the codebase to ensure zero dead imports or broken symbols.
+* **Key Touchpoints:**
+  - `backend/mcp_discovery.json*` `[DELETE]`
+  - `backend/mcp_clients/fastmcp_client_service.py` `[DELETE]`
+  - `backend/mcp_clients/mcp_discovery_manager.py` `[DELETE]`
+  - `backend/mcp_clients/mcp_servers_config.py` `[DELETE]`
+  - `backend/app/tasks/` `[DELETE]`
+  - `backend/app/services/scoping_agent.py` `[DELETE]`
+  - `backend/requirements.txt` `[MODIFY]`
+* **User Acceptance Criteria (UAC):**
+  - Codebase contains zero references to Celery, RabbitMQ, MySQL, or FastMCP.
+* **Technical Acceptance Criteria (TAC):**
+  - Monorepo passes full linter pass (`ruff check .` / `flake8`) with 0 unresolved imports.
+
+---
+
+#### `TASK-DOC-503`: Comprehensive Developer Onboarding & Architecture Documentation Alignment
 * **Target Path:** `docs/` & `README.md`
 * **Vibe-Coding Estimate:** `1.5 hours`
 * **Detailed Description:**  
@@ -1252,7 +1279,7 @@ sequenceDiagram
   - `docs/admin-guide.md` `[MODIFY]` (Knowledge base management, prompt editing, API key provisioning)
   - `docs/troubleshooting.md` `[MODIFY]` (Redis queue debugging, timeout tuning, ChromaDB healthchecks)
 * **User Acceptance Criteria (UAC):**
-  - A new developer can clone the repository, spin up the entire platform via `docker compose up -d --build`, run the test suite, and understand how to attach a new MCP tool within 15 minutes.
+  - A new developer can clone the repository, spin up the entire platform via `docker compose up -d --build` or `docker compose -f docker-compose.dev.yml up -d --build`, run the test suite, and understand how to attach a new MCP tool within 15 minutes.
 * **Technical Acceptance Criteria (TAC):**
   - Documentation complies with `.agent/rules/docs-standard.md` (root-relative paths only, no hardcoded machine paths, zero credentials/API keys).
 
