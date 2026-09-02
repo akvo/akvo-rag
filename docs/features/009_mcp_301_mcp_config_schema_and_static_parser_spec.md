@@ -49,7 +49,7 @@ graph TD
 
     subgraph ModernFlow["Modern Declarative Static Parsing (TASK-MCP-301)"]
         Boot2["FastAPI Startup"] --> ReadConfig["Read backend/mcp_config.json"]
-        ReadConfig --> PydanticParse["MCPConfigParser.parse()<br/>(Type-Safe Pydantic V2 Validation in < 5ms)"]
+        ReadConfig --> PydanticParse["MCPConfigParser.parse()<br/>(Type-Safe Pydantic V2 Validation in sub-5ms)"]
         PydanticParse --> Registry["Populate In-Memory Tool Registry<br/>(redis_queue & rest transports)"]
         Registry --> LangGraphReady["LangGraph Agent Ready for Invocations"]
     end

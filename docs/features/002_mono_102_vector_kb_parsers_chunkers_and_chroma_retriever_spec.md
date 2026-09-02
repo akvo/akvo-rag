@@ -80,10 +80,10 @@ graph TD
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Caller as Redis RPC Worker / Test Harness
-    participant Retriever as ChromaRetriever
-    participant OpenAI as OpenAI API
-    participant Chroma as ChromaDB Container
+    actor Caller as "Redis RPC Worker / Test Harness"
+    participant Retriever as "ChromaRetriever"
+    participant OpenAI as "OpenAI API"
+    participant Chroma as "ChromaDB Container"
 
     Note over Caller, Chroma: Multi-KB Parallel Semantic Search Flow
     Caller->>Retriever: search(query="Avocado disease", kb_ids=[1, 2], top_k=4)

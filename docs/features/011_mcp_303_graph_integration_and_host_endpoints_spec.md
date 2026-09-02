@@ -39,14 +39,14 @@ The legacy LangGraph pipeline in `akvo-rag-backend` suffered from two major arch
 
 ```mermaid
 graph TD
-    Start([User Chat Message]) --> Intent[1. Classify Intent Node]
+    Start(["User Chat Message"]) --> Intent["1. Classify Intent Node"]
     
-    Intent -- "small_talk" --> SmallTalk[2a. Small Talk Node] --> Finish([Stream Response to User])
-    Intent -- "rag_query" --> Contextualize[2b. Contextualize Query Node]
+    Intent -- "small_talk" --> SmallTalk["2a. Small Talk Node"] --> Finish(["Stream Response to User"])
+    Intent -- "rag_query" --> Contextualize["2b. Contextualize Query Node"]
     
-    Contextualize --> RunMCP[3. Run MCP Tool Node<br/>(Calls MCPQueueDispatcher via Redis RPC in < 5ms)]
+    Contextualize --> RunMCP["3. Run MCP Tool Node<br/>(Calls MCPQueueDispatcher via Redis RPC in sub-5ms)"]
     
-    RunMCP --> QASynthesis[4. QA Answer Synthesis Node<br/>(Streams tokens directly with authoritative citations)]
+    RunMCP --> QASynthesis["4. QA Answer Synthesis Node<br/>(Streams tokens directly with authoritative citations)"]
     
     QASynthesis --> Finish
 ```

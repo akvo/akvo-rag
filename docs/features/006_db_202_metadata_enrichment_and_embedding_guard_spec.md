@@ -88,10 +88,10 @@ erDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Ingestion as Ingestion Worker / Caller
-    participant Guard as EmbeddingDimensionGuard
-    participant OpenAI as OpenAI API
-    participant Chroma as ChromaDB Container
+    actor Ingestion as "Ingestion Worker / Caller"
+    participant Guard as "EmbeddingDimensionGuard"
+    participant OpenAI as "OpenAI API"
+    participant Chroma as "ChromaDB Container"
 
     Ingestion->>Guard: validate_and_embed(text, target_kb)
     Guard->>OpenAI: embeddings.create(input=[text], model=target_kb.embedding_model)
@@ -103,8 +103,8 @@ sequenceDiagram
         Guard->>Chroma: Safe Upsert / Query Execution
         Chroma-->>Guard: 200 OK
         Guard-->>Ingestion: Success
-    option Mismatch (e.g. 768 != 1536)
-        Guard-->>Ingestion: Raise EmbeddingDimensionMismatchError(expected=1536, received=768)
+    option Mismatch (Dimension Mismatch)
+        Guard-->>Ingestion: Raise EmbeddingDimensionMismatchError
     end
 ```
 

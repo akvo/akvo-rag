@@ -42,10 +42,10 @@ In the legacy architecture, the backend communicated with `vector-kb` over HTTP 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor LangGraph as LangGraph Agent / Tool Node
-    participant Dispatcher as MCPQueueDispatcher
-    participant Redis as Redis 7 Broker
-    participant Worker as vector-kb-mcp Worker
+    actor LangGraph as "LangGraph Agent / Tool Node"
+    participant Dispatcher as "MCPQueueDispatcher"
+    participant Redis as "Redis 7 Broker"
+    participant Worker as "vector-kb-mcp Worker"
     
     LangGraph->>Dispatcher: call_tool("knowledge_bases_mcp", "query_knowledge_base", args)
     

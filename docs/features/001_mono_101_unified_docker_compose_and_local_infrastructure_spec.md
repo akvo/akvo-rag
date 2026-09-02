@@ -75,15 +75,15 @@ graph TD
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Dev as Developer / CI Runner
-    participant Compose as Docker Compose Engine
-    participant PG as postgres:17-alpine
-    participant Redis as redis:7-alpine
-    participant Chroma as chromadb
-    participant MinIO as minio
-    participant Vector as vector-kb-mcp
-    participant Backend as backend (FastAPI)
-    participant Frontend as frontend (Next.js)
+    actor Dev as "Developer / CI Runner"
+    participant Compose as "Docker Compose Engine"
+    participant PG as "postgres:17-alpine"
+    participant Redis as "redis:7-alpine"
+    participant Chroma as "chromadb"
+    participant MinIO as "minio"
+    participant Vector as "vector-kb-mcp"
+    participant Backend as "backend (FastAPI)"
+    participant Frontend as "frontend (Next.js)"
 
     Dev->>Compose: docker compose up -d
     

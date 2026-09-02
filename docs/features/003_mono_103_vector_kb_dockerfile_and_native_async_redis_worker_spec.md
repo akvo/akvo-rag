@@ -41,11 +41,11 @@ In the legacy implementation, the vector knowledge base operated as a FastMCP HT
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Backend as akvo-rag-backend (FastAPI)
-    participant Redis as Redis Queue Broker (:6379)
-    participant Worker as vector-kb-mcp Container (main.py)
-    participant Retriever as ChromaRetriever
-    participant Chroma as ChromaDB Container
+    participant Backend as "akvo-rag-backend (FastAPI)"
+    participant Redis as "Redis Queue Broker (:6379)"
+    participant Worker as "vector-kb-mcp Container (main.py)"
+    participant Retriever as "ChromaRetriever"
+    participant Chroma as "ChromaDB Container"
 
     Note over Backend, Worker: 1. Request Enqueue
     Backend->>Backend: Generate correlation_id = uuid4()
@@ -71,17 +71,17 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    Req[Incoming Request on mcp:vector:requests] --> JSONCheck{Valid JSON?}
-    JSONCheck -- No --> ErrJSON[Reply status: error, message: 'Invalid JSON payload']
-    JSONCheck -- Yes --> ToolCheck{Tool registered in TOOL_HANDLERS?}
-    ToolCheck -- No --> ErrTool[Reply status: error, message: 'Unknown tool: ...']
-    ToolCheck -- Yes --> Exec[Execute Async Handler]
+    Req["Incoming Request on mcp:vector:requests"] --> JSONCheck{"Valid JSON?"}
+    JSONCheck -- "No" --> ErrJSON["Reply status: error, message: 'Invalid JSON payload'"]
+    JSONCheck -- "Yes" --> ToolCheck{"Tool registered in TOOL_HANDLERS?"}
+    ToolCheck -- "No" --> ErrTool["Reply status: error, message: 'Unknown tool: ...'"]
+    ToolCheck -- "Yes" --> Exec["Execute Async Handler"]
     
-    Exec --> Success{Execution Succeeded?}
-    Success -- Yes --> ReplyOK[RPUSH mcp:vector:responses:id with status: 'ok', data: result]
-    Success -- No --> ReplyErr[RPUSH mcp:vector:responses:id with status: 'error', error: str(exc)]
+    Exec --> Success{"Execution Succeeded?"}
+    Success -- "Yes" --> ReplyOK["RPUSH mcp:vector:responses:id with status: 'ok', data: result"]
+    Success -- "No" --> ReplyErr["RPUSH mcp:vector:responses:id with status: 'error', error: str(exc)"]
     
-    ReplyOK --> SetTTL[EXPIRE mcp:vector:responses:id 60s]
+    ReplyOK --> SetTTL["EXPIRE mcp:vector:responses:id 60s"]
     ReplyErr --> SetTTL
 ```
 
