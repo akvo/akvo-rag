@@ -2,7 +2,7 @@
 
 > **Feature ID:** `001_mono_101_unified_docker_compose_and_local_infrastructure_spec`
 > **Task Ref:** `TASK-MONO-101`
-> **Target Branch:** `epic/rag-monorepo-mcp`
+> **Target Branch:** `phase-1/107-rag-improvement-d8-phase-1-environment-orchestration-monorepo-setup-vector-microservice`
 > **Status:** `IMPLEMENTED`
 > **Estimated Effort:** `2.0 hrs (Vibe-Coding) / 1.5 days (Traditional)`
 > **Author:** Antigravity Architect / Senior Platform Engineer
