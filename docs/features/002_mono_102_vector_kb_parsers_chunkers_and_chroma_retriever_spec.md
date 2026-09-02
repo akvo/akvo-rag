@@ -1,6 +1,6 @@
 # Feature Specification: Vector-KB Parsers, Chunkers & Chroma Retriever
 
-> **Feature ID:** `002_vector_kb_parsers_chunkers_and_chroma_retriever_spec`  
+> **Feature ID:** `002_mono_102_vector_kb_parsers_chunkers_and_chroma_retriever_spec`  
 > **Task Ref:** `TASK-MONO-102`  
 > **Target Branch:** `epic/rag-monorepo-mcp`  
 > **Status:** `PROPOSED (Under Review)`  

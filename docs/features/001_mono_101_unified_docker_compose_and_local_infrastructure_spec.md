@@ -1,6 +1,6 @@
 # Feature Specification: Unified Docker Compose & Local Infrastructure
 
-> **Feature ID:** `001_unified_docker_compose_and_local_infrastructure_spec`  
+> **Feature ID:** `001_mono_101_unified_docker_compose_and_local_infrastructure_spec`  
 > **Task Ref:** `TASK-MONO-101`  
 > **Target Branch:** `epic/rag-monorepo-mcp`  
 > **Status:** `PROPOSED (Under Review)`  

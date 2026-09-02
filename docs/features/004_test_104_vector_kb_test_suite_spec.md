@@ -1,6 +1,6 @@
 # Feature Specification: Vector-KB Unit & Integration Test Suite
 
-> **Feature ID:** `004_vector_kb_test_suite_spec`  
+> **Feature ID:** `004_test_104_vector_kb_test_suite_spec`  
 > **Task Ref:** `TASK-TEST-104`  
 > **Target Branch:** `epic/rag-monorepo-mcp`  
 > **Status:** `PROPOSED (Under Review)`  

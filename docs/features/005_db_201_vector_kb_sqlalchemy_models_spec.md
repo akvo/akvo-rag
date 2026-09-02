@@ -1,6 +1,6 @@
 # Feature Specification: Vector-KB SQLAlchemy 2.0 Models
 
-> **Feature ID:** `005_vector_kb_sqlalchemy_models_spec`  
+> **Feature ID:** `005_db_201_vector_kb_sqlalchemy_models_spec`  
 > **Task Ref:** `TASK-DB-201`  
 > **Target Branch:** `epic/rag-monorepo-mcp`  
 > **Status:** `PROPOSED (Under Review)`  

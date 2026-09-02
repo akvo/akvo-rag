@@ -1,6 +1,6 @@
 # Feature Specification: Vector-KB Dockerfile & Native Async Redis Worker
 
-> **Feature ID:** `003_vector_kb_dockerfile_and_native_async_redis_worker_spec`  
+> **Feature ID:** `003_mono_103_vector_kb_dockerfile_and_native_async_redis_worker_spec`  
 > **Task Ref:** `TASK-MONO-103`  
 > **Target Branch:** `epic/rag-monorepo-mcp`  
 > **Status:** `PROPOSED (Under Review)`  
