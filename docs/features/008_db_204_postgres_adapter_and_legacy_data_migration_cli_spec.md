@@ -14,19 +14,19 @@
 ## 1. Overview & 5W1H Requirements Discovery
 
 ### 1.1 Problem Statement
-The legacy `vector-knowledge-base-mcp-server` relied on synchronous MySQL database connections (`pymysql`/`mysqlconnector`) with low concurrency connection pools. In the new Option C architecture, `vector-kb-mcp` requires a high-performance **async PostgreSQL database engine (`asyncpg`)** to support concurrent Redis RPC requests without blocking the event loop.
+The legacy `vector-knowledge-base-mcp-server` was already running on **PostgreSQL 17** (`postgres:17-alpine`), but used synchronous database connections (`psycopg2`) with low-concurrency pools. In the new Option C architecture, `vector-kb-mcp` requires a high-performance **async PostgreSQL database engine (`asyncpg`)** to handle concurrent Redis RPC requests without blocking the event loop.
 
-Furthermore, existing knowledge base deployments contain legacy MySQL records across `knowledge_bases`, `documents`, and `document_chunks`. An automated, idempotent **ETL Data Migration CLI** is required to migrate legacy records into PostgreSQL 17 `vkb_` tables without data loss or ID corruption.
+Furthermore, existing standalone deployments contain existing records across `knowledge_bases`, `documents`, and `document_chunks` (in `kb_mcp` Postgres or legacy databases). An automated, idempotent **ETL Data Migration CLI** is required to migrate records into the unified PostgreSQL 17 `akvo_rag` database under `vkb_` tables without data loss or ID corruption.
 
 ### 1.2 5W1H Discovery Lens
 
 | Dimension | Specification |
 |---|---|
 | **Who** | `vector-kb-mcp` async handlers, ingestion workers, and DevOps migration engineers. |
-| **What** | Implement an async PostgreSQL session engine (`asyncpg`, connection pooling, transaction context managers) and an idempotent CLI tool to extract legacy MySQL data and load it into PostgreSQL 17 `vkb_` tables. |
+| **What** | Implement an async PostgreSQL session engine (`asyncpg`, connection pooling, transaction context managers) and an idempotent CLI tool to extract legacy data (from standalone PostgreSQL or MySQL) and load it into unified PostgreSQL 17 `vkb_` tables. |
 | **Where** | `vector-kb-mcp/db/` (`session.py`, `base.py`), `vector-kb-mcp/cli/` (`migrate_legacy_data.py`, `__init__.py`). |
 | **When** | **Phase 2, Step 4** — concluding Phase 2 database infrastructure before moving to Phase 3 Redis RPC bridge. |
-| **Why** | Guarantees non-blocking async DB operations under high load and provides a deterministic, zero-downtime path to port existing knowledge bases into PostgreSQL 17. |
+| **Why** | Guarantees non-blocking async DB operations under high load and provides a deterministic, zero-downtime path to port existing knowledge bases into unified PostgreSQL 17. |
 | **How** | SQLAlchemy 2.0 `create_async_engine`, `async_sessionmaker`, `asyncpg`, and a multi-threaded batch ETL CLI with `--dry-run` and `--batch-size` flags. |
 
 ---
@@ -37,14 +37,14 @@ Furthermore, existing knowledge base deployments contain legacy MySQL records ac
 
 ```mermaid
 graph TD
-    subgraph LegacySource["Legacy MySQL Source Database"]
+    subgraph LegacySource["Legacy Standalone Database (Postgres 17 or MySQL)"]
         LKB[("knowledge_bases")]
         LDOC[("documents")]
         LCHUNK[("document_chunks")]
     end
 
     subgraph ETLScript["CLI Tool: python -m cli.migrate_legacy_data"]
-        Extractor["1. Extractor<br/>(Batch read via PyMySQL / SQLAlchemy)"]
+        Extractor["1. Extractor<br/>(Batch read via SQLAlchemy)"]
         Transformer["2. Transformer<br/>- Map table names to vkb_*<br/>- Add embedding_dim = 1536<br/>- Convert JSON to JSONB<br/>- Clean Celery artifacts"]
         Loader["3. Loader<br/>(Async batch insert with ON CONFLICT DO NOTHING)"]
     end
@@ -238,15 +238,15 @@ class LegacyDataMigrator:
             return total
 
 def main():
-    parser = argparse.ArgumentParser(description="Migrate legacy MySQL vector KB data to PostgreSQL 17")
-    parser.add_argument("--source-mysql-url", required=True, help="MySQL source connection URL (mysql+pymysql://...)")
+    parser = argparse.ArgumentParser(description="Migrate legacy vector KB data to consolidated PostgreSQL 17")
+    parser.add_argument("--source-url", required=True, help="Source connection URL (postgresql://... or mysql+pymysql://...)")
     parser.add_argument("--target-pg-url", default=settings.DATABASE_URL, help="PostgreSQL target URL (postgresql+asyncpg://...)")
     parser.add_argument("--batch-size", type=int, default=500, help="Batch chunk insert size")
     parser.add_argument("--dry-run", action="store_true", help="Perform extraction without writing to PostgreSQL")
     
     args = parser.parse_args()
     migrator = LegacyDataMigrator(
-        source_url=args.source_mysql_url,
+        source_url=args.source_url,
         target_url=args.target_pg_url,
         batch_size=args.batch_size,
         dry_run=args.dry_run
@@ -263,10 +263,10 @@ if __name__ == "__main__":
 
 ### 4.1 CLI Execution Commands
 
-1. **Dry-Run Validation Test:**
+1. **Dry-Run Validation Test (from standalone PostgreSQL):**
    ```bash
    python -m cli.migrate_legacy_data \
-     --source-mysql-url "mysql+pymysql://user:pass@host:3306/legacy_db" \
+     --source-url "postgresql://akvo:password@localhost:5432/kb_mcp" \
      --dry-run
    # Assert: Connects, counts records across tables, and exits 0 without writing.
    ```
