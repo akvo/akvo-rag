@@ -1,12 +1,12 @@
 # Feature Specification: Vector-KB Unit & Integration Test Suite
 
-> **Feature ID:** `004_test_104_vector_kb_test_suite_spec`  
-> **Task Ref:** `TASK-TEST-104`  
-> **Target Branch:** `epic/rag-monorepo-mcp`  
-> **Status:** `PROPOSED (Under Review)`  
-> **Estimated Effort:** `1.5 hrs (Vibe-Coding) / 1.0 day (Traditional)`  
-> **Author:** Antigravity Architect / Senior QA & Test Architect  
-> **Source Repository:** `vector-knowledge-base-mcp-server` (`/Users/galihpratama/Sites/vector-knowledge-base-mcp-server`)  
+> **Feature ID:** `004_test_104_vector_kb_test_suite_spec`
+> **Task Ref:** `TASK-TEST-104`
+> **Target Branch:** `epic/rag-monorepo-mcp`
+> **Status:** `IMPLEMENTED`
+> **Estimated Effort:** `1.5 hrs (Vibe-Coding) / 1.0 day (Traditional)`
+> **Author:** Antigravity Architect / Senior QA & Test Architect
+> **Source Repository:** `vector-knowledge-base-mcp-server` (`/Users/galihpratama/Sites/vector-knowledge-base-mcp-server`)
 > **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 9, 10)
 
 ---
@@ -37,7 +37,7 @@ The new `vector-kb-mcp` microservice replaces the legacy FastMCP server with cus
 graph TD
     subgraph TestSuite["vector-kb-mcp Test Suite (pytest)"]
         Conftest["conftest.py<br/>(Async Fixtures, Mock OpenAI, Mock Redis)"]
-        
+
         subgraph UnitTests["1. Unit Tests (Isolated Logic)"]
             TParser["test_parser.py<br/>(PDF, DOCX, TXT Extractors)"]
             TChunker["test_chunker.py<br/>(Token Slicing & Hash Determinism)"]
@@ -213,7 +213,7 @@ docker exec -it akvo-rag-vector-kb-mcp-1 python -m pytest tests/ -v
 
 ## 6. Definition of Done (DoD)
 
-- [ ] All unit and integration tests in `vector-kb-mcp/tests/` pass with zero failures: `pytest -v`.
-- [ ] Test suite achieves $\ge 85\%$ overall line coverage across `parser/`, `chunker/`, `retriever/`, and `main.py`.
-- [ ] Test suite executes deterministically in $< 10\text{s}$ offline using mock fixtures.
-- [ ] Executing `docker exec akvo-rag-vector-kb-mcp-1 python -m pytest tests/ -v` passes cleanly inside the live container.
+- [x] All unit and integration tests in `vector-kb-mcp/tests/` pass with zero failures: `pytest -v`.
+- [x] Test suite achieves $\ge 85\%$ overall line coverage across `parser/`, `chunker/`, `retriever/`, and `main.py`.
+- [x] Test suite executes deterministically in $< 10\text{s}$ offline using mock fixtures.
+- [x] Executing `docker exec akvo-rag-vector-kb-mcp-1 python -m pytest tests/ -v` passes cleanly inside the live container.
