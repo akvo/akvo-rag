@@ -2,8 +2,8 @@
 
 > **Feature ID:** `006_db_202_metadata_enrichment_and_embedding_guard_spec`  
 > **Task Ref:** `TASK-DB-202`  
-> **Target Branch:** `epic/rag-monorepo-mcp`  
-> **Status:** `PROPOSED (Under Review)`  
+> **Target Branch:** `feature/118-d9-db-201-port-vector-kb-sqlalchemy-models-into-vector-kb-mcpmodels`  
+> **Status:** `IMPLEMENTED (PR #121)`  
 > **Estimated Effort:** `1.5 hrs (Vibe-Coding) / 1.0 day (Traditional)`  
 > **Author:** Antigravity Architect / Data Architect  
 > **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 6, 8, 9)
@@ -299,7 +299,7 @@ This enables the LLM synthesis node in `akvo-rag-backend` to format authoritativ
 
 ## 6. Definition of Done (DoD)
 
-- [ ] `KnowledgeBase` model includes `embedding_model` (default: `text-embedding-3-small`) and `embedding_dim` (default: 1536).
-- [ ] `Document` model includes governance columns (`doc_version`, `issuing_authority`, `effective_date`, `doc_type`, `jurisdiction`) and JSONB GIN index.
-- [ ] Runtime dimension guard prevents indexing or querying vectors with lengths $\neq 1536$.
-- [ ] `test_metadata_guard.py` executes and passes with 100% test coverage.
+- [x] `KnowledgeBase` model includes `embedding_model` (default: `text-embedding-3-small`) and `embedding_dim` (default: 1536).
+- [x] `Document` model includes governance columns (`doc_version`, `issuing_authority`, `effective_date`, `doc_type`, `jurisdiction`) and JSONB GIN index.
+- [x] Runtime dimension guard prevents indexing or querying vectors with lengths $\neq 1536$.
+- [x] `test_metadata_guard.py` executes and passes with 100% test coverage.
