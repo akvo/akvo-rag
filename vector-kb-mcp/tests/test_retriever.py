@@ -137,4 +137,3 @@ async def test_chroma_retriever_empty_input(
     assert await retriever.search(query="", kb_ids=[1, 2]) == []
     assert await retriever.search(query="   ", kb_ids=[1, 2]) == []
     assert await retriever.search(query="valid query", kb_ids=[]) == []
-
