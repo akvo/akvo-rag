@@ -105,10 +105,6 @@ async def stream_mcp_response(
             "qa_prompt_str": qa_prompt,
             "knowledge_base_ids": knowledge_base_ids,
             "top_k": top_k,
-            "scope": {
-                "knowledge_base_ids": knowledge_base_ids,
-                "top_k": top_k,
-            },
         }
 
         # 4) Classify intent

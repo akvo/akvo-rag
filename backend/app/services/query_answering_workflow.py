@@ -15,7 +15,6 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 
 from app.services.llm.llm_factory import LLMFactory
 from mcp_clients.queue_dispatcher import MCPQueueDispatcher
-from app.services.scoping_agent import ScopingAgent
 
 # ---------------------------------------------------------------------
 # Logging setup & Global Dispatcher
@@ -40,7 +39,7 @@ class GraphState(TypedDict, total=False):
     top_k: int
     scope: Dict[str, Any]
     mcp_result: Any
-    context: list
+    context: List[Document]
     answer: str
     error: Optional[str]
 
@@ -278,30 +277,6 @@ async def contextualize_node(state: GraphState) -> GraphState:
 
     except Exception as e:
         logger.exception(f"contextualize_node failed: {e}")
-        return {**state, "error": str(e)}
-
-
-async def scoping_node(state: GraphState) -> GraphState:
-    """
-    Determine MCP tool scope using ScopingAgent (Legacy compatibility).
-    """
-    if state.get("error"):
-        return state
-
-    try:
-        query = state.get("contextual_query")
-        if not query:
-            raise KeyError("contextual_query missing in state")
-
-        agent = ScopingAgent()
-        scope = await agent.scope_query(
-            query=query, scope=state.get("scope", {})
-        )
-        logger.info(f"Scope determined: {scope}")
-        return {**state, "scope": scope}
-
-    except Exception as e:
-        logger.exception(f"scoping_node failed: {e}")
         return {**state, "error": str(e)}
 
 
@@ -605,38 +580,13 @@ async def response_generation_node(state: GraphState):
 
 
 # ---------------------------------------------------------------------
-# Conditional routing function
+# Conditional routing functions
 # ---------------------------------------------------------------------
 def check_mcp_success(state: GraphState) -> str:
     """Route to error handler if there's an error, otherwise continue."""
     if state.get("error"):
         return "error"
     return "success"
-
-
-# ---------------------------------------------------------------------
-# Build Workflow Graph (Clean RAG Pipeline without Scoping bottleneck)
-# ---------------------------------------------------------------------
-workflow = StateGraph(GraphState)
-workflow.add_node("classify_intent", classify_intent_node)
-workflow.add_node("small_talk", small_talk_node)
-workflow.add_node("contextualize", contextualize_node)
-workflow.add_node("run_mcp", run_mcp_tool_node)
-workflow.add_node("error_handler", error_handler_node)
-workflow.add_node("generate", response_generation_node)
-
-workflow.set_entry_point("classify_intent")
-
-workflow.add_conditional_edges(
-    "classify_intent",
-    lambda s: s.get("intent", "knowledge_query"),
-    {
-        "small_talk": "small_talk",
-        "weather_query": "contextualize",
-        "memory_query": "contextualize",
-        "knowledge_query": "contextualize",
-    },
-)
 
 
 def route_after_contextualize(state: GraphState) -> str:
@@ -646,21 +596,55 @@ def route_after_contextualize(state: GraphState) -> str:
     return "retrieval"
 
 
-workflow.add_conditional_edges(
-    "contextualize",
-    route_after_contextualize,
-    {"memory": "generate", "retrieval": "run_mcp"},
-)
+# ---------------------------------------------------------------------
+# Build Workflow Graph (Clean RAG Pipeline without Scoping bottleneck)
+# ---------------------------------------------------------------------
+def create_rag_graph():
+    """
+    Constructs the streamlined LangGraph for RAG QA:
+    1. classify_intent -> small_talk | contextualize
+    2. contextualize   -> generate (memory_query) | run_mcp (direct Redis RPC)
+    3. run_mcp         -> generate (success) | error_handler (error)
+    """
+    wf = StateGraph(GraphState)
+    wf.add_node("classify_intent", classify_intent_node)
+    wf.add_node("small_talk", small_talk_node)
+    wf.add_node("contextualize", contextualize_node)
+    wf.add_node("run_mcp", run_mcp_tool_node)
+    wf.add_node("error_handler", error_handler_node)
+    wf.add_node("generate", response_generation_node)
 
-# Add conditional routing after run_mcp to handle errors
-workflow.add_conditional_edges(
-    "run_mcp",
-    check_mcp_success,
-    {"success": "generate", "error": "error_handler"},
-)
+    wf.set_entry_point("classify_intent")
 
-workflow.add_edge("small_talk", "__end__")
-workflow.add_edge("error_handler", "__end__")
-workflow.add_edge("generate", "__end__")
+    wf.add_conditional_edges(
+        "classify_intent",
+        lambda s: s.get("intent", "knowledge_query"),
+        {
+            "small_talk": "small_talk",
+            "weather_query": "contextualize",
+            "memory_query": "contextualize",
+            "knowledge_query": "contextualize",
+        },
+    )
 
+    wf.add_conditional_edges(
+        "contextualize",
+        route_after_contextualize,
+        {"memory": "generate", "retrieval": "run_mcp"},
+    )
+
+    wf.add_conditional_edges(
+        "run_mcp",
+        check_mcp_success,
+        {"success": "generate", "error": "error_handler"},
+    )
+
+    wf.add_edge("small_talk", "__end__")
+    wf.add_edge("error_handler", "__end__")
+    wf.add_edge("generate", "__end__")
+
+    return wf
+
+
+workflow = create_rag_graph()
 query_answering_workflow = workflow.compile()
