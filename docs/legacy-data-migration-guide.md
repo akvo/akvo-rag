@@ -115,60 +115,39 @@ If you do not need historical chat logs from MySQL and only require standard adm
 
 ### Scenario 2: Migrating Historical Users & Chats from Legacy MySQL
 
-If you have existing historical users, registered apps, and chat histories in a legacy MySQL database, use the following procedure:
+If you have existing historical users, registered apps, and chat histories in a legacy MySQL database, use the dedicated backend migration CLI tool:
 
-#### Step 4.2.1: Test MySQL Connectivity from Backend
-Verify connection to your MySQL instance:
+#### Step 4.2.1: Dry-Run Backend MySQL Migration
 
-```bash
-docker exec -it akvo-rag-backend-1 python -c "
-import pymysql
-conn = pymysql.connect(
-    host='<MYSQL_HOST>', # Use 'host.docker.internal' for host machine
-    user='<MYSQL_USER>',
-    password='<MYSQL_PASSWORD>',
-    database='<MYSQL_DATABASE>',
-    port=<MYSQL_PORT> # e.g. 3306
-)
-print('MySQL Connection Successful!')
-conn.close()
-"
-```
-
-#### Step 4.2.2: Run Backend Table ETL Script
-You can pipe data directly from MySQL into PostgreSQL using Python:
+Run a dry run to verify connectivity and preview rows:
 
 ```bash
-docker exec -it akvo-rag-backend-1 python -c "
-import os
-import pandas as pd
-from sqlalchemy import create_engine
-
-mysql_url = 'mysql+pymysql://<USER>:<PASS>@<HOST>:<PORT>/<MYSQL_DB>'
-pg_url = 'postgresql+psycopg2://postgres:postgres@postgres:5432/akvo_rag'
-
-mysql_engine = create_engine(mysql_url)
-pg_engine = create_engine(pg_url)
-
-tables = ['users', 'apps', 'app_knowledge_bases', 'chats', 'messages']
-
-for tbl in tables:
-    print(f'Migrating table: {tbl}...')
-    try:
-        df = pd.read_sql_table(tbl, mysql_engine)
-        if not df.empty:
-            df.to_sql(tbl, pg_engine, if_exists='append', index=False)
-            print(f' -> Successfully migrated {len(df)} rows to {tbl}')
-        else:
-            print(f' -> Table {tbl} is empty, skipping.')
-    except Exception as e:
-        print(f' -> Notice for {tbl}: {e}')
-
-print('Backend MySQL migration completed!')
-"
+docker exec -it akvo-rag-backend-1 python cli/migrate_legacy_backend.py \
+  --source-url "mysql+mysqlconnector://<MYSQL_USER>:<MYSQL_PASSWORD>@<MYSQL_HOST>:3306/<MYSQL_DATABASE>" \
+  --dry-run
 ```
+
+*(Note: If legacy MySQL is running on your host machine, use `host.docker.internal` as `<MYSQL_HOST>`)*.
+
+#### Step 4.2.2: Execute Live Backend Migration
+
+```bash
+docker exec -it akvo-rag-backend-1 python cli/migrate_legacy_backend.py \
+  --source-url "mysql+mysqlconnector://<MYSQL_USER>:<MYSQL_PASSWORD>@<MYSQL_HOST>:3306/<MYSQL_DATABASE>"
+```
+
+The script automatically migrates and sanitizes:
+
+- **`users`** (with password hashes & superuser flags)
+- **`apps`** (with access tokens & appstatus enums)
+- **`app_knowledge_bases`**
+- **`chats`** & **`messages`**
+- **`chat_knowledge_bases`**
+- **`system_settings`**
+- Resets all primary key PostgreSQL sequences (`users_id_seq`, `apps_id_seq`, `chats_id_seq`, `messages_id_seq`, etc.) to ensure seamless auto-incrementing.
 
 ---
+
 
 ## 5. Part C: Storage Verification (ChromaDB & MinIO)
 
