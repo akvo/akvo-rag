@@ -1,12 +1,12 @@
 # Feature Specification: PostgreSQL Async Adapter & Legacy Data Migration CLI
 
-> **Feature ID:** `008_db_204_postgres_adapter_and_legacy_data_migration_cli_spec`  
-> **Task Ref:** `TASK-DB-204`  
-> **Target Branch:** `epic/rag-monorepo-mcp`  
-> **Status:** `PROPOSED (Under Review)`  
-> **Estimated Effort:** `2.0 hrs (Vibe-Coding) / 1.5 days (Traditional)`  
-> **Author:** Antigravity Architect / Database & Backend Specialist  
-> **Source Repository:** `vector-knowledge-base-mcp-server` (`/Users/galihpratama/Sites/vector-knowledge-base-mcp-server`)  
+> **Feature ID:** `008_db_204_postgres_adapter_and_legacy_data_migration_cli_spec`
+> **Task Ref:** `TASK-DB-204`
+> **Target Branch:** `epic/rag-monorepo-mcp`
+> **Status:** `IMPLEMENTED`
+> **Estimated Effort:** `2.0 hrs (Vibe-Coding) / 1.5 days (Traditional)`
+> **Author:** Antigravity Architect / Database & Backend Specialist
+> **Source Repository:** `vector-knowledge-base-mcp-server`
 > **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 6, 8, 9)
 
 ---
@@ -140,11 +140,11 @@ class LegacyDataMigrator:
 
     async def migrate_all(self):
         logger.info(f"Starting legacy migration (dry_run={self.dry_run}, batch_size={self.batch_size})")
-        
+
         kb_count = await self.migrate_knowledge_bases()
         doc_count = await self.migrate_documents()
         chunk_count = await self.migrate_chunks()
-        
+
         logger.info("=" * 50)
         logger.info("MIGRATION SUMMARY:")
         logger.info(f"  • Knowledge Bases Migrated: {kb_count}")
@@ -216,7 +216,7 @@ class LegacyDataMigrator:
                 rows = result.fetchmany(self.batch_size)
                 if not rows:
                     break
-                
+
                 if not self.dry_run:
                     async with AsyncSession(self.target_engine) as session:
                         for row in rows:
@@ -243,7 +243,7 @@ def main():
     parser.add_argument("--target-pg-url", default=settings.DATABASE_URL, help="PostgreSQL target URL (postgresql+asyncpg://...)")
     parser.add_argument("--batch-size", type=int, default=500, help="Batch chunk insert size")
     parser.add_argument("--dry-run", action="store_true", help="Perform extraction without writing to PostgreSQL")
-    
+
     args = parser.parse_args()
     migrator = LegacyDataMigrator(
         source_url=args.source_url,
