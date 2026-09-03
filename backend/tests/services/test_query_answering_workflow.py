@@ -202,8 +202,12 @@ class TestQueryAnsweringWorkflow:
         fake_chain = MagicMock()
         fake_chain.ainvoke = fake_ainvoke
 
+        cpt_patch = (
+            "app.services.query_answering_workflow."
+            "ChatPromptTemplate.from_messages"
+        )
         monkeypatch.setattr(
-            "app.services.query_answering_workflow.ChatPromptTemplate.from_messages",
+            cpt_patch,
             lambda msgs: MagicMock(__or__=lambda self, other: fake_chain),
         )
         monkeypatch.setattr(
@@ -233,8 +237,12 @@ class TestQueryAnsweringWorkflow:
         fake_chain = MagicMock()
         fake_chain.ainvoke = AsyncMock(side_effect=Exception("Chain failed"))
 
+        cpt_patch = (
+            "app.services.query_answering_workflow."
+            "ChatPromptTemplate.from_messages"
+        )
         monkeypatch.setattr(
-            "app.services.query_answering_workflow.ChatPromptTemplate.from_messages",
+            cpt_patch,
             lambda msgs: MagicMock(__or__=lambda self, other: fake_chain),
         )
         monkeypatch.setattr(
@@ -294,46 +302,60 @@ class TestQueryAnsweringWorkflow:
     @pytest.mark.asyncio
     async def test_run_mcp_tool_node_success(self, monkeypatch):
         """
-        run_mcp_tool_node() calls MCPClientManager.run_tool and stores result.
+        run_mcp_tool_node() calls MCPQueueDispatcher.call_tool and
+        stores result.
         """
-        fake_manager = MagicMock()
-        fake_manager.run_tool = AsyncMock(return_value={"res": 123})
+        fake_dispatcher = MagicMock()
+        fake_dispatcher.call_tool = AsyncMock(
+            return_value={
+                "chunks": [
+                    {
+                        "chunk_id": "c1",
+                        "content": "Avocado harvesting guide",
+                        "score": 0.95,
+                        "metadata": {"source": "manual.pdf"},
+                    }
+                ]
+            }
+        )
         monkeypatch.setattr(
-            "app.services.query_answering_workflow.MCPClientManager",
-            lambda: fake_manager,
+            "app.services.query_answering_workflow._mcp_dispatcher",
+            fake_dispatcher,
         )
 
         state: GraphState = {
-            "scope": {"server_name": "s1", "tool_name": "t1", "input": {}},
+            "query": "harvest avocado",
+            "knowledge_base_ids": [1],
         }
 
         new_state = await run_mcp_tool_node(state)
-        assert new_state["mcp_result"] == {"res": 123}
-        assert "error" not in new_state
+        assert len(new_state["context"]) == 1
+        assert (
+            new_state["context"][0].page_content == "Avocado harvesting guide"
+        )
+        assert new_state["context"][0].metadata["source"] == "manual.pdf"
+        assert new_state["error"] is None
 
     @pytest.mark.asyncio
     async def test_run_mcp_tool_node_failure(self, monkeypatch):
         """run_mcp_tool_node() should set error when MCP tool fails."""
-        fake_manager = MagicMock()
-        fake_manager.run_tool = AsyncMock(
-            side_effect=Exception("MCP tool failed")
+        fake_dispatcher = MagicMock()
+        fake_dispatcher.call_tool = AsyncMock(
+            side_effect=Exception("Redis queue timeout")
         )
         monkeypatch.setattr(
-            "app.services.query_answering_workflow.MCPClientManager",
-            lambda: fake_manager,
+            "app.services.query_answering_workflow._mcp_dispatcher",
+            fake_dispatcher,
         )
 
         state: GraphState = {
-            "scope": {
-                "server_name": "weather",
-                "tool_name": "get_weather",
-                "input": {},
-            },
+            "query": "harvest avocado",
+            "knowledge_base_ids": [1],
         }
 
         new_state = await run_mcp_tool_node(state)
         assert "error" in new_state
-        assert "MCP tool failed" in new_state["error"]
+        assert "Redis queue timeout" in new_state["error"]
 
     # ---------------- check_mcp_success ----------------
 
@@ -363,7 +385,11 @@ class TestQueryAnsweringWorkflow:
 
         async def fake_ainvoke(msgs):
             return SimpleNamespace(
-                content="I don't have access to real-time weather data right now, but typically this time of year sees mild temperatures. Please check weather.com for current conditions."
+                content=(
+                    "I don't have access to real-time weather data right now, "
+                    "but typically this time of year sees mild temperatures. "
+                    "Please check weather.com for current conditions."
+                )
             )
 
         fake_llm = MagicMock()
@@ -388,7 +414,10 @@ class TestQueryAnsweringWorkflow:
 
     @pytest.mark.asyncio
     async def test_error_handler_weather_fallback(self, monkeypatch):
-        """error_handler_node should provide ultimate fallback for weather on LLM failure."""
+        """
+        error_handler_node should provide ultimate fallback for weather
+        on LLM failure.
+        """
 
         fake_llm = MagicMock()
         fake_llm.ainvoke = AsyncMock(side_effect=Exception("LLM down"))
@@ -411,11 +440,17 @@ class TestQueryAnsweringWorkflow:
 
     @pytest.mark.asyncio
     async def test_error_handler_knowledge_query(self, monkeypatch):
-        """error_handler_node should provide friendly 'try again' message for knowledge queries."""
+        """
+        error_handler_node should provide friendly 'try again' message
+        for knowledge queries.
+        """
 
         async def fake_ainvoke(msgs):
             return SimpleNamespace(
-                content="I'm having trouble finding that information right now. Could you please try again in a moment?"
+                content=(
+                    "I'm having trouble finding that information right now. "
+                    "Could you please try again in a moment?"
+                )
             )
 
         fake_llm = MagicMock()
@@ -444,7 +479,10 @@ class TestQueryAnsweringWorkflow:
 
     @pytest.mark.asyncio
     async def test_error_handler_knowledge_query_fallback(self, monkeypatch):
-        """error_handler_node should provide friendly ultimate fallback for non-weather queries on LLM failure."""
+        """
+        error_handler_node should provide friendly ultimate fallback
+        for non-weather queries on LLM failure.
+        """
 
         fake_llm = MagicMock()
         fake_llm.ainvoke = AsyncMock(side_effect=Exception("LLM down"))
@@ -467,7 +505,7 @@ class TestQueryAnsweringWorkflow:
         assert "try again" in answer_lower or "moment" in answer_lower
 
     @pytest.mark.asyncio
-    async def test_error_handler_knowledge_query(self, monkeypatch):
+    async def test_error_handler_general_query_error(self, monkeypatch):
         """
         error_handler_node should handle general query errors
         with friendly message.
@@ -475,7 +513,10 @@ class TestQueryAnsweringWorkflow:
 
         async def fake_ainvoke(msgs):
             return SimpleNamespace(
-                content="I'm having a bit of trouble with that. Please try again in just a moment!"
+                content=(
+                    "I'm having a bit of trouble with that. "
+                    "Please try again in just a moment!"
+                )
             )
 
         fake_llm = MagicMock()
@@ -499,7 +540,10 @@ class TestQueryAnsweringWorkflow:
 
     @pytest.mark.asyncio
     async def test_error_handler_missing_contextual_query(self, monkeypatch):
-        """error_handler_node should handle missing contextual_query by using query."""
+        """
+        error_handler_node should handle missing contextual_query
+        by using query.
+        """
 
         async def fake_ainvoke(msgs):
             return SimpleNamespace(content="Helpful response")
@@ -582,15 +626,23 @@ class TestQueryAnsweringWorkflow:
 
         # Mock ChatPromptTemplate
         fake_qa_prompt = MagicMock()
+        cpt_patch = (
+            "app.services.query_answering_workflow."
+            "ChatPromptTemplate.from_messages"
+        )
         monkeypatch.setattr(
-            "app.services.query_answering_workflow.ChatPromptTemplate.from_messages",
+            cpt_patch,
             lambda msgs: fake_qa_prompt,
         )
 
         # Mock PromptTemplate
         fake_doc_prompt = MagicMock()
+        pt_patch = (
+            "app.services.query_answering_workflow."
+            "PromptTemplate.from_template"
+        )
         monkeypatch.setattr(
-            "app.services.query_answering_workflow.PromptTemplate.from_template",
+            pt_patch,
             lambda template: fake_doc_prompt,
         )
 
@@ -602,8 +654,12 @@ class TestQueryAnsweringWorkflow:
         fake_chain = MagicMock()
         fake_chain.astream = fake_astream
 
+        csdc_patch = (
+            "app.services.query_answering_workflow."
+            "create_stuff_documents_chain"
+        )
         monkeypatch.setattr(
-            "app.services.query_answering_workflow.create_stuff_documents_chain",
+            csdc_patch,
             lambda **_: fake_chain,
         )
 
@@ -635,14 +691,22 @@ class TestQueryAnsweringWorkflow:
         )
 
         fake_qa_prompt = MagicMock()
+        cpt_patch = (
+            "app.services.query_answering_workflow."
+            "ChatPromptTemplate.from_messages"
+        )
         monkeypatch.setattr(
-            "app.services.query_answering_workflow.ChatPromptTemplate.from_messages",
+            cpt_patch,
             lambda msgs: fake_qa_prompt,
         )
 
         fake_doc_prompt = MagicMock()
+        pt_patch = (
+            "app.services.query_answering_workflow."
+            "PromptTemplate.from_template"
+        )
         monkeypatch.setattr(
-            "app.services.query_answering_workflow.PromptTemplate.from_template",
+            pt_patch,
             lambda template: fake_doc_prompt,
         )
 
@@ -654,8 +718,12 @@ class TestQueryAnsweringWorkflow:
         fake_chain = MagicMock()
         fake_chain.astream = fake_astream
 
+        csdc_patch = (
+            "app.services.query_answering_workflow."
+            "create_stuff_documents_chain"
+        )
         monkeypatch.setattr(
-            "app.services.query_answering_workflow.create_stuff_documents_chain",
+            csdc_patch,
             lambda **_: fake_chain,
         )
 

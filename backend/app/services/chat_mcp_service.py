@@ -12,9 +12,7 @@ from app.services.query_answering_workflow import (
     classify_intent_node,
     small_talk_node,
     contextualize_node,
-    scoping_node,
     run_mcp_tool_node,
-    post_processing_node,
     error_handler_node,
 )
 
@@ -105,6 +103,8 @@ async def stream_mcp_response(
             "chat_history": chat_history,
             "contextualize_prompt_str": contextualize_prompt,
             "qa_prompt_str": qa_prompt,
+            "knowledge_base_ids": knowledge_base_ids,
+            "top_k": top_k,
             "scope": {
                 "knowledge_base_ids": knowledge_base_ids,
                 "top_k": top_k,
@@ -142,8 +142,8 @@ async def stream_mcp_response(
 
         # 7) Route based on intent
         if intent != "memory_query":
-            # Knowledge queries need scoping and retrieval
-            state = await scoping_node(state)
+            # Direct vector retrieval via
+            # MCPQueueDispatcher without ScopingAgent
             state = await run_mcp_tool_node(state)
 
             # Check if MCP tool failed - use error handler
@@ -167,9 +167,6 @@ async def stream_mcp_response(
                 yield f'0:"{escaped}"\n'
                 yield 'd:{"finishReason":"stop"}\n'
                 return
-
-            # Continue with normal flow if no error
-            state = await post_processing_node(state)
         else:
             # Memory queries skip retrieval and go straight to generation
             logger.info(
