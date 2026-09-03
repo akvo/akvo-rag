@@ -50,10 +50,21 @@ async def get_knowledge_bases(
     """
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     result = await kb_mcp_endpoint_service.list_kbs()
+    items = (
+        result
+        if isinstance(result, list)
+        else (
+            result.get("knowledge_bases", result.get("data", []))
+            if isinstance(result, dict)
+            else []
+        )
+    )
     formatted = []
-    for res in result:
-        res["is_superuser"] = True
-        formatted.append(res)
+    for item in items:
+        if isinstance(item, dict):
+            item_copy = dict(item)
+            item_copy["is_superuser"] = current_user.is_superuser
+            formatted.append(item_copy)
     return formatted
 
 

@@ -74,9 +74,13 @@ class KnowledgeBaseMCPEndpointService:
         )
 
         if isinstance(result, dict):
-            kbs = result.get("knowledge_bases") or result.get("data")
+            kbs = result.get("knowledge_bases")
+            if kbs is None:
+                kbs = result.get("data")
             if kbs is not None and not include_total:
-                return kbs
+                return kbs if isinstance(kbs, list) else [kbs]
+        elif isinstance(result, list):
+            return result
         return result
 
     async def get_kb(
