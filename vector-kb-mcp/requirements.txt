@@ -6,6 +6,7 @@ pydantic-settings>=2.0.0
 # Database & ORM
 SQLAlchemy>=2.0.23
 asyncpg>=0.29.0
+alembic>=1.13.0
 
 # Document Extraction
 pypdf>=4.2.0
