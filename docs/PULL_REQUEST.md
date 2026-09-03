@@ -9,14 +9,14 @@ Phase 2 consolidates the `vector-kb-mcp` persistence layer into the unified Post
 - **Milestone / Issue Link:** [#117](https://github.com/akvo/akvo-rag/issues/117)
 - **Base Branch:** `phase-1/107-rag-improvement-d8-phase-1-environment-orchestration-monorepo-setup-vector-microservice`
 - **Head Branch:** `phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening`
-- **LLD Reference:** [`docs/lld/container_based_rag_platform_lld.md`](docs/lld/container_based_rag_platform_lld.md) (Sections 6, 8, 9)
+- **LLD Reference:** [`docs/lld/container_based_rag_platform_lld.md`](https://github.com/akvo/akvo-rag/blob/phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening/docs/lld/container_based_rag_platform_lld.md) (Sections 6, 8, 9)
 
 ---
 
 ## What Changes Were Made? (Sub-Feature Breakdown)
 
 ### 1. DB-201: Modernized SQLAlchemy 2.0 Models (`vector-kb-mcp/models/`)
-* **Issue Link:** [#118](https://github.com/akvo/akvo-rag/issues/118) | **Spec:** [`docs/features/005_db_201_vector_kb_sqlalchemy_models_spec.md`](docs/features/005_db_201_vector_kb_sqlalchemy_models_spec.md)
+* **Issue Link:** [#118](https://github.com/akvo/akvo-rag/issues/118) | **Spec:** [`docs/features/005_db_201_vector_kb_sqlalchemy_models_spec.md`](https://github.com/akvo/akvo-rag/blob/phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening/docs/features/005_db_201_vector_kb_sqlalchemy_models_spec.md)
 * Ported declarative SQLAlchemy 2.0 mapped models from the legacy standalone repository:
   * `KnowledgeBase` (`vkb_knowledge_bases`): Tenant/user isolation, chunk size/overlap configuration.
   * `Document` (`vkb_documents`): File tracking, hash validation, composite unique constraints (`knowledge_base_id`, `file_hash`).
@@ -25,7 +25,7 @@ Phase 2 consolidates the `vector-kb-mcp` persistence layer into the unified Post
 * Enforced `vkb_` table isolation prefixes across all tables, primary keys, and foreign keys.
 
 ### 2. DB-202: Governance Metadata & 1536-Dim Embedding Guard (`vector-kb-mcp/core/`, `models/`)
-* **Issue Link:** [#120](https://github.com/akvo/akvo-rag/issues/120) | **Spec:** [`docs/features/006_db_202_metadata_enrichment_and_embedding_guard_spec.md`](docs/features/006_db_202_metadata_enrichment_and_embedding_guard_spec.md)
+* **Issue Link:** [#120](https://github.com/akvo/akvo-rag/issues/120) | **Spec:** [`docs/features/006_db_202_metadata_enrichment_and_embedding_guard_spec.md`](https://github.com/akvo/akvo-rag/blob/phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening/docs/features/006_db_202_metadata_enrichment_and_embedding_guard_spec.md)
 * **Metadata Enrichment**:
   * Enriched `KnowledgeBase` with `embedding_model` and `embedding_dim` (defaulting to `text-embedding-3-small` and `1536`).
   * Enriched `Document` with governance metadata (`doc_version`, `issuing_authority`, `effective_date`, `doc_type`, `jurisdiction`) and PostgreSQL `JSONB` extensible metadata with GIN indexing (`idx_vkb_doc_metadata_gin`).
@@ -35,15 +35,17 @@ Phase 2 consolidates the `vector-kb-mcp` persistence layer into the unified Post
   * Hardened `ChromaRetriever` to validate embedding query dimensions prior to dispatching vector similarity searches.
 
 ### 3. DB-203: Service-Owned Alembic Migrations (`vector-kb-mcp/alembic/`)
-* **Issue Link:** [#122](https://github.com/akvo/akvo-rag/issues/122) | **Spec:** [`docs/features/007_db_203_service_owned_alembic_migrations_spec.md`](docs/features/007_db_203_service_owned_alembic_migrations_spec.md)
+* **Issue Link:** [#122](https://github.com/akvo/akvo-rag/issues/122) | **Spec:** [`docs/features/007_db_203_service_owned_alembic_migrations_spec.md`](https://github.com/akvo/akvo-rag/blob/phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening/docs/features/007_db_203_service_owned_alembic_migrations_spec.md)
 * Configured isolated Alembic migration environment inside `vector-kb-mcp/alembic.ini` and `env.py`.
 * Isolated version tracking to dedicated table:
-  $$\text{version\_table} = \mathbf{"alembic\_version\_vkb"}$$
+  ```python
+  version_table = "alembic_version_vkb"
+  ```
 * Implemented `include_object` filter in `env.py` preventing Alembic from scanning or dropping non-`vkb_` tables (such as `backend/` application tables).
 * Authored initial baseline migration `001_initial_vkb_schema.py` covering all 4 tables, foreign keys, indexes, and GIN JSONB indexes.
 
 ### 4. DB-204: Asyncpg Session Manager & Legacy Migration CLI (`vector-kb-mcp/db/`, `cli/`)
-* **Issue Link:** [#124](https://github.com/akvo/akvo-rag/issues/124) | **Spec:** [`docs/features/008_db_204_postgres_adapter_and_legacy_data_migration_cli_spec.md`](docs/features/008_db_204_postgres_adapter_and_legacy_data_migration_cli_spec.md)
+* **Issue Link:** [#124](https://github.com/akvo/akvo-rag/issues/124) | **Spec:** [`docs/features/008_db_204_postgres_adapter_and_legacy_data_migration_cli_spec.md`](https://github.com/akvo/akvo-rag/blob/phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening/docs/features/008_db_204_postgres_adapter_and_legacy_data_migration_cli_spec.md)
 * **Async PostgreSQL Session Manager (`vector-kb-mcp/db/session.py`)**:
   * SQLAlchemy 2.0 `create_async_engine` with `asyncpg` driver and connection pooling (`pool_size=10`, `max_overflow=20`, `pool_pre_ping=True`).
   * `get_async_session()` context manager with automatic rollback and lifecycle management.
@@ -74,7 +76,7 @@ All unit, integration, and live container tests pass with zero failures:
 |---|:---:|:---:|---|
 | **Flake8 Linting** | 0 warnings/errors | **PASS** (0 errors) | `docker exec akvo-rag-vector-kb-mcp-1 python -m flake8 .` |
 | **Total Test Suite** | 100% pass | **PASS** (69 passed in 5.52s) | `docker exec akvo-rag-vector-kb-mcp-1 pytest tests/` |
-| **Total Code Coverage** | $\ge 80\%$ (Akvo mandate) | **97% Overall Coverage** | `docker exec akvo-rag-vector-kb-mcp-1 pytest tests/ --cov=.` |
+| **Total Code Coverage** | >= 80% (Akvo mandate) | **97% Overall Coverage** | `docker exec akvo-rag-vector-kb-mcp-1 pytest tests/ --cov=.` |
 | **Models & DB Coverage** | 100% | **100%** | `tests/test_models.py`, `tests/test_db_and_migrator.py` |
 | **Live Postgres 17 Test** | Schema & Cascade pass | **PASS** | `tests/test_integration_models.py` |
 | **Alembic Migration Test** | Upgrade/Downgrade pass | **PASS** | `tests/test_migrations.py` |
