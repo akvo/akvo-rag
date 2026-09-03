@@ -6,9 +6,9 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     Enum as SQLEnum,
+    JSON,
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.mysql import JSON
 import enum
 
 from app.models.base import Base, TimestampMixin

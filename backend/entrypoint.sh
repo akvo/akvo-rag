@@ -16,6 +16,7 @@ if [ "$ENVIRONMENT" = "development" ]; then
     echo "Installing system dependencies..."
     apt-get update -qq && apt-get install -y -qq \
     build-essential \
+    libpq-dev \
     default-libmysqlclient-dev \
     pkg-config \
     netcat-traditional
@@ -31,16 +32,16 @@ if [ "$ENVIRONMENT" = "development" ]; then
 fi
 
 # ===========================================
-# Wait for MySQL
+# Wait for PostgreSQL
 # ===========================================
-echo "Waiting for MySQL..."
-DB_HOST=${MYSQL_SERVER:-db}
-DB_PORT=${MYSQL_PORT:-3306}
+echo "Waiting for PostgreSQL..."
+DB_HOST=${POSTGRES_SERVER:-postgres}
+DB_PORT=${POSTGRES_PORT:-5432}
 
 while ! nc -z "$DB_HOST" "$DB_PORT"; do
     sleep 1
 done
-echo "✅ MySQL started"
+echo "✅ PostgreSQL started"
 
 # ===========================================
 # Run migrations
