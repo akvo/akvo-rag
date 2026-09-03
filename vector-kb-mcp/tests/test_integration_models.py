@@ -1,3 +1,4 @@
+from datetime import date
 import pytest
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
@@ -35,18 +36,22 @@ async def test_live_postgresql_schema_and_cascade_integration():
     )
 
     async with async_session() as session:
-        # 1. Insert KnowledgeBase
+        # 1. Insert KnowledgeBase with embedding configuration
         kb = KnowledgeBase(
             name="pg17_live_kb",
             description="Integration test Knowledge Base on PostgreSQL 17",
+            embedding_model="text-embedding-3-small",
+            embedding_dim=1536,
         )
         session.add(kb)
         await session.commit()
         await session.refresh(kb)
 
         assert kb.id is not None
+        assert kb.embedding_model == "text-embedding-3-small"
+        assert kb.embedding_dim == 1536
 
-        # 2. Insert Document
+        # 2. Insert Document with governance metadata & JSONB attributes
         doc = Document(
             knowledge_base_id=kb.id,
             file_name="pg17_doc.pdf",
@@ -55,12 +60,22 @@ async def test_live_postgresql_schema_and_cascade_integration():
             content_type="application/pdf",
             file_hash="p" * 64,
             status="INDEXED",
+            doc_version="2024.1",
+            issuing_authority="Ministry of Water & Sanitation",
+            effective_date=date(2024, 1, 1),
+            doc_type="STANDARD",
+            jurisdiction="National",
+            metadata_={"jurisdiction": "Kenya", "program": "WASH-2024"},
         )
         session.add(doc)
         await session.commit()
         await session.refresh(doc)
 
         assert doc.id is not None
+        assert doc.issuing_authority == "Ministry of Water & Sanitation"
+        assert doc.doc_version == "2024.1"
+        assert doc.effective_date == date(2024, 1, 1)
+        assert doc.metadata_["program"] == "WASH-2024"
 
         # 3. Insert DocumentChunk with native JSONB
         chunk = DocumentChunk(
@@ -90,11 +105,19 @@ async def test_live_postgresql_schema_and_cascade_integration():
         await session.commit()
 
         # 5. Query and verify JSONB extraction
-        result = await session.execute(
+        result_chunk = await session.execute(
             select(DocumentChunk).where(DocumentChunk.id == "c" * 64)
         )
-        fetched_chunk = result.scalar_one()
+        fetched_chunk = result_chunk.scalar_one()
         assert fetched_chunk.chunk_metadata["authority"] == "Akvo RAG Platform"
+
+        result_doc = await session.execute(
+            select(Document).where(
+                Document.issuing_authority == "Ministry of Water & Sanitation"
+            )
+        )
+        fetched_doc = result_doc.scalar_one()
+        assert fetched_doc.metadata_["jurisdiction"] == "Kenya"
 
         # 6. Verify Cascade Deletion on Live Postgres
         kb_id = kb.id

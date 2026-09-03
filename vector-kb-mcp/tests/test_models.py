@@ -1,43 +1,15 @@
 from datetime import datetime
 import pytest
-from sqlalchemy import create_engine, select, event, inspect
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy import select, inspect
+from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from models import (
-    Base,
     KnowledgeBase,
     Document,
     DocumentChunk,
     ProcessingTask,
 )
-
-
-@pytest.fixture
-def db_session():
-    """
-    Create an isolated in-memory SQLite database session for unit testing.
-    """
-    engine = create_engine("sqlite:///:memory:", echo=False)
-
-    # Enable SQLite foreign key constraint enforcement
-    @event.listens_for(engine, "connect")
-    def set_sqlite_pragma(dbapi_connection, connection_record):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-    Base.metadata.create_all(engine)
-    TestingSessionLocal = sessionmaker(
-        bind=engine, autoflush=False, autocommit=False
-    )
-    session = TestingSessionLocal()
-
-    try:
-        yield session
-    finally:
-        session.close()
-        Base.metadata.drop_all(engine)
 
 
 def test_table_creation(db_session: Session):
@@ -65,12 +37,14 @@ def test_knowledge_base_crud_and_defaults(db_session: Session):
     assert kb.name == "agri_manuals"
     assert kb.description == "Agricultural manuals and guidelines"
     assert kb.is_active is True
+    assert kb.embedding_model == "text-embedding-3-small"
+    assert kb.embedding_dim == 1536
     assert isinstance(kb.created_at, datetime)
     assert isinstance(kb.updated_at, datetime)
 
 
 def test_document_creation_and_relationships(db_session: Session):
-    """Test Document creation linked to KnowledgeBase."""
+    """Test Document creation linked to KnowledgeBase with metadata."""
     kb = KnowledgeBase(name="water_standards")
     db_session.add(kb)
     db_session.commit()
@@ -83,6 +57,11 @@ def test_document_creation_and_relationships(db_session: Session):
         content_type="application/pdf",
         file_hash="a" * 64,
         status="PENDING",
+        doc_version="2024.1",
+        issuing_authority="Ministry of Water",
+        doc_type="STANDARD",
+        jurisdiction="National",
+        metadata_={"sector": "WASH"},
     )
     db_session.add(doc)
     db_session.commit()
@@ -91,6 +70,11 @@ def test_document_creation_and_relationships(db_session: Session):
     assert doc.id is not None
     assert doc.knowledge_base_id == kb.id
     assert doc.file_name == "water_quality_2024.pdf"
+    assert doc.doc_version == "2024.1"
+    assert doc.issuing_authority == "Ministry of Water"
+    assert doc.doc_type == "STANDARD"
+    assert doc.jurisdiction == "National"
+    assert doc.metadata_ == {"sector": "WASH"}
     assert doc.knowledge_base.name == "water_standards"
     assert len(kb.documents) == 1
     assert kb.documents[0].id == doc.id
