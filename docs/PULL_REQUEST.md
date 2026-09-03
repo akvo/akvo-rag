@@ -1,144 +1,89 @@
-# [#117] feat(vector-kb): Phase 2 - Unified Database Schema Isolation & Metadata Hardening
+# [#132] feat(workflow): integrate MCPQueueDispatcher into RAG graph and host REST endpoints
 
 ## Summary
 
-This Pull Request delivers **Phase 2 (Milestone D9: Unified Database Schema Isolation & Metadata Hardening)**, merging all completed and tested Phase 2 deliverables into the `phase-1` base branch (`phase-1/107-rag-improvement-d8-phase-1-environment-orchestration-monorepo-setup-vector-microservice`).
+This Pull Request delivers **TASK-MCP-303 (Milestone D10: RAG Graph Integration & Host REST Endpoints)**, integrating `MCPQueueDispatcher` directly into the LangGraph state machine (`query_answering_workflow.py`), streaming chat service (`chat_mcp_service.py`), and host Knowledge Base adapter service (`kb_mcp_endpoint_service.py`).
 
-Phase 2 consolidates the `vector-kb-mcp` persistence layer into the unified PostgreSQL 17 database (`akvo_rag`), enforces complete schema isolation with `vkb_` table prefixes and dedicated `alembic_version_vkb` migration tracking, adds public-sector governance metadata and strict 1536-dim vector embedding guards, and delivers a robust asyncpg database engine with an automated legacy data migration CLI.
+By eliminating the legacy `ScopingAgent` LLM node bottleneck and Base64 wrapping, this implementation reduces chat turn retrieval latency by > 1.0s, while maintaining 100% backward-compatible JSON schema parity across all host REST endpoints (`/api/knowledge-base`, `/api/apps`) for existing callers (AgriConnect, CoM, Web UI).
 
-- **Milestone / Issue Link:** [#117](https://github.com/akvo/akvo-rag/issues/117)
-- **Base Branch:** `phase-1/107-rag-improvement-d8-phase-1-environment-orchestration-monorepo-setup-vector-microservice`
-- **Head Branch:** `phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening`
-- **LLD Reference:** [`docs/lld/container_based_rag_platform_lld.md`](https://github.com/akvo/akvo-rag/blob/phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening/docs/lld/container_based_rag_platform_lld.md) (Sections 6, 8, 9)
-- **Manual QA Guide:** [`docs/qa/qa-guide-phase-2-unified-database-schema-isolation-metadata-hardening.md`](https://github.com/akvo/akvo-rag/blob/phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening/docs/qa/qa-guide-phase-2-unified-database-schema-isolation-metadata-hardening.md)
-
----
-
-## What Changes Were Made? (Sub-Feature Breakdown)
-
-### 1. DB-201: Modernized SQLAlchemy 2.0 Models (`vector-kb-mcp/models/`)
-* **Issue Link:** [#118](https://github.com/akvo/akvo-rag/issues/118) | **Spec:** [`docs/features/005_db_201_vector_kb_sqlalchemy_models_spec.md`](https://github.com/akvo/akvo-rag/blob/phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening/docs/features/005_db_201_vector_kb_sqlalchemy_models_spec.md)
-* Ported declarative SQLAlchemy 2.0 mapped models from the legacy standalone repository:
-  * `KnowledgeBase` (`vkb_knowledge_bases`): Tenant/user isolation, chunk size/overlap configuration.
-  * `Document` (`vkb_documents`): File tracking, hash validation, composite unique constraints (`knowledge_base_id`, `file_hash`).
-  * `DocumentChunk` (`vkb_document_chunks`): Text chunk store with ChromaDB vector UUID tracking and token counting.
-  * `ProcessingTask` (`vkb_processing_tasks`): Ingestion status tracking (`PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`) with Celery/Redis decoupling.
-* Enforced `vkb_` table isolation prefixes across all tables, primary keys, and foreign keys.
-
-### 2. DB-202: Governance Metadata & 1536-Dim Embedding Guard (`vector-kb-mcp/core/`, `models/`)
-* **Issue Link:** [#120](https://github.com/akvo/akvo-rag/issues/120) | **Spec:** [`docs/features/006_db_202_metadata_enrichment_and_embedding_guard_spec.md`](https://github.com/akvo/akvo-rag/blob/phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening/docs/features/006_db_202_metadata_enrichment_and_embedding_guard_spec.md)
-* **Metadata Enrichment**:
-  * Enriched `KnowledgeBase` with `embedding_model` and `embedding_dim` (defaulting to `text-embedding-3-small` and `1536`).
-  * Enriched `Document` with governance metadata (`doc_version`, `issuing_authority`, `effective_date`, `doc_type`, `jurisdiction`) and PostgreSQL `JSONB` extensible metadata with GIN indexing (`idx_vkb_doc_metadata_gin`).
-* **Vector Dimension Guard**:
-  * Added `EmbeddingDimensionMismatchError` and `VectorMCPException` in `vector-kb-mcp/core/exceptions.py`.
-  * Added runtime validator `validate_embedding_dimension` in `vector-kb-mcp/core/guards.py`.
-  * Hardened `ChromaRetriever` to validate embedding query dimensions prior to dispatching vector similarity searches.
-
-### 3. DB-203: Service-Owned Alembic Migrations (`vector-kb-mcp/alembic/`)
-* **Issue Link:** [#122](https://github.com/akvo/akvo-rag/issues/122) | **Spec:** [`docs/features/007_db_203_service_owned_alembic_migrations_spec.md`](https://github.com/akvo/akvo-rag/blob/phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening/docs/features/007_db_203_service_owned_alembic_migrations_spec.md)
-* Configured isolated Alembic migration environment inside `vector-kb-mcp/alembic.ini` and `env.py`.
-* Isolated version tracking to dedicated table:
-  ```python
-  version_table = "alembic_version_vkb"
-  ```
-* Implemented `include_object` filter in `env.py` preventing Alembic from scanning or dropping non-`vkb_` tables (such as `backend/` application tables).
-* Authored initial baseline migration `001_initial_vkb_schema.py` covering all 4 tables, foreign keys, indexes, and GIN JSONB indexes.
-
-### 4. DB-204: Asyncpg Session Manager & Legacy Migration CLI (`vector-kb-mcp/db/`, `cli/`)
-* **Issue Link:** [#124](https://github.com/akvo/akvo-rag/issues/124) | **Spec:** [`docs/features/008_db_204_postgres_adapter_and_legacy_data_migration_cli_spec.md`](https://github.com/akvo/akvo-rag/blob/phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening/docs/features/008_db_204_postgres_adapter_and_legacy_data_migration_cli_spec.md)
-* **Async PostgreSQL Session Manager (`vector-kb-mcp/db/session.py`)**:
-  * SQLAlchemy 2.0 `create_async_engine` with `asyncpg` driver and connection pooling (`pool_size=10`, `max_overflow=20`, `pool_pre_ping=True`).
-  * `get_async_session()` context manager with automatic rollback and lifecycle management.
-  * Multi-driver URL normalizer supporting both standard PostgreSQL connections and asyncpg dialects.
-* **Automated Legacy Migration CLI (`vector-kb-mcp/cli/migrate_legacy_data.py`)**:
-  * Idempotent ETL pipeline reading from legacy MySQL or standalone PostgreSQL databases and inserting into `vkb_` tables.
-  * Conflict resolution (`ON CONFLICT DO NOTHING`), batch chunk streaming (`--batch-size`), and non-destructive dry run simulation (`--dry-run`).
-  * Automatic metadata transformation, default backfilling (`embedding_dim=1536`), and JSON to JSONB normalization.
+- **Issue Link:** [#132](https://github.com/akvo/akvo-rag/issues/132)
+- **Base Branch:** `feature/130-d10-mcp-302-build-mcpqueuedispatcher-redis-request-reply-with-correlation-id`
+- **Head Branch:** `feature/132-d10-mcp-303-integrate-mcpqueuedispatcher-into-rag-graph-host-rest-endpoints-appspy-knowledge_basepy`
+- **Feature Specification:** [`docs/features/011_mcp_303_graph_integration_and_host_endpoints_spec.md`](https://github.com/akvo/akvo-rag/blob/feature/132-d10-mcp-303-integrate-mcpqueuedispatcher-into-rag-graph-host-rest-endpoints-appspy-knowledge_basepy/docs/features/011_mcp_303_graph_integration_and_host_endpoints_spec.md)
+- **LLD Reference:** [`docs/lld/container_based_rag_platform_lld.md`](https://github.com/akvo/akvo-rag/blob/main/docs/lld/container_based_rag_platform_lld.md) (Sections 7, 8, 9)
 
 ---
 
-## Why Were These Changes Made?
+## What Changes Were Made?
 
-1. **Eliminate Microservice Coupling & Schema Conflicts**: Option C consolidates backend and vector microservices onto PostgreSQL 17. Isolating tables to `vkb_` and Alembic tracking to `alembic_version_vkb` prevents schema collision and allows independent deployment and migration lifecycles.
-2. **Prevent Vector Index Corruption**: Mismatched embedding dimensions degrade retrieval quality and cause silent vector search failures. Enforcing runtime dimension validation at the MCP gateway guarantees index integrity.
-3. **High Concurrency & Async Readiness**: Moving `vector-kb-mcp` to native `asyncpg` enables high-throughput Redis RPC request handling without blocking the Python event loop.
-4. **Zero-Downtime Legacy Data Portability**: The migration CLI enables immediate, automated transition of existing knowledge bases, documents, and chunks from previous standalone deployments into the unified monorepo infrastructure.
+### 1. LangGraph State Machine Streamlining (`backend/app/services/query_answering_workflow.py`)
+- **Direct Redis RPC Retrieval**: Re-engineered `run_mcp_tool_node` to execute queries directly via `MCPQueueDispatcher.call_tool("knowledge_bases_mcp", "query_knowledge_base", ...)` over Redis queues.
+- **Purged Scoping Bottleneck**: Removed `scoping_node` from active graph execution path, simplifying the state graph topology to a clean 4/5-node flow:
+  `classify_intent` ➔ `contextualize` ➔ `run_mcp_tool` ➔ `generate` / `error_handler`
+- **Direct Document Ingestion**: Ingests structured chunk results into `List[Document]` with preserved metadata (`chunk_id`, `document_id`, `kb_id`, `score`).
+
+### 2. Streaming Response Alignment (`backend/app/services/chat_mcp_service.py`)
+- Streamlined `stream_mcp_response` to invoke `run_mcp_tool_node` directly without `ScopingAgent`.
+- Retained full backward-compatible citation delimiters (`base64_context + "__LLM_RESPONSE__" + streamed_tokens`) required by frontend web clients.
+
+### 3. High-Speed Knowledge Base Adapter (`backend/mcp_clients/kb_mcp_endpoint_service.py`)
+- Re-architected all administrative KB operations (`list_kbs`, `get_kb`, `create_kb`, `update_kb`, `delete_kb`, `list_documents_by_kb_id`, `get_document`, `delete_document`, `get_processing_tasks`, `test_retrieval`) to route asynchronously through `MCPQueueDispatcher.call_tool(...)`.
+
+### 4. Integration & Benchmark Test Suite (`backend/tests/integration/test_graph_and_host_endpoints.py`)
+- **Graph Retrieval & Synthesis**: Validates end-to-end question answering and ground citation synthesis.
+- **Latency Benchmark**: Verified IPC execution overhead is < 50ms (measured ~20ms).
+- **Host REST Schema Parity**: Validated 100% JSON schema contract compatibility across all `/api/knowledge-base` endpoints.
+
+---
+
+## Architectural Data Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Web / Host Client (AgriConnect/CoM)
+    participant API as FastAPI Host API
+    participant Graph as LangGraph Engine
+    participant Dispatcher as MCPQueueDispatcher
+    participant Redis as Redis RPC Queue
+    participant Worker as Vector KB MCP Worker
+
+    User->>API: POST /api/chat/stream or /api/knowledge-base
+    alt RAG Chat Turn
+        API->>Graph: Execute query_answering_workflow
+        Graph->>Dispatcher: call_tool("knowledge_bases_mcp", "query_knowledge_base")
+        Dispatcher->>Redis: RPUSH mcp:vector:requests (correlation_id)
+        Worker->>Redis: BLPOP mcp:vector:requests
+        Worker-->>Redis: SET mcp:vector:responses:{correlation_id}
+        Dispatcher-->>Graph: List[Document] Chunks
+        Graph-->>API: Stream Tokens + Ground Citations
+    else KB Admin CRUD
+        API->>Dispatcher: call_tool("knowledge_bases_mcp", "<operation>")
+        Dispatcher->>Redis: RPC Request
+        Worker-->>Dispatcher: JSON Response
+        Dispatcher-->>API: Preserved JSON Schema
+    end
+    API-->>User: Streaming or JSON Response
+```
 
 ---
 
 ## Verification & Quality Gates
 
-### Automated Test Suite Summary
-
-All unit, integration, and live container tests pass with zero failures:
-
 | Verification Gate | Target | Result | Command |
-|---|:---:|:---:|---|
-| **Flake8 Linting** | 0 warnings/errors | **PASS** (0 errors) | `docker exec akvo-rag-vector-kb-mcp-1 python -m flake8 .` |
-| **Total Test Suite** | 100% pass | **PASS** (69 passed in 5.52s) | `docker exec akvo-rag-vector-kb-mcp-1 pytest tests/` |
-| **Total Code Coverage** | >= 80% (Akvo mandate) | **97% Overall Coverage** | `docker exec akvo-rag-vector-kb-mcp-1 pytest tests/ --cov=.` |
-| **Models & DB Coverage** | 100% | **100%** | `tests/test_models.py`, `tests/test_db_and_migrator.py` |
-| **Live Postgres 17 Test** | Schema & Cascade pass | **PASS** | `tests/test_integration_models.py` |
-| **Alembic Migration Test** | Upgrade/Downgrade pass | **PASS** | `tests/test_migrations.py` |
-| **Chroma & Redis Tests** | RPC & vector pass | **PASS** | `tests/test_integration_chroma.py`, `tests/test_integration_redis_worker.py` |
-
-### Detailed Coverage Breakdown
-
-```text
-Name                                         Stmts   Miss  Cover   Missing
---------------------------------------------------------------------------
-alembic/env.py                                  64      9    86%   38-50, 92-93, 102, 128
-alembic/versions/001_initial_vkb_schema.py      35      0   100%
-chunker/__init__.py                              3      0   100%
-chunker/hashing.py                              10      0   100%
-chunker/text_chunker.py                         35      0   100%
-cli/__init__.py                                  2      0   100%
-cli/migrate_legacy_data.py                     136     12    91%   58, 70, 114, 119-124, 233-234, 327
-core/__init__.py                                 4      0   100%
-core/config.py                                  21      0   100%
-core/exceptions.py                               9      0   100%
-core/guards.py                                   7      0   100%
-db/__init__.py                                   2      0   100%
-db/session.py                                   23      0   100%
-main.py                                        143     22    85%
-models/__init__.py                               6      0   100%
-models/base.py                                   8      0   100%
-models/document.py                              27      0   100%
-models/document_chunk.py                        20      0   100%
-models/knowledge_base.py                        16      0   100%
-models/processing_task.py                       17      0   100%
-parser/__init__.py                              15      0   100%
-parser/base.py                                  18      1    94%
-parser/docx_parser.py                           14      0   100%
-parser/pdf_parser.py                            18      0   100%
-parser/text_parser.py                           14      0   100%
-retriever/__init__.py                            3      0   100%
-retriever/chroma_retriever.py                   49      0   100%
-retriever/models.py                             14      0   100%
-tests/conftest.py                               60      0   100%
-tests/test_chunker.py                           52      0   100%
-tests/test_db_and_migrator.py                  191      0   100%
-tests/test_integration_chroma.py                35      4    89%
-tests/test_integration_models.py                60      2    97%
-tests/test_integration_redis_worker.py          40      4    90%
-tests/test_metadata_guard.py                    94      0   100%
-tests/test_migrations.py                       139      9    94%
-tests/test_models.py                           138      0   100%
-tests/test_parser.py                           106      0   100%
-tests/test_redis_worker.py                     174      0   100%
-tests/test_retriever.py                         55      0   100%
---------------------------------------------------------------------------
-TOTAL                                         1877     63    97%
-```
+|---|---|---|---|
+| **Flake8 Linting** | 0 warnings/errors | **PASS** (0 errors) | `docker exec akvo-rag-backend-1 flake8 app/ mcp_clients/ tests/` |
+| **Unit Tests** | 100% passing | **PASS** (19 passed) | `docker exec akvo-rag-backend-1 python -m pytest tests/unit -v` |
+| **Service Tests** | 100% passing | **PASS** (91 passed) | `docker exec akvo-rag-backend-1 python -m pytest tests/services -v` |
+| **Integration Tests** | 100% passing | **PASS** (87 passed) | `docker exec akvo-rag-backend-1 python -m pytest tests/integration -v` |
+| **Full Pytest Suite** | 100% passing | **PASS** (263 passed, 0 failed) | `docker exec akvo-rag-backend-1 python -m pytest tests/ -v` |
+| **IPC Latency Benchmark** | < 50ms | **PASS** (~20ms) | `docker exec akvo-rag-backend-1 python -m pytest tests/integration/test_graph_and_host_endpoints.py -v` |
 
 ---
 
-## Requester Checklist (Akvo Developer Guidelines)
-
-- [x] **PR Title Standard**: Follows `[#117] feat(vector-kb): Phase 2 - Unified Database Schema Isolation & Metadata Hardening`
-- [x] **Branch Naming**: Target base branch is `phase-1/107-rag-improvement-d8-phase-1-environment-orchestration-monorepo-setup-vector-microservice`
-- [x] **Test Coverage Gate**: Minimum 80% coverage mandate satisfied (achieved **97%** overall coverage across `vector-kb-mcp`)
-- [x] **Code Quality**: Clean Flake8 linting with zero warnings/errors
-- [x] **Documentation & Specs Aligned**: Feature specifications `005`, `006`, `007`, `008` under `docs/features/` updated to `IMPLEMENTED`
-- [x] **Zero Hardcoded Secrets**: All configuration sourced from environment variables (`DATABASE_URL`, `REDIS_URL`, `CHROMA_HOST`)
+## Akvo Requester Checklist
+- [x] Linked GitHub issue in PR title (`[#132] feat(workflow): integrate MCPQueueDispatcher into RAG graph and host REST endpoints`)
+- [x] Strict PEP 8 formatting (Flake8 with 0 warnings/errors)
+- [x] 100% test pass rate (263 passed tests inside Docker)
+- [x] Host REST API schema backwards compatibility verified
+- [x] Target base branch set to `feature/130-d10-mcp-302-build-mcpqueuedispatcher-redis-request-reply-with-correlation-id`

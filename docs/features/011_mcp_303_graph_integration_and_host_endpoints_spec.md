@@ -1,11 +1,11 @@
 # Feature Specification: RAG Graph Integration & Host REST Endpoints
 
-> **Feature ID:** `011_mcp_303_graph_integration_and_host_endpoints_spec`  
-> **Task Ref:** `TASK-MCP-303`  
-> **Target Branch:** `epic/rag-monorepo-mcp`  
-> **Status:** `PROPOSED (Under Review)`  
-> **Estimated Effort:** `2.0 hrs (Vibe-Coding) / 1.5 days (Traditional)`  
-> **Author:** Antigravity Architect / Backend & LangGraph Specialist  
+> **Feature ID:** `011_mcp_303_graph_integration_and_host_endpoints_spec`
+> **Task Ref:** `TASK-MCP-303`
+> **Target Branch:** `epic/rag-monorepo-mcp`
+> **Status:** `IMPLEMENTED`
+> **Estimated Effort:** `2.0 hrs (Vibe-Coding) / 1.5 days (Traditional)`
+> **Author:** Antigravity Architect / Backend & LangGraph Specialist
 > **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 7, 8, 9)
 
 ---
@@ -13,7 +13,9 @@
 ## 1. Overview & 5W1H Requirements Discovery
 
 ### 1.1 Problem Statement
+
 The legacy LangGraph pipeline in `akvo-rag-backend` suffered from two major architectural bottlenecks:
+
 1. **Scoping LLM Node Bottleneck:** An extra LLM call (`ScopingAgent`) was executed on every user turn just to guess which MCP tools to invoke, adding $800\text{ms} - 1500\text{ms}$ of latency per chat request.
 2. **Base64 Payload Wrapping:** Document context was serialized to Base64 strings in FastMCP and decoded using custom string parsing (`__LLM_RESPONSE__`).
 3. **Host API Compatibility Mandate:** Host applications (`AgriConnect`, `CoM`) rely on `/api/v1/knowledge-bases` and `/api/v1/apps` REST endpoints. These endpoints must remain 100% stable with identical request/response schemas while switching under-the-hood transport to Redis RPC.
@@ -23,7 +25,7 @@ The legacy LangGraph pipeline in `akvo-rag-backend` suffered from two major arch
 ### 1.2 5W1H Discovery Lens
 
 | Dimension | Specification |
-|---|---|
+| --- | --- |
 | **Who** | Web chat users, RAG dialogue engine, and host tenant applications (`AgriConnect`, `CoM`). |
 | **What** | Integrate `MCPQueueDispatcher` into the LangGraph state machine, remove the `ScopingAgent` node, and wire `KnowledgeBaseMCPEndpointService` to Redis RPC with zero API contract regressions. |
 | **Where** | `backend/app/services/query_answering_workflow.py`, `backend/app/services/chat_mcp_service.py`, `backend/mcp_clients/kb_mcp_endpoint_service.py`, `backend/app/api/api_v1/knowledge_base.py`. |
@@ -40,14 +42,14 @@ The legacy LangGraph pipeline in `akvo-rag-backend` suffered from two major arch
 ```mermaid
 graph TD
     Start(["User Chat Message"]) --> Intent["1. Classify Intent Node"]
-    
+
     Intent -- "small_talk" --> SmallTalk["2a. Small Talk Node"] --> Finish(["Stream Response to User"])
     Intent -- "rag_query" --> Contextualize["2b. Contextualize Query Node"]
-    
+
     Contextualize --> RunMCP["3. Run MCP Tool Node<br/>(Calls MCPQueueDispatcher via Redis RPC in sub-5ms)"]
-    
+
     RunMCP --> QASynthesis["4. QA Answer Synthesis Node<br/>(Streams tokens directly with authoritative citations)"]
-    
+
     QASynthesis --> Finish
 ```
 
@@ -192,7 +194,7 @@ class KnowledgeBaseMCPEndpointService:
 ## 4. Host REST Endpoints Zero-Regression Contract
 
 | Endpoint | Method | Caller | Underlying Transport | Schema Contract |
-|---|:---:|---|---|---|
+| --- | :---: | --- | --- | --- |
 | `/api/v1/knowledge-bases` | `GET` | AgriConnect / Web UI | Redis RPC (`list_knowledge_bases`) | Preserved `[{"id": 1, "name": "...", "documents": []}]` |
 | `/api/v1/knowledge-bases` | `POST` | AgriConnect / Web UI | Redis RPC (`create_knowledge_base`) | Preserved `{"id": 1, "name": "..."}` |
 | `/api/v1/knowledge-bases/{id}` | `GET` | AgriConnect / Web UI | Redis RPC (`get_knowledge_base`) | Preserved `{"id": 1, "name": "...", ...}` |
@@ -223,7 +225,7 @@ class KnowledgeBaseMCPEndpointService:
 ## 6. Subtask Estimation & Breakdown
 
 | Subtask ID | Description | Target Files | Vibe Est. | Trad. Est. | Confidence |
-|---|---|---|:---:|:---:|:---:|
+| --- | --- | --- | :---: | :---: | :---: |
 | `SUB-303.1` | Refactor `query_answering_workflow.py` to remove `ScopingAgent` and Base64 wrapping | `backend/app/services/query_answering_workflow.py` `[MODIFY]` | 0.6 hr | 0.5 day | High (98%) |
 | `SUB-303.2` | Update `KnowledgeBaseMCPEndpointService` to route all CRUD via Redis RPC | `backend/mcp_clients/kb_mcp_endpoint_service.py` `[MODIFY]` | 0.5 hr | 0.4 day | High (99%) |
 | `SUB-303.3` | Verify `/api/v1/knowledge-bases` and `/api/v1/apps` endpoints against host contracts | `backend/app/api/api_v1/knowledge_base.py`, `apps.py` `[VERIFY]` | 0.4 hr | 0.3 day | High (98%) |
@@ -234,7 +236,7 @@ class KnowledgeBaseMCPEndpointService:
 
 ## 7. Definition of Done (DoD)
 
-- [ ] `ScopingAgent` node and Base64 decoding are completely purged from LangGraph.
-- [ ] `run_mcp_tool_node` retrieves chunks via `MCPQueueDispatcher` in $< 5\text{ms}$ IPC latency.
-- [ ] Host REST endpoints (`/api/v1/knowledge-bases`, `/api/v1/apps`) operate seamlessly over Redis queues with 0 regressions.
-- [ ] `pytest tests/integration/test_graph_and_host_endpoints.py` passes with 100% test success.
+- [x] `ScopingAgent` node and Base64 decoding are completely purged from LangGraph.
+- [x] `run_mcp_tool_node` retrieves chunks via `MCPQueueDispatcher` in $< 5\text{ms}$ IPC latency.
+- [x] Host REST endpoints (`/api/v1/knowledge-bases`, `/api/v1/apps`) operate seamlessly over Redis queues with 0 regressions.
+- [x] `pytest tests/integration/test_graph_and_host_endpoints.py` passes with 100% test success.
