@@ -10,6 +10,7 @@ from openai import AsyncOpenAI
 import redis.asyncio as redis
 
 from core.config import Settings, settings as default_settings
+from db.migrator import run_vkb_migrations
 from retriever.chroma_retriever import ChromaRetriever
 
 # Setup logging
@@ -34,11 +35,21 @@ class VectorMCPWorker:
         ] = {}
 
     async def initialize(self, skip_connection_init: bool = False):
-        """Initialize connections and register all tool handlers."""
+        """
+        Initialize connections, auto-run migrations, and register
+        tool handlers.
+        """
         logger.info("Initializing vector-kb-mcp worker...")
 
         if not skip_connection_init:
-            # 1. Initialize Redis connection
+            # 1. Run database auto-migrations
+            try:
+                run_vkb_migrations(db_url=self.settings.DATABASE_URL)
+            except Exception as e:
+                logger.error("Database auto-migration failed: %s", e)
+                raise
+
+            # 2. Initialize Redis connection
             if self.redis_client is None:
                 self.redis_client = redis.from_url(
                     self.settings.REDIS_URL, decode_responses=True
