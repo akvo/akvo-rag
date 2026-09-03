@@ -10,7 +10,6 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import mysql
 
 # revision identifiers, used by Alembic.
 revision: str = "59cfa0f1361d"
@@ -33,7 +32,7 @@ def upgrade() -> None:
     op.alter_column(
         "document_chunks",
         "created_at",
-        existing_type=mysql.TIMESTAMP(),
+        existing_type=sa.DateTime(),
         type_=sa.DateTime(),
         nullable=False,
         existing_server_default=sa.text("CURRENT_TIMESTAMP"),
@@ -41,12 +40,10 @@ def upgrade() -> None:
     op.alter_column(
         "document_chunks",
         "updated_at",
-        existing_type=mysql.TIMESTAMP(),
+        existing_type=sa.DateTime(),
         type_=sa.DateTime(),
         nullable=False,
-        existing_server_default=sa.text(
-            "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
-        ),
+        existing_server_default=sa.text("CURRENT_TIMESTAMP"),
     )
     op.drop_index("idx_hash", table_name="document_chunks")
     op.create_index(
@@ -56,10 +53,18 @@ def upgrade() -> None:
         unique=False,
     )
     op.create_foreign_key(
-        None, "document_chunks", "knowledge_bases", ["kb_id"], ["id"]
+        "fk_document_chunks_kb_id",
+        "document_chunks",
+        "knowledge_bases",
+        ["kb_id"],
+        ["id"],
     )
     op.create_foreign_key(
-        None, "document_chunks", "documents", ["document_id"], ["id"]
+        "fk_document_chunks_document_id",
+        "document_chunks",
+        "documents",
+        ["document_id"],
+        ["id"],
     )
     op.drop_column("document_chunks", "metadata")
     op.drop_index("idx_file_hash", table_name="documents")
@@ -77,31 +82,31 @@ def upgrade() -> None:
     op.alter_column(
         "processing_tasks",
         "knowledge_base_id",
-        existing_type=mysql.INTEGER(),
+        existing_type=sa.Integer(),
         nullable=True,
     )
     op.alter_column(
         "processing_tasks",
         "document_id",
-        existing_type=mysql.INTEGER(),
+        existing_type=sa.Integer(),
         nullable=True,
     )
     op.alter_column(
         "processing_tasks",
         "status",
-        existing_type=mysql.VARCHAR(length=50),
+        existing_type=sa.String(length=50),
         nullable=True,
     )
     op.alter_column(
         "processing_tasks",
         "created_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         nullable=True,
     )
     op.alter_column(
         "processing_tasks",
         "updated_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         nullable=True,
     )
     op.create_index(
@@ -110,8 +115,19 @@ def upgrade() -> None:
         ["id"],
         unique=False,
     )
-    op.drop_index("email", table_name="users")
-    op.drop_index("username", table_name="users")
+    bind = op.get_bind()
+    if bind.dialect.name == "mysql":
+        op.drop_index("email", table_name="users")
+        op.drop_index("username", table_name="users")
+    elif bind.dialect.name == "postgresql":
+        op.execute(
+            "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key;"
+        )
+        op.execute(
+            "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_username_key;"
+        )
+        op.execute("DROP INDEX IF EXISTS email;")
+        op.execute("DROP INDEX IF EXISTS username;")
     op.create_index(op.f("ix_users_email"), "users", ["email"], unique=True)
     op.create_index(op.f("ix_users_id"), "users", ["id"], unique=False)
     op.create_index(
@@ -125,39 +141,48 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_users_username"), table_name="users")
     op.drop_index(op.f("ix_users_id"), table_name="users")
     op.drop_index(op.f("ix_users_email"), table_name="users")
-    op.create_index("username", "users", ["username"], unique=True)
-    op.create_index("email", "users", ["email"], unique=True)
+    bind = op.get_bind()
+    if bind.dialect.name == "mysql":
+        op.create_index("username", "users", ["username"], unique=True)
+        op.create_index("email", "users", ["email"], unique=True)
+    elif bind.dialect.name == "postgresql":
+        op.execute(
+            "ALTER TABLE users ADD CONSTRAINT users_email_key UNIQUE (email);"
+        )
+        op.execute(
+            "ALTER TABLE users ADD CONSTRAINT users_username_key UNIQUE (username);"  # noqa
+        )
     op.drop_index(
         op.f("ix_processing_tasks_id"), table_name="processing_tasks"
     )
     op.alter_column(
         "processing_tasks",
         "updated_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         nullable=False,
     )
     op.alter_column(
         "processing_tasks",
         "created_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         nullable=False,
     )
     op.alter_column(
         "processing_tasks",
         "status",
-        existing_type=mysql.VARCHAR(length=50),
+        existing_type=sa.String(length=50),
         nullable=False,
     )
     op.alter_column(
         "processing_tasks",
         "document_id",
-        existing_type=mysql.INTEGER(),
+        existing_type=sa.Integer(),
         nullable=False,
     )
     op.alter_column(
         "processing_tasks",
         "knowledge_base_id",
-        existing_type=mysql.INTEGER(),
+        existing_type=sa.Integer(),
         nullable=False,
     )
     op.drop_index(op.f("ix_messages_id"), table_name="messages")
@@ -166,10 +191,43 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_documents_file_hash"), table_name="documents")
     op.create_index("idx_file_hash", "documents", ["file_hash"], unique=False)
     op.add_column(
-        "document_chunks", sa.Column("metadata", mysql.JSON(), nullable=True)
+        "document_chunks", sa.Column("metadata", sa.JSON(), nullable=True)
     )
-    op.drop_constraint(None, "document_chunks", type_="foreignkey")
-    op.drop_constraint(None, "document_chunks", type_="foreignkey")
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            "ALTER TABLE document_chunks "
+            "DROP CONSTRAINT IF EXISTS fk_document_chunks_kb_id;"
+        )
+        op.execute(
+            "ALTER TABLE document_chunks "
+            "DROP CONSTRAINT IF EXISTS document_chunks_kb_id_fkey;"
+        )
+        op.execute(
+            "ALTER TABLE document_chunks "
+            "DROP CONSTRAINT IF EXISTS fk_document_chunks_document_id;"
+        )
+        op.execute(
+            "ALTER TABLE document_chunks "
+            "DROP CONSTRAINT IF EXISTS document_chunks_document_id_fkey;"
+        )
+    else:
+        try:
+            op.drop_constraint(
+                "fk_document_chunks_kb_id",
+                "document_chunks",
+                type_="foreignkey",
+            )
+        except Exception:
+            pass
+        try:
+            op.drop_constraint(
+                "fk_document_chunks_document_id",
+                "document_chunks",
+                type_="foreignkey",
+            )
+        except Exception:
+            pass
     op.drop_index(
         op.f("ix_document_chunks_hash"), table_name="document_chunks"
     )
@@ -178,17 +236,15 @@ def downgrade() -> None:
         "document_chunks",
         "updated_at",
         existing_type=sa.DateTime(),
-        type_=mysql.TIMESTAMP(),
+        type_=sa.DateTime(),
         nullable=True,
-        existing_server_default=sa.text(
-            "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
-        ),
+        existing_server_default=sa.text("CURRENT_TIMESTAMP"),
     )
     op.alter_column(
         "document_chunks",
         "created_at",
         existing_type=sa.DateTime(),
-        type_=mysql.TIMESTAMP(),
+        type_=sa.DateTime(),
         nullable=True,
         existing_server_default=sa.text("CURRENT_TIMESTAMP"),
     )

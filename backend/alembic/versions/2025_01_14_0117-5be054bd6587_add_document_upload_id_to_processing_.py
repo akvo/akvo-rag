@@ -20,23 +20,36 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # 1. 添加 document_upload_id 字段
-    op.execute(
-        """
-        ALTER TABLE processing_tasks
-        ADD COLUMN document_upload_id INT,
-        ADD CONSTRAINT processing_tasks_document_upload_id_fkey
-        FOREIGN KEY (document_upload_id) REFERENCES document_uploads(id)
-    """
+    # 1. Add document_upload_id column and foreign key constraint
+    op.add_column(
+        "processing_tasks",
+        sa.Column("document_upload_id", sa.Integer(), nullable=True),
+    )
+    op.create_foreign_key(
+        "processing_tasks_document_upload_id_fkey",
+        "processing_tasks",
+        "document_uploads",
+        ["document_upload_id"],
+        ["id"],
     )
 
 
 def downgrade() -> None:
-    # 1. 删除外键约束和字段
-    op.execute(
-        """
-        ALTER TABLE processing_tasks
-        DROP FOREIGN KEY processing_tasks_document_upload_id_fkey,
-        DROP COLUMN document_upload_id
-    """
-    )
+    # 1. Drop foreign key constraint and column
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            "ALTER TABLE processing_tasks "
+            "DROP CONSTRAINT IF EXISTS "
+            "processing_tasks_document_upload_id_fkey;"
+        )
+    else:
+        try:
+            op.drop_constraint(
+                "processing_tasks_document_upload_id_fkey",
+                "processing_tasks",
+                type_="foreignkey",
+            )
+        except Exception:
+            pass
+    op.drop_column("processing_tasks", "document_upload_id")
