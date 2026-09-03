@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import List, Optional, TYPE_CHECKING
-from sqlalchemy import String, Text, Boolean
+from sqlalchemy import String, Text, Boolean, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base, TimestampMixin
 
@@ -21,6 +21,20 @@ class KnowledgeBase(Base, TimestampMixin):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False
+    )
+
+    # Embedding model configuration & dimension guard
+    embedding_model: Mapped[str] = mapped_column(
+        String(100),
+        default="text-embedding-3-small",
+        server_default="text-embedding-3-small",
+        nullable=False,
+    )
+    embedding_dim: Mapped[int] = mapped_column(
+        Integer,
+        default=1536,
+        server_default="1536",
+        nullable=False,
     )
 
     # Relationships with strict cascade deletion
