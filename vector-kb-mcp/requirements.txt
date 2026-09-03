@@ -3,6 +3,10 @@ redis>=5.0.0
 pydantic>=2.7.0
 pydantic-settings>=2.0.0
 
+# Database & ORM
+SQLAlchemy>=2.0.23
+asyncpg>=0.29.0
+
 # Document Extraction
 pypdf>=4.2.0
 docx2txt>=0.8
