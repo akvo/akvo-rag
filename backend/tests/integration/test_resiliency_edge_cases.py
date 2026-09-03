@@ -1,6 +1,7 @@
 import pytest
 import base64
 import json
+from unittest.mock import AsyncMock, MagicMock
 from app.services.utils.history_utils import strip_context_prefixes
 from app.services.query_answering_workflow import (
     scoping_node,
@@ -82,15 +83,23 @@ class TestResiliencyEdgeCases:
         assert result["error"] == "Previous node failed"
 
     @pytest.mark.asyncio
-    async def test_run_mcp_tool_node_validation_error(self):
+    async def test_run_mcp_tool_node_validation_error(self, monkeypatch):
         """
-        Verify that run_mcp_tool_node raises a proper error state if scope
-        is invalid (and no prior error).
+        Verify that run_mcp_tool_node handles dispatcher exceptions gracefully
+        and sets the error in state.
         """
-        # Arrange: no prior error, but scope is missing required keys
+        fake_dispatcher = MagicMock()
+        fake_dispatcher.call_tool = AsyncMock(
+            side_effect=ValueError("Invalid retrieval parameters")
+        )
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow._mcp_dispatcher",
+            fake_dispatcher,
+        )
+
         state: GraphState = {
             "query": "Where is my data?",
-            "scope": {"input": {}},  # Missing server_name and tool_name
+            "knowledge_base_ids": [1],
         }
 
         # Act
@@ -98,4 +107,4 @@ class TestResiliencyEdgeCases:
 
         # Assert: It should catch the ValueError and set the error state
         assert "error" in result
-        assert "Invalid scope" in result["error"]
+        assert "Invalid retrieval parameters" in result["error"]
