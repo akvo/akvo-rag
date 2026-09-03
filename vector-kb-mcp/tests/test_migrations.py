@@ -223,18 +223,9 @@ async def test_live_postgresql_alembic_upgrade_downgrade(alembic_ini_path):
     except Exception as exc:
         pytest.fail(f"PostgreSQL migration lifecycle test failed: {exc}")
     finally:
-        # Clean teardown
+        # Ensure target database is left upgraded at head
         try:
-            command.downgrade(alembic_cfg, "base")
+            command.upgrade(alembic_cfg, "head")
         except Exception:
             pass
-        async with engine.begin() as conn:
-            for tbl in [
-                "alembic_version_vkb",
-                "vkb_processing_tasks",
-                "vkb_document_chunks",
-                "vkb_documents",
-                "vkb_knowledge_bases",
-            ]:
-                await conn.execute(text(f"DROP TABLE IF EXISTS {tbl} CASCADE"))
         await engine.dispose()
