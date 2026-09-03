@@ -4,7 +4,7 @@
 
 This Pull Request delivers **TASK-MCP-303 (Milestone D10: RAG Graph Integration & Host REST Endpoints)**, integrating `MCPQueueDispatcher` directly into the LangGraph state machine (`query_answering_workflow.py`), streaming chat service (`chat_mcp_service.py`), and host Knowledge Base adapter service (`kb_mcp_endpoint_service.py`).
 
-By eliminating the legacy `ScopingAgent` LLM node bottleneck and Base64 wrapping, this implementation reduces chat turn retrieval latency by $> 1.0\text{s}$, while maintaining 100% backward-compatible JSON schema parity across all host REST endpoints (`/api/knowledge-base`, `/api/apps`) for existing callers (AgriConnect, CoM, Web UI).
+By eliminating the legacy `ScopingAgent` LLM node bottleneck and Base64 wrapping, this implementation reduces chat turn retrieval latency by > 1.0s, while maintaining 100% backward-compatible JSON schema parity across all host REST endpoints (`/api/knowledge-base`, `/api/apps`) for existing callers (AgriConnect, CoM, Web UI).
 
 - **Issue Link:** [#132](https://github.com/akvo/akvo-rag/issues/132)
 - **Base Branch:** `feature/130-d10-mcp-302-build-mcpqueuedispatcher-redis-request-reply-with-correlation-id`
@@ -19,7 +19,7 @@ By eliminating the legacy `ScopingAgent` LLM node bottleneck and Base64 wrapping
 ### 1. LangGraph State Machine Streamlining (`backend/app/services/query_answering_workflow.py`)
 - **Direct Redis RPC Retrieval**: Re-engineered `run_mcp_tool_node` to execute queries directly via `MCPQueueDispatcher.call_tool("knowledge_bases_mcp", "query_knowledge_base", ...)` over Redis queues.
 - **Purged Scoping Bottleneck**: Removed `scoping_node` from active graph execution path, simplifying the state graph topology to a clean 4/5-node flow:
-  $$\text{classify\_intent} \longrightarrow \text{contextualize} \longrightarrow \text{run\_mcp\_tool} \longrightarrow \text{generate} / \text{error\_handler}$$
+  `classify_intent` ➔ `contextualize` ➔ `run_mcp_tool` ➔ `generate` / `error_handler`
 - **Direct Document Ingestion**: Ingests structured chunk results into `List[Document]` with preserved metadata (`chunk_id`, `document_id`, `kb_id`, `score`).
 
 ### 2. Streaming Response Alignment (`backend/app/services/chat_mcp_service.py`)
@@ -31,7 +31,7 @@ By eliminating the legacy `ScopingAgent` LLM node bottleneck and Base64 wrapping
 
 ### 4. Integration & Benchmark Test Suite (`backend/tests/integration/test_graph_and_host_endpoints.py`)
 - **Graph Retrieval & Synthesis**: Validates end-to-end question answering and ground citation synthesis.
-- **Latency Benchmark**: Verified IPC execution overhead is $< 50\text{ms}$ (measured $\approx 20\text{ms}$).
+- **Latency Benchmark**: Verified IPC execution overhead is < 50ms (measured ~20ms).
 - **Host REST Schema Parity**: Validated 100% JSON schema contract compatibility across all `/api/knowledge-base` endpoints.
 
 ---
@@ -77,7 +77,7 @@ sequenceDiagram
 | **Service Tests** | 100% passing | **PASS** (91 passed) | `docker exec akvo-rag-backend-1 python -m pytest tests/services -v` |
 | **Integration Tests** | 100% passing | **PASS** (87 passed) | `docker exec akvo-rag-backend-1 python -m pytest tests/integration -v` |
 | **Full Pytest Suite** | 100% passing | **PASS** (263 passed, 0 failed) | `docker exec akvo-rag-backend-1 python -m pytest tests/ -v` |
-| **IPC Latency Benchmark** | $< 50\text{ms}$ | **PASS** (~20ms) | `docker exec akvo-rag-backend-1 python -m pytest tests/integration/test_graph_and_host_endpoints.py -v` |
+| **IPC Latency Benchmark** | < 50ms | **PASS** (~20ms) | `docker exec akvo-rag-backend-1 python -m pytest tests/integration/test_graph_and_host_endpoints.py -v` |
 
 ---
 
