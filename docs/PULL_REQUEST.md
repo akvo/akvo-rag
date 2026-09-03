@@ -94,7 +94,7 @@ graph TD
 | **Vector KB MCP Test Suite** | 100% pass | **PASS (69 passed in 4.8s)** | `docker exec akvo-rag-vector-kb-mcp-1 pytest tests/ -v` |
 | **Flake8 Code Linting** | 0 errors | **PASS (0 warnings/errors)** | `docker exec akvo-rag-backend-1 flake8 app/ tests/` |
 | **LangGraph Latency Benchmark** | < 20ms step overhead | **PASS (1.2ms median)** | `docker exec akvo-rag-backend-1 python -m pytest tests/services/test_query_answering_workflow.py -k test_retrieval_step_latency_benchmark` |
-| **Alembic Migration Reversibility** | Upgrade/Downgrade pass | **PASS (de57ec74e817 head)** | `docker exec akvo-rag-backend-1 alembic current` |
+| **Alembic Migration Reversibility** | Upgrade/Downgrade pass | **PASS (vbotbjue5lfd head)** | `docker exec akvo-rag-backend-1 alembic current` |
 | **Host REST API Contracts** | 100% backwards compatible | **PASS (9 contract tests passed)** | `docker exec akvo-rag-backend-1 python -m pytest tests/api/test_host_api_backwards_compatibility.py -v` |
 
 ---

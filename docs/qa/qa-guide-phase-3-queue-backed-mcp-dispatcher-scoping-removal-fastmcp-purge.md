@@ -313,7 +313,7 @@ docker exec akvo-rag-backend-1 alembic current
 **Expected Output:**
 
 ```text
-de57ec74e817 (head)
+vbotbjue5lfd (head)
 ```
 
 ### Step 8.2: Verify PostgreSQL Table Schema & Constraints
@@ -328,12 +328,17 @@ docker exec akvo-rag-postgres-1 psql -U postgres -d akvo_rag -c "\dt"
 - `apps`
 - `app_knowledge_bases`
 - `prompt_definitions`
-- `prompt_overlays`
-- `chat_sessions` / `chat_messages`
+- `prompt_versions`
+- `chats` / `messages` / `chat_knowledge_bases`
 - `api_keys`
-- `alembic_version`
+- `jobs`
+- `password_reset_tokens`
+- `system_settings`
+- `alembic_version` / `alembic_version_vkb`
+- `vkb_*` tables (managed by vector microservice)
 
 ---
+
 
 ## 9. Manual QA: Host REST API Backwards Compatibility
 
