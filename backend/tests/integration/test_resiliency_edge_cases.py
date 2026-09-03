@@ -4,7 +4,6 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 from app.services.utils.history_utils import strip_context_prefixes
 from app.services.query_answering_workflow import (
-    scoping_node,
     run_mcp_tool_node,
     GraphState,
 )
@@ -44,20 +43,19 @@ class TestResiliencyEdgeCases:
         assert b64_prefix[:10] not in cleaned[1]["content"]
 
     @pytest.mark.asyncio
-    async def test_scoping_node_resiliency_on_missing_query(self):
+    async def test_run_mcp_tool_node_resiliency_on_upstream_error(self):
         """
-        Verify that scoping_node handles missing 'contextual_query'
-        safely.
+        Verify that run_mcp_tool_node handles incoming error in state safely
+        without executing retrieval.
         """
-        # Arrange: state without 'contextual_query', simulating a failure in
-        # 'contextualize_node'
+        # Arrange: state with an upstream error
         state: GraphState = {
             "query": "Where is my data?",
             "error": "LLM failed to contextualize",
         }
 
         # Act
-        result = await scoping_node(state)
+        result = await run_mcp_tool_node(state)
 
         # Assert: It should return early because error is set.
         assert result["error"] == "LLM failed to contextualize"

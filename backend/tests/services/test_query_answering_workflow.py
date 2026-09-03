@@ -1,5 +1,7 @@
 import json
 import base64
+import time
+import statistics
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from types import SimpleNamespace
@@ -8,7 +10,6 @@ from langchain_core.documents import Document
 from app.services.query_answering_workflow import (
     decode_mcp_context,
     contextualize_node,
-    scoping_node,
     run_mcp_tool_node,
     post_processing_node,
     response_generation_node,
@@ -16,6 +17,8 @@ from app.services.query_answering_workflow import (
     small_talk_node,
     error_handler_node,
     check_mcp_success,
+    create_rag_graph,
+    query_answering_workflow,
     GraphState,
 )
 
@@ -259,43 +262,26 @@ class TestQueryAnsweringWorkflow:
         new_state = await contextualize_node(state)
         assert "error" in new_state
 
-    # ---------------- scoping_node ----------------
+    # ---------------- Graph Structure Verification ----------------
 
-    @pytest.mark.asyncio
-    async def test_scoping_node_success(self, monkeypatch):
-        """scoping_node() sets scope using ScopingAgent mock."""
-        fake_agent = MagicMock()
-        fake_agent.scope_query = AsyncMock(
-            return_value={
-                "server_name": "s1",
-                "tool_name": "t1",
-                "input": {"knowledge_base_ids": [1], "query": "q"},
-            }
-        )
-        monkeypatch.setattr(
-            "app.services.query_answering_workflow.ScopingAgent",
-            lambda: fake_agent,
-        )
+    def test_graph_structure_and_nodes(self):
+        """
+        Verify that create_rag_graph builds the streamlined graph and that
+        scoping_node is completely removed from the pipeline.
+        """
+        wf = create_rag_graph()
+        nodes = wf.nodes
+        assert "classify_intent" in nodes
+        assert "small_talk" in nodes
+        assert "contextualize" in nodes
+        assert "run_mcp" in nodes
+        assert "generate" in nodes
+        assert "error_handler" in nodes
+        assert "scoping_node" not in nodes
+        assert "scoping" not in nodes
 
-        state: GraphState = {"contextual_query": "q", "scope": {}}
-        new_state = await scoping_node(state)
-        assert new_state["scope"]["server_name"] == "s1"
-
-    @pytest.mark.asyncio
-    async def test_scoping_node_error(self, monkeypatch):
-        """scoping_node() should set error on failure."""
-        fake_agent = MagicMock()
-        fake_agent.scope_query = AsyncMock(
-            side_effect=Exception("Scoping failed")
-        )
-        monkeypatch.setattr(
-            "app.services.query_answering_workflow.ScopingAgent",
-            lambda: fake_agent,
-        )
-
-        state: GraphState = {"contextual_query": "q", "scope": {}}
-        new_state = await scoping_node(state)
-        assert "error" in new_state
+        compiled = wf.compile()
+        assert compiled is not None
 
     # ---------------- run_mcp_tool_node ----------------
 
@@ -743,3 +729,226 @@ class TestQueryAnsweringWorkflow:
             c for c in chunks if isinstance(c, dict) and "error" in c
         ]
         assert len(error_chunks) > 0
+
+    # ---------------- E2E Graph Execution & Benchmark Tests ----------------
+
+    @pytest.mark.asyncio
+    async def test_graph_execution_path_knowledge_query(self, monkeypatch):
+        """
+        Verify end-to-end graph execution with knowledge query:
+        classify_intent -> contextualize -> run_mcp -> generate
+        """
+        # 1. Mock LLM for intent & contextualize
+        fake_llm = MagicMock()
+
+        async def fake_ainvoke(msgs):
+            # If system message is intent classification
+            if isinstance(msgs, list) and len(msgs) >= 2:
+                sys_content = msgs[0][1] if isinstance(msgs[0], tuple) else ""
+                if "classification" in sys_content:
+                    return SimpleNamespace(
+                        content='{"intent": "knowledge_query"}'
+                    )
+                if "friendly assistant" in sys_content:
+                    return SimpleNamespace(content="Hello there!")
+            return SimpleNamespace(content="What fertilizer for maize?")
+
+        fake_llm.ainvoke = fake_ainvoke
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow.LLMFactory.create",
+            lambda: fake_llm,
+        )
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow.llm_instance",
+            fake_llm,
+        )
+
+        # 2. Mock ChatPromptTemplate
+        fake_chain = MagicMock()
+        fake_chain.ainvoke = AsyncMock(
+            return_value=SimpleNamespace(content="What fertilizer for maize?")
+        )
+        cpt_patch = (
+            "app.services.query_answering_workflow."
+            "ChatPromptTemplate.from_messages"
+        )
+        monkeypatch.setattr(
+            cpt_patch,
+            lambda msgs: MagicMock(__or__=lambda self, other: fake_chain),
+        )
+
+        # 3. Mock Dispatcher
+        fake_dispatcher = MagicMock()
+        fake_dispatcher.call_tool = AsyncMock(
+            return_value={
+                "chunks": [
+                    {
+                        "chunk_id": "c1",
+                        "content": "Use NPK 15-15-15 for maize planting.",
+                        "score": 0.92,
+                        "metadata": {"doc": "maize_guide.pdf"},
+                    }
+                ]
+            }
+        )
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow._mcp_dispatcher",
+            fake_dispatcher,
+        )
+
+        # 4. Mock QA Generation streaming chain
+        async def fake_astream(_):
+            yield "For maize, use NPK 15-15-15."
+
+        fake_qa_chain = MagicMock()
+        fake_qa_chain.astream = fake_astream
+
+        csdc_patch = (
+            "app.services.query_answering_workflow."
+            "create_stuff_documents_chain"
+        )
+        monkeypatch.setattr(
+            csdc_patch,
+            lambda **_: fake_qa_chain,
+        )
+
+        initial_state: GraphState = {
+            "query": "What fertilizer is needed for maize?",
+            "chat_history": [],
+            "contextualize_prompt_str": "Contextualize: {input}",
+            "qa_prompt_str": "Answer: {context}",
+            "knowledge_base_ids": [2],
+            "top_k": 5,
+        }
+
+        result = await query_answering_workflow.ainvoke(initial_state)
+
+        assert result["intent"] == "knowledge_query"
+        assert result["contextual_query"] == "What fertilizer for maize?"
+        assert len(result["context"]) == 1
+        assert "NPK 15-15-15" in result["context"][0].page_content
+        assert result["answer"] == "For maize, use NPK 15-15-15."
+
+    @pytest.mark.asyncio
+    async def test_retrieval_step_latency_benchmark(self, monkeypatch):
+        """
+        Benchmark direct vector retrieval step latency.
+        Verify median execution latency is < 20ms across 50 iterations.
+        """
+        fake_dispatcher = MagicMock()
+
+        async def fast_call_tool(server_name, tool_name, arguments):
+            return {
+                "chunks": [
+                    {
+                        "chunk_id": f"c_{i}",
+                        "content": f"Document content snippet {i}",
+                        "score": 0.95,
+                        "metadata": {"source": "bench.pdf"},
+                    }
+                    for i in range(5)
+                ]
+            }
+
+        fake_dispatcher.call_tool = fast_call_tool
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow._mcp_dispatcher",
+            fake_dispatcher,
+        )
+
+        state: GraphState = {
+            "query": "Benchmark retrieval query",
+            "contextual_query": "Benchmark retrieval query",
+            "knowledge_base_ids": [101, 102],
+            "top_k": 5,
+        }
+
+        latencies = []
+        # Warmup
+        await run_mcp_tool_node(state)
+
+        # 50 benchmark iterations
+        for _ in range(50):
+            start = time.perf_counter()
+            res = await run_mcp_tool_node(state)
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            latencies.append(elapsed_ms)
+            assert len(res["context"]) == 5
+
+        med_latency = statistics.median(latencies)
+        assert (
+            med_latency < 20.0
+        ), f"Median latency was {med_latency:.2f}ms >= 20ms"
+
+    @pytest.mark.asyncio
+    async def test_graph_error_resilience_fallback(self, monkeypatch):
+        """
+        Verify that graph safely handles vector retrieval failures, routing
+        to error_handler_node with a friendly fallback answer.
+        """
+        # Mock LLM
+        fake_llm = MagicMock()
+
+        async def fake_ainvoke(msgs):
+            if isinstance(msgs, list) and len(msgs) >= 2:
+                sys_content = msgs[0][1] if isinstance(msgs[0], tuple) else ""
+                if "classification" in sys_content:
+                    return SimpleNamespace(
+                        content='{"intent": "knowledge_query"}'
+                    )
+            return SimpleNamespace(
+                content=(
+                    "I'm having trouble retrieving information right now. "
+                    "Please try again later."
+                )
+            )
+
+        fake_llm.ainvoke = fake_ainvoke
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow.LLMFactory.create",
+            lambda: fake_llm,
+        )
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow.llm_instance",
+            fake_llm,
+        )
+
+        fake_chain = MagicMock()
+        fake_chain.ainvoke = AsyncMock(
+            return_value=SimpleNamespace(content="Contextualized query")
+        )
+        cpt_patch = (
+            "app.services.query_answering_workflow."
+            "ChatPromptTemplate.from_messages"
+        )
+        monkeypatch.setattr(
+            cpt_patch,
+            lambda msgs: MagicMock(__or__=lambda self, other: fake_chain),
+        )
+
+        # Simulate vector retrieval RPC timeout / network failure
+        fake_dispatcher = MagicMock()
+        fake_dispatcher.call_tool = AsyncMock(
+            side_effect=TimeoutError("Vector service connection timed out")
+        )
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow._mcp_dispatcher",
+            fake_dispatcher,
+        )
+
+        initial_state: GraphState = {
+            "query": "How to treat plant blight?",
+            "chat_history": [],
+            "contextualize_prompt_str": "Contextualize",
+            "qa_prompt_str": "QA",
+            "knowledge_base_ids": [1],
+            "top_k": 5,
+        }
+
+        result = await query_answering_workflow.ainvoke(initial_state)
+
+        # Asserts graceful fallback response without crashing
+        assert "answer" in result
+        assert len(result["answer"]) > 0
+        answer_lower = result["answer"].lower()
+        assert "trouble" in answer_lower or "try again" in answer_lower
