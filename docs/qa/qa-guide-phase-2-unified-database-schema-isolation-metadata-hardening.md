@@ -1,6 +1,6 @@
 # Phase 2 Manual QA & Verification Guide
 
-> **Issue**: [#117](https://github.com/akvo/akvo-rag/issues/117) — `[RAG IMPROVEMENT] D9 - Phase 2: Unified Database Schema Isolation & Metadata Hardening`  
+> **Issue**: [#117](https://github.com/akvo/akvo-rag/issues/117) — `[RAG IMPROVEMENT] D9 - Phase 2: Unified Database Schema Isolation & Metadata Hardening`
 > **Target Branch / PR**: `phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening` -> `phase-1` ([PR #126](https://github.com/akvo/akvo-rag/pull/126))
 
 ---
@@ -284,10 +284,10 @@ main()
 
 | Verification Item | Acceptance Criteria | Verified |
 |---|---|:---:|
-| **Automated Suite** | All 69 tests pass with $\ge 80\%$ statement coverage (97% achieved) | [ ] |
-| **Alembic Table Isolation** | `alembic_version_vkb` and `vkb_` tables created under `akvo_rag` | [ ] |
-| **Schema Governance** | `vkb_documents` has governance columns, `jsonb` metadata, and GIN index | [ ] |
-| **Migration Reversibility** | `alembic downgrade base` and `upgrade head` work without errors | [ ] |
-| **Asyncpg Engine** | `get_db_session` context manager commits transactions & cascades deletes | [ ] |
-| **1536-Dim Guard** | 1536-dim vectors pass; mismatched dimensions raise structured error | [ ] |
-| **Migration CLI** | Dry-run and live batch migrations extract, transform, and load idempotently | [ ] |
+| **Automated Suite** | All 69 tests pass with >= 80% statement coverage (97% achieved) | [x] |
+| **Alembic Table Isolation** | `alembic_version_vkb` and `vkb_` tables created under `akvo_rag` | [x] |
+| **Schema Governance** | `vkb_documents` has governance columns, `jsonb` metadata, and GIN index | [x] |
+| **Migration Reversibility** | `alembic downgrade base` and `upgrade head` work without errors | [x] |
+| **Asyncpg Engine** | `get_db_session` context manager commits transactions & cascades deletes | [x] |
+| **1536-Dim Guard** | 1536-dim vectors pass; mismatched dimensions raise structured error | [x] |
+| **Migration CLI** | Dry-run and live batch migrations extract, transform, and load idempotently | [x] |
