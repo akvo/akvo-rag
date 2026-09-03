@@ -1,4 +1,5 @@
 """MCP Client Custom Exception Hierarchy."""
+from typing import Optional
 
 
 class MCPException(Exception):
@@ -10,7 +11,17 @@ class MCPException(Exception):
 class MCPTimeoutError(MCPException):
     """Raised when an MCP tool invocation times out."""
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        server_name: Optional[str] = None,
+        tool_name: Optional[str] = None,
+        timeout: Optional[float] = None,
+    ):
+        super().__init__(message)
+        self.server_name = server_name
+        self.tool_name = tool_name
+        self.timeout = timeout
 
 
 class MCPToolExecutionError(MCPException):
@@ -19,7 +30,15 @@ class MCPToolExecutionError(MCPException):
     during execution.
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        server_name: Optional[str] = None,
+        tool_name: Optional[str] = None,
+    ):
+        super().__init__(message)
+        self.server_name = server_name
+        self.tool_name = tool_name
 
 
 class MCPConfigurationError(MCPException):
@@ -27,4 +46,12 @@ class MCPConfigurationError(MCPException):
     Raised when an unknown server, tool, or unsupported transport is requested.
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        server_name: Optional[str] = None,
+        tool_name: Optional[str] = None,
+    ):
+        super().__init__(message)
+        self.server_name = server_name
+        self.tool_name = tool_name

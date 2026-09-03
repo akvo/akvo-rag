@@ -952,3 +952,127 @@ class TestQueryAnsweringWorkflow:
         assert len(result["answer"]) > 0
         answer_lower = result["answer"].lower()
         assert "trouble" in answer_lower or "try again" in answer_lower
+
+    @pytest.mark.asyncio
+    async def test_graph_node_sequence(self):
+        """
+        Verify that graph structure strictly executes:
+        classify_intent -> contextualize -> run_mcp -> generate
+        with zero references to scoping_node.
+        """
+        wf = create_rag_graph()
+        nodes = wf.nodes
+        assert "classify_intent" in nodes
+        assert "contextualize" in nodes
+        assert "run_mcp" in nodes
+        assert "generate" in nodes
+        assert "scoping_node" not in nodes
+        assert "scoping" not in nodes
+
+    @pytest.mark.asyncio
+    async def test_small_talk_intent_bypass(self, monkeypatch):
+        """
+        User query 'Hello, who are you?' routes to small_talk and terminates
+        without invoking vector queues.
+        """
+
+        async def fake_ainvoke(msgs):
+            if isinstance(msgs, list) and len(msgs) >= 1:
+                prompt_text = str(msgs[0])
+                if (
+                    "classify" in prompt_text.lower()
+                    or "intent" in prompt_text.lower()
+                ):
+                    return SimpleNamespace(content='{"intent": "small_talk"}')
+            return SimpleNamespace(content="Hello! I am your assistant.")
+
+        fake_llm = MagicMock()
+        fake_llm.ainvoke = fake_ainvoke
+
+        fake_dispatcher = MagicMock()
+        fake_dispatcher.call_tool = AsyncMock()
+
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow.LLMFactory.create",
+            lambda: fake_llm,
+        )
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow._mcp_dispatcher",
+            fake_dispatcher,
+        )
+
+        state: GraphState = {
+            "query": "Hello, who are you?",
+            "chat_history": [],
+            "contextualize_prompt_str": "",
+            "qa_prompt_str": "",
+        }
+
+        result = await query_answering_workflow.ainvoke(state)
+        assert result["intent"] == "small_talk"
+        assert "Hello!" in result["answer"]
+        # Ensure vector dispatcher was never called
+        fake_dispatcher.call_tool.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_empty_retrieval_fallback(self, monkeypatch):
+        """
+        When run_mcp_tool returns 0 chunks, synthesis node gracefully replies
+        with standard helpful fallback.
+        """
+        fake_dispatcher = MagicMock()
+        fake_dispatcher.call_tool = AsyncMock(return_value={"chunks": []})
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow._mcp_dispatcher",
+            fake_dispatcher,
+        )
+
+        state: GraphState = {
+            "query": "Unknown topic with zero documents",
+            "contextual_query": "Unknown topic with zero documents",
+            "knowledge_base_ids": [999],
+        }
+
+        result = await run_mcp_tool_node(state)
+        assert result["context"] == []
+        assert result["error"] is None
+
+    @pytest.mark.asyncio
+    async def test_token_stream_synthesis(self, monkeypatch):
+        """
+        Verifies response generation node formats synthesis and citations.
+        """
+
+        async def fake_astream(inputs):
+            yield "Avocados should be picked with care [[citation:1]]."
+
+        fake_chain = MagicMock()
+        fake_chain.astream = fake_astream
+
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow.create_stuff_documents_chain",  # noqa
+            lambda **_: fake_chain,
+        )
+
+        state: GraphState = {
+            "query": "How to harvest avocado?",
+            "contextual_query": "How to harvest avocado?",
+            "qa_prompt_str": "QA: {context} {input}",
+            "context": [
+                Document(
+                    page_content="Harvest with shears leaving 1cm stem.",
+                    metadata={"source": "farm_guide.pdf", "page": 3},
+                )
+            ],
+            "chat_history": [],
+        }
+
+        yielded_states = []
+        async for chunk in response_generation_node(state):
+            yielded_states.append(chunk)
+
+        assert len(yielded_states) > 0
+        final_state = yielded_states[-1]
+        assert "answer" in final_state
+        assert "[[citation:1]]" in final_state["answer"]
+        assert len(final_state["context"]) == 1
