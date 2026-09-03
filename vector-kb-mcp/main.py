@@ -11,7 +11,13 @@ import redis.asyncio as redis
 
 from core.config import Settings, settings as default_settings
 from db.migrator import run_vkb_migrations
+from db.session import get_db_session
+from models.knowledge_base import KnowledgeBase
+from models.document import Document
+from models.processing_task import ProcessingTask
 from retriever.chroma_retriever import ChromaRetriever
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 # Setup logging
 logging.basicConfig(
@@ -90,14 +96,14 @@ class VectorMCPWorker:
         # 5. Register tool handlers
         self.tool_handlers = {
             "query_knowledge_base": self._handle_query_kb,
-            "list_knowledge_bases": self._handle_list_kbs_stub,
-            "get_knowledge_base": self._handle_get_kb_stub,
-            "create_knowledge_base": self._handle_create_kb_stub,
-            "update_knowledge_base": self._handle_update_kb_stub,
-            "delete_knowledge_base": self._handle_delete_kb_stub,
-            "list_documents": self._handle_list_docs_stub,
-            "get_document": self._handle_get_doc_stub,
-            "get_processing_tasks": self._handle_get_tasks_stub,
+            "list_knowledge_bases": self._handle_list_kbs,
+            "get_knowledge_base": self._handle_get_kb,
+            "create_knowledge_base": self._handle_create_kb,
+            "update_knowledge_base": self._handle_update_kb,
+            "delete_knowledge_base": self._handle_delete_kb,
+            "list_documents": self._handle_list_docs,
+            "get_document": self._handle_get_doc,
+            "get_processing_tasks": self._handle_get_tasks,
         }
         logger.info("Registered %d tool handlers.", len(self.tool_handlers))
 
@@ -128,46 +134,222 @@ class VectorMCPWorker:
         ]
         return {"chunks": formatted_chunks}
 
-    # Stubs for Phase 2 DB model integration
-    async def _handle_list_kbs_stub(
-        self, args: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        return {"knowledge_bases": []}
+    @staticmethod
+    def _serialize_kb(kb: KnowledgeBase) -> Dict[str, Any]:
+        return {
+            "id": kb.id,
+            "name": kb.name,
+            "description": kb.description,
+            "is_active": kb.is_active,
+            "embedding_model": kb.embedding_model,
+            "embedding_dim": kb.embedding_dim,
+            "created_at": (
+                kb.created_at.isoformat() if kb.created_at else None
+            ),
+            "updated_at": (
+                kb.updated_at.isoformat() if kb.updated_at else None
+            ),
+            "documents": [
+                {
+                    "id": doc.id,
+                    "file_name": doc.file_name,
+                    "file_path": doc.file_path,
+                    "file_size": doc.file_size,
+                    "content_type": doc.content_type,
+                    "status": doc.status,
+                    "created_at": (
+                        doc.created_at.isoformat() if doc.created_at else None
+                    ),
+                }
+                for doc in (kb.documents or [])
+            ],
+        }
 
-    async def _handle_get_kb_stub(
-        self, args: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        return {"id": args.get("kb_id"), "status": "ACTIVE"}
+    @staticmethod
+    def _serialize_doc(doc: Document) -> Dict[str, Any]:
+        return {
+            "id": doc.id,
+            "knowledge_base_id": doc.knowledge_base_id,
+            "file_name": doc.file_name,
+            "file_path": doc.file_path,
+            "file_size": doc.file_size,
+            "content_type": doc.content_type,
+            "file_hash": doc.file_hash,
+            "status": doc.status,
+            "doc_version": doc.doc_version,
+            "issuing_authority": doc.issuing_authority,
+            "effective_date": (
+                doc.effective_date.isoformat() if doc.effective_date else None
+            ),
+            "doc_type": doc.doc_type,
+            "jurisdiction": doc.jurisdiction,
+            "metadata": doc.metadata_,
+            "created_at": (
+                doc.created_at.isoformat() if doc.created_at else None
+            ),
+            "updated_at": (
+                doc.updated_at.isoformat() if doc.updated_at else None
+            ),
+        }
 
-    async def _handle_create_kb_stub(
-        self, args: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        return {"status": "created", "kb_id": 1}
+    async def _handle_list_kbs(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        async with get_db_session() as session:
+            stmt = (
+                select(KnowledgeBase)
+                .options(selectinload(KnowledgeBase.documents))
+                .order_by(KnowledgeBase.id.asc())
+            )
 
-    async def _handle_update_kb_stub(
-        self, args: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        return {"status": "updated"}
+            if "kb_ids" in args and args["kb_ids"]:
+                stmt = stmt.where(KnowledgeBase.id.in_(args["kb_ids"]))
+            if "search" in args and args["search"]:
+                stmt = stmt.where(
+                    KnowledgeBase.name.ilike(f"%{args['search']}%")
+                )
 
-    async def _handle_delete_kb_stub(
-        self, args: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        return {"status": "deleted"}
+            res = await session.execute(stmt)
+            kbs = res.scalars().all()
+            return {"knowledge_bases": [self._serialize_kb(kb) for kb in kbs]}
 
-    async def _handle_list_docs_stub(
-        self, args: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        return {"documents": []}
+    async def _handle_get_kb(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        kb_id = args.get("kb_id")
+        if not kb_id:
+            return {"error": "Missing kb_id", "knowledge_base": None}
 
-    async def _handle_get_doc_stub(
-        self, args: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        return {"document": {}}
+        async with get_db_session() as session:
+            stmt = (
+                select(KnowledgeBase)
+                .options(selectinload(KnowledgeBase.documents))
+                .where(KnowledgeBase.id == kb_id)
+            )
+            res = await session.execute(stmt)
+            kb = res.scalar_one_or_none()
+            if not kb:
+                return {
+                    "error": "Knowledge base not found",
+                    "knowledge_base": None,
+                }
+            return {"knowledge_base": self._serialize_kb(kb)}
 
-    async def _handle_get_tasks_stub(
-        self, args: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        return {"tasks": []}
+    async def _handle_create_kb(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        name = args.get("name", "New Knowledge Base")
+        description = args.get("description", "")
+        model = args.get("embedding_model", "text-embedding-3-small")
+        dim = args.get("embedding_dim", 1536)
+
+        async with get_db_session() as session:
+            kb = KnowledgeBase(
+                name=name,
+                description=description,
+                embedding_model=model,
+                embedding_dim=dim,
+                is_active=True,
+            )
+            session.add(kb)
+            await session.flush()
+            await session.refresh(kb, ["documents"])
+            return {
+                "knowledge_base": self._serialize_kb(kb),
+                "status": "created",
+                "kb_id": kb.id,
+            }
+
+    async def _handle_update_kb(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        kb_id = args.get("kb_id")
+        if not kb_id:
+            return {"error": "Missing kb_id"}
+
+        async with get_db_session() as session:
+            stmt = (
+                select(KnowledgeBase)
+                .options(selectinload(KnowledgeBase.documents))
+                .where(KnowledgeBase.id == kb_id)
+            )
+            res = await session.execute(stmt)
+            kb = res.scalar_one_or_none()
+            if not kb:
+                return {"error": "Knowledge base not found"}
+
+            if "name" in args and args["name"] is not None:
+                kb.name = args["name"]
+            if "description" in args and args["description"] is not None:
+                kb.description = args["description"]
+            if "is_active" in args and args["is_active"] is not None:
+                kb.is_active = args["is_active"]
+            await session.flush()
+            return {
+                "knowledge_base": self._serialize_kb(kb),
+                "status": "updated",
+            }
+
+    async def _handle_delete_kb(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        kb_id = args.get("kb_id")
+        if not kb_id:
+            return {"error": "Missing kb_id"}
+
+        async with get_db_session() as session:
+            stmt = select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+            res = await session.execute(stmt)
+            kb = res.scalar_one_or_none()
+            if kb:
+                await session.delete(kb)
+            return {"status": "deleted", "kb_id": kb_id}
+
+    async def _handle_list_docs(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        kb_id = args.get("kb_id")
+        async with get_db_session() as session:
+            stmt = select(Document).order_by(Document.id.desc())
+            if kb_id:
+                stmt = stmt.where(Document.knowledge_base_id == kb_id)
+            res = await session.execute(stmt)
+            docs = res.scalars().all()
+            return {"documents": [self._serialize_doc(doc) for doc in docs]}
+
+    async def _handle_get_doc(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        doc_id = args.get("document_id") or args.get("id")
+        if not doc_id:
+            return {"error": "Missing document_id", "document": None}
+
+        async with get_db_session() as session:
+            stmt = select(Document).where(Document.id == doc_id)
+            res = await session.execute(stmt)
+            doc = res.scalar_one_or_none()
+            if not doc:
+                return {"error": "Document not found", "document": None}
+            return {"document": self._serialize_doc(doc)}
+
+    async def _handle_get_tasks(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        kb_id = args.get("kb_id")
+        async with get_db_session() as session:
+            stmt = select(ProcessingTask).order_by(ProcessingTask.id.desc())
+            if kb_id:
+                stmt = stmt.where(ProcessingTask.knowledge_base_id == kb_id)
+            res = await session.execute(stmt)
+            tasks = res.scalars().all()
+            return {
+                "tasks": [
+                    {
+                        "id": t.id,
+                        "task_id": t.task_id,
+                        "knowledge_base_id": t.knowledge_base_id,
+                        "document_id": t.document_id,
+                        "task_type": t.task_type,
+                        "status": t.status,
+                        "progress_percentage": t.progress_percentage,
+                        "current_step": t.current_step,
+                        "error_message": t.error_message,
+                        "created_at": (
+                            t.created_at.isoformat() if t.created_at else None
+                        ),
+                        "completed_at": (
+                            t.completed_at.isoformat()
+                            if t.completed_at
+                            else None
+                        ),
+                    }
+                    for t in tasks
+                ]
+            }
 
     # --- Event Loop ---
     async def run(self):

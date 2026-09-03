@@ -130,3 +130,14 @@ async def fake_redis():
     yield r
     await r.flushall()
     await r.aclose()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def reset_db_engine():
+    yield
+    from db.session import close_db_engine
+
+    try:
+        await close_db_engine()
+    except Exception:
+        pass

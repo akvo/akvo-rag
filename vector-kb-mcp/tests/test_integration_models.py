@@ -20,12 +20,14 @@ from models import (
 @pytest.mark.asyncio
 async def test_live_postgresql_schema_and_cascade_integration():
     """Verify models against live PostgreSQL 17 container via asyncpg."""
+    test_db_url = settings.DATABASE_URL.replace("/akvo_rag", "/akvo_rag_test")
     try:
-        engine = create_async_engine(settings.DATABASE_URL, echo=False)
+        engine = create_async_engine(test_db_url, echo=False)
         async with engine.begin() as conn:
             # Create all tables on PostgreSQL 17
             await conn.run_sync(Base.metadata.create_all)
     except Exception as exc:
+
         pytest.skip(
             f"Live PostgreSQL not reachable ({exc}); "
             "skipping integration test."
