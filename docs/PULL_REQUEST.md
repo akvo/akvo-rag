@@ -10,6 +10,7 @@ Phase 2 consolidates the `vector-kb-mcp` persistence layer into the unified Post
 - **Base Branch:** `phase-1/107-rag-improvement-d8-phase-1-environment-orchestration-monorepo-setup-vector-microservice`
 - **Head Branch:** `phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening`
 - **LLD Reference:** [`docs/lld/container_based_rag_platform_lld.md`](https://github.com/akvo/akvo-rag/blob/phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening/docs/lld/container_based_rag_platform_lld.md) (Sections 6, 8, 9)
+- **Manual QA Guide:** [`docs/qa/qa-guide-phase-2-unified-database-schema-isolation-metadata-hardening.md`](https://github.com/akvo/akvo-rag/blob/phase-2/117-rag-improvement-d9-phase-2-unified-database-schema-isolation-metadata-hardening/docs/qa/qa-guide-phase-2-unified-database-schema-isolation-metadata-hardening.md)
 
 ---
 
