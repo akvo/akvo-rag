@@ -152,3 +152,7 @@ class MCPConfig(BaseModel):
         for server in self.servers.values():
             tools.extend(server.tools)
         return tools
+
+    def list_servers(self) -> List[str]:
+        """List names of all registered MCP servers."""
+        return list(self.servers.keys())

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Any, Dict, Optional
@@ -38,6 +39,18 @@ class MCPQueueDispatcher:
         self._redis = redis_client
         self._http_client: Optional[httpx.AsyncClient] = None
 
+    @property
+    def redis_client(self) -> Optional[aioredis.Redis]:
+        """Expose current Redis client instance."""
+        return self._redis
+
+    @property
+    def http_client(self) -> httpx.AsyncClient:
+        """Expose current shared async HTTP client."""
+        if self._http_client is None or self._http_client.is_closed:
+            self._http_client = httpx.AsyncClient(timeout=30.0)
+        return self._http_client
+
     async def get_redis(self) -> aioredis.Redis:
         """Lazily initialize Redis connection pool."""
         if self._redis is None:
@@ -48,14 +61,17 @@ class MCPQueueDispatcher:
 
     async def get_http_client(self) -> httpx.AsyncClient:
         """Lazily initialize shared async HTTP client."""
-        if self._http_client is None or self._http_client.is_closed:
-            self._http_client = httpx.AsyncClient(timeout=30.0)
-        return self._http_client
+        return self.http_client
 
     async def close(self):
         """Cleanly close all open network and broker connections."""
         if self._redis is not None:
-            await self._redis.aclose()
+            if hasattr(self._redis, "aclose"):
+                await self._redis.aclose()
+            elif hasattr(self._redis, "close"):
+                res = self._redis.close()
+                if asyncio.iscoroutine(res):
+                    await res
         if self._http_client is not None and not self._http_client.is_closed:
             await self._http_client.aclose()
 
@@ -87,13 +103,17 @@ class MCPQueueDispatcher:
         server = self.config.servers.get(server_name)
         if not server:
             raise MCPConfigurationError(
-                f"Server '{server_name}' not configured in mcp_config.json"
+                f"Server '{server_name}' not configured in mcp_config.json",
+                server_name=server_name,
+                tool_name=tool_name,
             )
 
         tool_def = self.config.get_tool(server_name, tool_name)
         if not tool_def:
             raise MCPConfigurationError(
-                f"Tool '{tool_name}' not defined for server '{server_name}'"
+                f"Tool '{tool_name}' not defined for server '{server_name}'",
+                server_name=server_name,
+                tool_name=tool_name,
             )
 
         effective_timeout = (
@@ -102,18 +122,23 @@ class MCPQueueDispatcher:
 
         if isinstance(server, RedisQueueServerConfig):
             return await self._call_redis_queue(
-                server, tool_name, arguments, effective_timeout
+                server_name, server, tool_name, arguments, effective_timeout
             )
         elif isinstance(server, RestServerConfig):
             return await self._call_rest(
-                server, tool_def, arguments, effective_timeout
+                server_name, server, tool_def, arguments, effective_timeout
             )
         else:
             transport = getattr(server, "transport", "unknown")
-            raise MCPConfigurationError(f"Unsupported transport: {transport}")
+            raise MCPConfigurationError(
+                f"Unsupported transport: {transport}",
+                server_name=server_name,
+                tool_name=tool_name,
+            )
 
     async def _call_redis_queue(
         self,
+        server_name: str,
         server: RedisQueueServerConfig,
         tool_name: str,
         arguments: Dict[str, Any],
@@ -137,21 +162,36 @@ class MCPQueueDispatcher:
         await redis.lpush(server.request_queue, json.dumps(payload))
 
         try:
-            # Await response with timeout via BLPOP
-            result = await redis.blpop(response_queue, timeout=int(timeout))
+            # Await response with timeout via BLPOP wrapped in asyncio.wait_for
+            blpop_timeout = max(1, int(timeout))
+            try:
+                result = await asyncio.wait_for(
+                    redis.blpop(response_queue, timeout=blpop_timeout),
+                    timeout=timeout,
+                )
+            except asyncio.TimeoutError:
+                result = None
+
             if not result:
                 msg = (
                     f"RPC call to '{tool_name}' on '{server.name}' timed out "
                     f"after {timeout}s (corr_id: {correlation_id})"
                 )
-                raise MCPTimeoutError(msg)
+                raise MCPTimeoutError(
+                    msg,
+                    server_name=server_name,
+                    tool_name=tool_name,
+                    timeout=timeout,
+                )
 
             _, raw_response = result
             data = json.loads(raw_response)
 
             if data.get("status") == "error":
                 raise MCPToolExecutionError(
-                    data.get("error", "Unknown remote tool execution error")
+                    data.get("error", "Unknown remote tool execution error"),
+                    server_name=server_name,
+                    tool_name=tool_name,
                 )
 
             return data.get("data", {})
@@ -162,6 +202,7 @@ class MCPQueueDispatcher:
 
     async def _call_rest(
         self,
+        server_name: str,
         server: RestServerConfig,
         tool_def: MCPToolDefinition,
         arguments: Dict[str, Any],
@@ -182,15 +223,24 @@ class MCPQueueDispatcher:
             return response.json()
         except httpx.TimeoutException:
             raise MCPTimeoutError(
-                f"HTTP request to '{url}' timed out after {timeout}s"
+                f"HTTP request to '{url}' timed out after {timeout}s",
+                server_name=server_name,
+                tool_name=tool_def.name,
+                timeout=timeout,
             )
         except httpx.HTTPStatusError as e:
             msg = (
                 f"HTTP error {e.response.status_code} from '{url}': "
                 f"{e.response.text}"
             )
-            raise MCPToolExecutionError(msg)
+            raise MCPToolExecutionError(
+                msg,
+                server_name=server_name,
+                tool_name=tool_def.name,
+            )
         except Exception as e:
             raise MCPToolExecutionError(
-                f"Failed to execute REST tool '{tool_def.name}': {str(e)}"
+                f"Failed to execute REST tool '{tool_def.name}': {str(e)}",
+                server_name=server_name,
+                tool_name=tool_def.name,
             )
