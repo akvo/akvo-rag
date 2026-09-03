@@ -1,17 +1,19 @@
 import sys
 import logging
 
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
-from app.db.session import SessionLocal
-from app.models.prompt import PromptDefinition, PromptVersion, PromptNameEnum
+
 from app.constants import (
     DEFAULT_CONTEXTUALIZE_PROMPT,
-    DEFAULT_QA_STRICT_PROMPT,
     DEFAULT_QA_FLEXIBLE_PROMPT,
+    DEFAULT_QA_STRICT_PROMPT,
 )
+from app.db.session import SessionLocal
+from app.models.prompt import PromptDefinition, PromptNameEnum, PromptVersion
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("prompt_seeder")
 
 # Define the initial prompts and versions
 INITIAL_PROMPTS = {
@@ -36,16 +38,15 @@ INITIAL_PROMPTS = {
 }
 
 
-def seed_prompts():
+def seed_prompts() -> None:
     db = SessionLocal()
     try:
         for prompt_name, prompt_data in INITIAL_PROMPTS.items():
             # Check if definition already exists
-            definition = (
-                db.query(PromptDefinition)
-                .filter_by(name=prompt_name.value)
-                .first()
+            stmt = select(PromptDefinition).where(
+                PromptDefinition.name == prompt_name.value
             )
+            definition = db.execute(stmt).scalar_one_or_none()
 
             if not definition:
                 definition = PromptDefinition(name=prompt_name.value)
@@ -62,32 +63,36 @@ def seed_prompts():
                 db.add(version)
                 logger.info("Seeded new prompt: %s", prompt_name)
             else:
-                # Check if the latest active version matches the current content
-                active_version = (
-                    db.query(PromptVersion)
-                    .filter_by(
-                        prompt_definition_id=definition.id, is_active=True
-                    )
-                    .first()
+                # Check if the latest active version matches current content
+                active_stmt = select(PromptVersion).where(
+                    PromptVersion.prompt_definition_id == definition.id,
+                    PromptVersion.is_active == True,  # noqa: E712
                 )
+                active_version = db.execute(active_stmt).scalar_one_or_none()
 
                 if (
                     not active_version
                     or active_version.content != prompt_data["content"]
                 ):
                     # Deactivate existing active versions
-                    db.query(PromptVersion).filter_by(
-                        prompt_definition_id=definition.id
-                    ).update({"is_active": False})
+                    deactivate_stmt = select(PromptVersion).where(
+                        PromptVersion.prompt_definition_id == definition.id,
+                        PromptVersion.is_active == True,  # noqa: E712
+                    )
+                    existing_actives = (
+                        db.execute(deactivate_stmt).scalars().all()
+                    )
+                    for act_v in existing_actives:
+                        act_v.is_active = False
 
-                    # Get the highest version number
-                    from sqlalchemy import func
-
+                    # Get highest version number
+                    max_v_stmt = select(
+                        func.max(PromptVersion.version_number)
+                    ).where(
+                        PromptVersion.prompt_definition_id == definition.id
+                    )
                     max_version = (
-                        db.query(func.max(PromptVersion.version_number))
-                        .filter_by(prompt_definition_id=definition.id)
-                        .scalar()
-                        or 0
+                        db.execute(max_v_stmt).scalar_one_or_none() or 0
                     )
 
                     new_version = PromptVersion(
@@ -115,7 +120,7 @@ def seed_prompts():
 
     except SQLAlchemyError as e:
         db.rollback()
-        logger.error("❌ Error during seeding:", str(e), file=sys.stderr)
+        logger.error("❌ Error during seeding: %s", str(e), file=sys.stderr)
     finally:
         db.close()
 
