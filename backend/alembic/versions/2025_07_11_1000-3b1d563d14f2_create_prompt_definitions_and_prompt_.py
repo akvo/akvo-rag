@@ -2,7 +2,6 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import mysql
 
 # revision identifiers, used by Alembic.
 revision: str = "3b1d563d14f2"
@@ -37,7 +36,7 @@ def upgrade() -> None:
         "prompt_versions",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("prompt_definition_id", sa.Integer(), nullable=False),
-        sa.Column("content", mysql.LONGTEXT(), nullable=False),
+        sa.Column("content", sa.Text(), nullable=False),
         sa.Column("version_number", sa.Integer(), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column("activated_by_user_id", sa.Integer(), nullable=True),
@@ -64,14 +63,29 @@ def upgrade() -> None:
         unique=False,
     )
 
-    op.drop_index(op.f("ix_api_keys_name"), table_name="api_keys")
-    op.drop_index(op.f("key"), table_name="api_keys")
-    op.drop_index(
-        op.f("ix_document_uploads_created_at"), table_name="document_uploads"
-    )
-    op.drop_index(
-        op.f("ix_document_uploads_status"), table_name="document_uploads"
-    )
+    bind = op.get_bind()
+    if bind.dialect.name == "mysql":
+        op.drop_index(op.f("ix_api_keys_name"), table_name="api_keys")
+        op.drop_index(op.f("key"), table_name="api_keys")
+        op.drop_index(
+            op.f("ix_document_uploads_created_at"),
+            table_name="document_uploads",
+        )
+        op.drop_index(
+            op.f("ix_document_uploads_status"), table_name="document_uploads"
+        )
+    elif bind.dialect.name == "postgresql":
+        op.execute("DROP INDEX IF EXISTS ix_api_keys_name;")
+        op.execute("DROP INDEX IF EXISTS key;")
+        op.execute("DROP INDEX IF EXISTS ix_api_keys_key;")
+        op.execute(
+            "ALTER TABLE api_keys DROP CONSTRAINT IF EXISTS api_keys_key_key;"
+        )
+        op.execute(
+            "ALTER TABLE api_keys DROP CONSTRAINT IF EXISTS uq_api_keys_key;"
+        )
+        op.execute("DROP INDEX IF EXISTS ix_document_uploads_created_at;")
+        op.execute("DROP INDEX IF EXISTS ix_document_uploads_status;")
     op.create_index(
         op.f("ix_document_uploads_id"),
         "document_uploads",
@@ -81,38 +95,38 @@ def upgrade() -> None:
     op.alter_column(
         "documents",
         "file_size",
-        existing_type=mysql.INTEGER(),
+        existing_type=sa.Integer(),
         type_=sa.BigInteger(),
         nullable=False,
     )
     op.alter_column(
         "documents",
         "content_type",
-        existing_type=mysql.VARCHAR(length=100),
+        existing_type=sa.String(length=100),
         nullable=False,
     )
     op.alter_column(
         "documents",
         "created_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         nullable=True,
     )
     op.alter_column(
         "documents",
         "updated_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         nullable=True,
     )
     op.alter_column(
         "knowledge_bases",
         "created_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         nullable=True,
     )
     op.alter_column(
         "knowledge_bases",
         "updated_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         nullable=True,
     )
     # ### end Alembic commands ###
@@ -123,38 +137,38 @@ def downgrade() -> None:
     op.alter_column(
         "knowledge_bases",
         "updated_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         nullable=False,  # Revert to original nullable=False
     )
     op.alter_column(
         "knowledge_bases",
         "created_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         nullable=False,  # Revert to original nullable=False
     )
     op.alter_column(
         "documents",
         "updated_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         nullable=False,  # Revert to original nullable=False
     )
     op.alter_column(
         "documents",
         "created_at",
-        existing_type=mysql.DATETIME(),
+        existing_type=sa.DateTime(),
         nullable=False,  # Revert to original nullable=False
     )
     op.alter_column(
         "documents",
         "content_type",
-        existing_type=mysql.VARCHAR(length=100),
+        existing_type=sa.String(length=100),
         nullable=True,  # Revert to original nullable=True
     )
     op.alter_column(
         "documents",
         "file_size",
         existing_type=sa.BigInteger(),
-        type_=mysql.INTEGER(),
+        type_=sa.Integer(),
         nullable=True,  # Revert to original nullable=True
     )
 
@@ -180,11 +194,30 @@ def downgrade() -> None:
     )
 
     # REVERT PROMPT
-    op.drop_constraint(
-        "prompt_versions_ibfk_2",
-        "prompt_versions",
-        type_="foreignkey",
-    )
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            "ALTER TABLE prompt_versions "
+            "DROP CONSTRAINT IF EXISTS "
+            "prompt_versions_prompt_definition_id_fkey;"
+        )
+        op.execute(
+            "ALTER TABLE prompt_versions "
+            "DROP CONSTRAINT IF EXISTS prompt_versions_created_by_fkey;"
+        )
+        op.execute(
+            "ALTER TABLE prompt_versions "
+            "DROP CONSTRAINT IF EXISTS prompt_versions_ibfk_2;"
+        )
+    elif bind.dialect.name == "mysql":
+        try:
+            op.drop_constraint(
+                "prompt_versions_ibfk_2",
+                "prompt_versions",
+                type_="foreignkey",
+            )
+        except Exception:
+            pass
     op.drop_index(
         op.f("ix_prompt_versions_prompt_definition_id"),
         table_name="prompt_versions",

@@ -26,10 +26,28 @@ def upgrade() -> None:
     op.add_column(
         "users", sa.Column("approved_at", sa.DateTime(), nullable=True)
     )
-    op.create_foreign_key(None, "users", "users", ["approved_by"], ["id"])
+    op.create_foreign_key(
+        "fk_users_approved_by", "users", "users", ["approved_by"], ["id"]
+    )
 
 
 def downgrade() -> None:
-    op.drop_constraint(None, "users", type_="foreignkey")
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            "ALTER TABLE users "
+            "DROP CONSTRAINT IF EXISTS fk_users_approved_by;"
+        )
+        op.execute(
+            "ALTER TABLE users "
+            "DROP CONSTRAINT IF EXISTS users_approved_by_fkey;"
+        )
+    else:
+        try:
+            op.drop_constraint(
+                "fk_users_approved_by", "users", type_="foreignkey"
+            )
+        except Exception:
+            pass
     op.drop_column("users", "approved_at")
     op.drop_column("users", "approved_by")

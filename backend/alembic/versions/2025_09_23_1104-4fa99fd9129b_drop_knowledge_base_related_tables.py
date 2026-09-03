@@ -20,7 +20,6 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import mysql
 
 # revision identifiers, used by Alembic.
 revision: str = "4fa99fd9129b"
@@ -36,49 +35,95 @@ def upgrade() -> None:
     op.execute("DELETE FROM messages;")
     op.execute("DELETE FROM chats;")
 
-    # Reset AUTO_INCREMENT counters
-    op.execute("ALTER TABLE messages AUTO_INCREMENT = 1;")
-    op.execute("ALTER TABLE chats AUTO_INCREMENT = 1;")
+    # Reset AUTO_INCREMENT / sequence counters conditionally
+    bind = op.get_bind()
+    if bind.dialect.name == "mysql":
+        op.execute("ALTER TABLE messages AUTO_INCREMENT = 1;")
+        op.execute("ALTER TABLE chats AUTO_INCREMENT = 1;")
+    elif bind.dialect.name == "postgresql":
+        op.execute("ALTER SEQUENCE IF EXISTS messages_id_seq RESTART WITH 1;")
+        op.execute("ALTER SEQUENCE IF EXISTS chats_id_seq RESTART WITH 1;")
 
     # --- Step 2: Drop FKs and tables in dependency order ---
 
     # --- document_chunks ---
-    op.drop_constraint(
-        "document_chunks_ibfk_1", "document_chunks", type_="foreignkey"
-    )
-    op.drop_constraint(
-        "document_chunks_ibfk_2", "document_chunks", type_="foreignkey"
-    )
+    bind = op.get_bind()
+    if bind.dialect.name == "mysql":
+        op.drop_constraint(
+            "document_chunks_ibfk_1", "document_chunks", type_="foreignkey"
+        )
+        op.drop_constraint(
+            "document_chunks_ibfk_2", "document_chunks", type_="foreignkey"
+        )
+        op.drop_constraint(
+            "processing_tasks_document_upload_id_fkey",
+            "processing_tasks",
+            type_="foreignkey",
+        )
+        op.drop_constraint(
+            "processing_tasks_ibfk_1", "processing_tasks", type_="foreignkey"
+        )
+        op.drop_constraint(
+            "processing_tasks_ibfk_2", "processing_tasks", type_="foreignkey"
+        )
+        op.drop_constraint(
+            "document_uploads_ibfk_1", "document_uploads", type_="foreignkey"
+        )
+        op.drop_constraint("documents_ibfk_1", "documents", type_="foreignkey")
+        op.drop_constraint(
+            "knowledge_bases_ibfk_1", "knowledge_bases", type_="foreignkey"
+        )
+    elif bind.dialect.name == "postgresql":
+        op.execute(
+            "ALTER TABLE document_chunks DROP CONSTRAINT IF EXISTS document_chunks_ibfk_1;"  # noqa
+        )
+        op.execute(
+            "ALTER TABLE document_chunks DROP CONSTRAINT IF EXISTS document_chunks_ibfk_2;"  # noqa
+        )
+        op.execute(
+            "ALTER TABLE document_chunks DROP CONSTRAINT IF EXISTS document_chunks_kb_id_fkey;"  # noqa
+        )
+        op.execute(
+            "ALTER TABLE document_chunks DROP CONSTRAINT IF EXISTS document_chunks_document_id_fkey;"  # noqa
+        )
+        op.execute(
+            "ALTER TABLE processing_tasks DROP CONSTRAINT IF EXISTS processing_tasks_document_upload_id_fkey;"  # noqa
+        )
+        op.execute(
+            "ALTER TABLE processing_tasks DROP CONSTRAINT IF EXISTS processing_tasks_ibfk_1;"  # noqa
+        )
+        op.execute(
+            "ALTER TABLE processing_tasks DROP CONSTRAINT IF EXISTS processing_tasks_ibfk_2;"  # noqa
+        )
+        op.execute(
+            "ALTER TABLE processing_tasks DROP CONSTRAINT IF EXISTS processing_tasks_document_id_fkey;"  # noqa
+        )
+        op.execute(
+            "ALTER TABLE processing_tasks DROP CONSTRAINT IF EXISTS processing_tasks_knowledge_base_id_fkey;"  # noqa
+        )
+        op.execute(
+            "ALTER TABLE document_uploads DROP CONSTRAINT IF EXISTS document_uploads_ibfk_1;"  # noqa
+        )
+        op.execute(
+            "ALTER TABLE document_uploads DROP CONSTRAINT IF EXISTS document_uploads_knowledge_base_id_fkey;"  # noqa
+        )
+        op.execute(
+            "ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_ibfk_1;"
+        )
+        op.execute(
+            "ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_knowledge_base_id_fkey;"  # noqa
+        )
+        op.execute(
+            "ALTER TABLE knowledge_bases DROP CONSTRAINT IF EXISTS knowledge_bases_ibfk_1;"  # noqa
+        )
+        op.execute(
+            "ALTER TABLE knowledge_bases DROP CONSTRAINT IF EXISTS knowledge_bases_user_id_fkey;"  # noqa
+        )
+
     op.drop_table("document_chunks")
-
-    # --- processing_tasks ---
-    op.drop_constraint(
-        "processing_tasks_document_upload_id_fkey",
-        "processing_tasks",
-        type_="foreignkey",
-    )
-    op.drop_constraint(
-        "processing_tasks_ibfk_1", "processing_tasks", type_="foreignkey"
-    )
-    op.drop_constraint(
-        "processing_tasks_ibfk_2", "processing_tasks", type_="foreignkey"
-    )
     op.drop_table("processing_tasks")
-
-    # --- document_uploads ---
-    op.drop_constraint(
-        "document_uploads_ibfk_1", "document_uploads", type_="foreignkey"
-    )
     op.drop_table("document_uploads")
-
-    # --- documents ---
-    op.drop_constraint("documents_ibfk_1", "documents", type_="foreignkey")
     op.drop_table("documents")
-
-    # --- knowledge_bases ---
-    op.drop_constraint(
-        "knowledge_bases_ibfk_1", "knowledge_bases", type_="foreignkey"
-    )
     op.drop_table("knowledge_bases")
 
 
@@ -94,7 +139,7 @@ def downgrade() -> None:
             nullable=False,
         ),
         sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("description", mysql.LONGTEXT, nullable=True),
+        sa.Column("description", sa.Text, nullable=True),
         sa.Column("user_id", sa.Integer, nullable=False),
         sa.Column("created_at", sa.DateTime, nullable=True),
         sa.Column("updated_at", sa.DateTime, nullable=True),
@@ -193,8 +238,10 @@ def downgrade() -> None:
         sa.Column("document_upload_id", sa.Integer, nullable=True),
         sa.PrimaryKeyConstraint("id"),
         sa.Index("ix_processing_tasks_id", "id"),
-        sa.Index("document_id", "document_id"),
-        sa.Index("knowledge_base_id", "knowledge_base_id"),
+        sa.Index("ix_processing_tasks_document_id", "document_id"),
+        sa.Index(
+            "ix_processing_tasks_knowledge_base_id", "knowledge_base_id"
+        ),
         sa.Index(
             "processing_tasks_document_upload_id_fkey", "document_upload_id"
         ),
@@ -232,14 +279,12 @@ def downgrade() -> None:
             "updated_at",
             sa.DateTime,
             nullable=False,
-            server_default=sa.text(
-                "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
-            ),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.Index("idx_kb_file_name", "kb_id", "file_name"),
         sa.Index("ix_document_chunks_hash", "hash"),
-        sa.Index("document_id", "document_id"),
+        sa.Index("ix_document_chunks_document_id", "document_id"),
         sa.ForeignKeyConstraint(
             ["kb_id"], ["knowledge_bases.id"], name="document_chunks_ibfk_1"
         ),
