@@ -1,11 +1,11 @@
 # Feature Specification: `MCPQueueDispatcher` (Redis Request-Reply with Correlation ID)
 
-> **Feature ID:** `010_mcp_302_mcp_queue_dispatcher_spec`  
-> **Task Ref:** `TASK-MCP-302`  
-> **Target Branch:** `epic/rag-monorepo-mcp`  
-> **Status:** `PROPOSED (Under Review)`  
-> **Estimated Effort:** `2.0 hrs (Vibe-Coding) / 1.5 days (Traditional)`  
-> **Author:** Antigravity Architect / Backend & Systems Specialist  
+> **Feature ID:** `010_mcp_302_mcp_queue_dispatcher_spec`
+> **Task Ref:** `TASK-MCP-302`
+> **Target Branch:** `epic/rag-monorepo-mcp`
+> **Status:** `IMPLEMENTED`
+> **Estimated Effort:** `2.0 hrs (Vibe-Coding) / 1.5 days (Traditional)`
+> **Author:** Antigravity Architect / Backend & Systems Specialist
 > **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 7, 8, 9)
 
 ---
@@ -46,13 +46,13 @@ sequenceDiagram
     participant Dispatcher as "MCPQueueDispatcher"
     participant Redis as "Redis 7 Broker"
     participant Worker as "vector-kb-mcp Worker"
-    
+
     LangGraph->>Dispatcher: call_tool("knowledge_bases_mcp", "query_knowledge_base", args)
-    
+
     Note over Dispatcher: 1. Generate correlation_id (e.g. "req-abc-123")<br/>2. Target queue: "mcp:vector:requests"<br/>3. Reply key: "mcp:vector:responses:req-abc-123"
-    
+
     Dispatcher->>Redis: LPUSH mcp:vector:requests { correlation_id, tool, arguments, response_queue }
-    
+
     par Async Dispatcher Wait
         Dispatcher->>Redis: BLPOP mcp:vector:responses:req-abc-123 (timeout=30s)
     and Vector Microservice Processing
@@ -61,7 +61,7 @@ sequenceDiagram
         Worker->>Redis: RPUSH mcp:vector:responses:req-abc-123 { status: "ok", data: { chunks: [...] } }
         Worker->>Redis: EXPIRE mcp:vector:responses:req-abc-123 60
     end
-    
+
     Redis-->>Dispatcher: Returns [key, response_json]
     Dispatcher->>Dispatcher: Deserializes JSON & verifies status == "ok"
     Dispatcher-->>LangGraph: Returns List[RetrievedChunk]

@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     OLLAMA_API_BASE: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "deepseek-r1:7b"
 
+    # REDIS settings
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
     # RABBITMQ
     RABBITMQ_USER: str = os.getenv("RABBITMQ_USER", "rabbitmq")
     RABBITMQ_PASS: str = os.getenv("RABBITMQ_PASS", "rabbitmq")
