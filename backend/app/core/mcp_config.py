@@ -156,3 +156,13 @@ class MCPConfig(BaseModel):
     def list_servers(self) -> List[str]:
         """List names of all registered MCP servers."""
         return list(self.servers.keys())
+
+
+def load_mcp_config(config_path: str = "mcp_config.json") -> MCPConfig:
+    """Convenience helper to load and parse declarative MCP configuration."""
+    return MCPConfig.load_from_file(config_path)
+
+
+def parse_mcp_config(data: Dict[str, Any]) -> MCPConfig:
+    """Convenience helper to parse and validate MCP config dict."""
+    return MCPConfig.model_validate(data)

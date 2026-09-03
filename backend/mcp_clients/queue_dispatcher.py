@@ -136,6 +136,9 @@ class MCPQueueDispatcher:
                 tool_name=tool_name,
             )
 
+    # Alias for flexibility
+    dispatch = call_tool
+
     async def _call_redis_queue(
         self,
         server_name: str,
