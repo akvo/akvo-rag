@@ -18,6 +18,16 @@ class Settings(BaseSettings):
     VERSION: str = "0.1.0"  # Project version
     API_V1_STR: str = "/api"  # API version string
 
+    # CORS settings (comma-separated origins from env)
+    BACKEND_CORS_ORIGINS: list[str] = [
+        origin.strip()
+        for origin in os.getenv(
+            "BACKEND_CORS_ORIGINS",
+            "http://localhost:3000,http://127.0.0.1:3000",
+        ).split(",")
+        if origin.strip()
+    ]
+
     # Database (PostgreSQL) settings
     POSTGRES_SERVER: str = os.getenv(
         "POSTGRES_SERVER", os.getenv("POSTGRES_HOST", "postgres")
