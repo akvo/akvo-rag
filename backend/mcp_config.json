@@ -178,17 +178,141 @@
           }
         },
         {
-          "name": "get_processing_tasks",
-          "description": "Get the processing status of an asynchronous document indexing task.",
+          "name": "register_document",
+          "description": "Register an uploaded document metadata in the knowledge base.",
           "inputSchema": {
             "type": "object",
             "properties": {
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "file_name": {
+                "type": "string",
+                "description": "File name."
+              },
+              "file_path": {
+                "type": "string",
+                "description": "MinIO object path or storage file path."
+              },
+              "file_size": {
+                "type": "integer",
+                "description": "File size in bytes."
+              },
+              "content_type": {
+                "type": "string",
+                "description": "MIME type of document."
+              },
+              "file_hash": {
+                "type": "string",
+                "description": "SHA-256 hash of document content."
+              }
+            },
+            "required": ["kb_id", "file_name", "file_path"]
+          }
+        },
+        {
+          "name": "ingest_document",
+          "description": "Ingest and index a registered document into vector store and full-text search.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "document_id": {
+                "type": "integer",
+                "description": "Document ID."
+              },
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "upload_id": {
+                "type": "string",
+                "description": "Upload task correlation ID."
+              }
+            },
+            "required": ["document_id", "kb_id"]
+          }
+        },
+        {
+          "name": "process_document",
+          "description": "Process and index document chunks into vector store.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "document_id": {
+                "type": "integer",
+                "description": "Document ID."
+              },
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "upload_id": {
+                "type": "string",
+                "description": "Upload task correlation ID."
+              }
+            },
+            "required": ["document_id", "kb_id"]
+          }
+        },
+        {
+          "name": "delete_document",
+          "description": "Delete a document and all its indexed vector chunks from the knowledge base.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "document_id": {
+                "type": "integer",
+                "description": "Document ID to delete."
+              }
+            },
+            "required": ["kb_id", "document_id"]
+          }
+        },
+        {
+          "name": "preview_documents",
+          "description": "Preview chunked and parsed document segments.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "document_ids": {
+                "type": "array",
+                "items": { "type": "integer" },
+                "description": "List of document IDs to preview."
+              }
+            },
+            "required": ["kb_id"]
+          }
+        },
+        {
+          "name": "get_processing_tasks",
+          "description": "Get the processing status of asynchronous document indexing tasks.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "task_ids": {
+                "type": "array",
+                "items": { "type": "integer" },
+                "description": "List of task IDs."
+              },
               "task_id": {
                 "type": "string",
                 "description": "Asynchronous ingestion task ID."
               }
             },
-            "required": ["task_id"]
+            "required": []
           }
         }
       ]

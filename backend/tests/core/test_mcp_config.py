@@ -28,7 +28,7 @@ def test_valid_mcp_config_parsing():
     assert kb_server.response_queue_prefix == "mcp:vector:responses"
     assert kb_server.timeout_seconds == 30
 
-    # Verify all 9 vector tools are present
+    # Verify all 14 vector tools are present
     expected_kb_tools = [
         "query_knowledge_base",
         "list_knowledge_bases",
@@ -38,6 +38,11 @@ def test_valid_mcp_config_parsing():
         "delete_knowledge_base",
         "list_documents",
         "get_document",
+        "register_document",
+        "ingest_document",
+        "process_document",
+        "delete_document",
+        "preview_documents",
         "get_processing_tasks",
     ]
     tool_names = [tool.name for tool in kb_server.tools]
