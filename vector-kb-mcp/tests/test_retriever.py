@@ -137,3 +137,54 @@ async def test_chroma_retriever_empty_input(
     assert await retriever.search(query="", kb_ids=[1, 2]) == []
     assert await retriever.search(query="   ", kb_ids=[1, 2]) == []
     assert await retriever.search(query="valid query", kb_ids=[]) == []
+
+
+@pytest.mark.asyncio
+async def test_chroma_retriever_l2_space_conversion(
+    mock_openai_client,
+):
+    from unittest.mock import MagicMock
+
+    mock_chroma = MagicMock()
+    mock_col = MagicMock()
+    mock_col.name = "kb_l2"
+    mock_col.metadata = {"hnsw:space": "l2"}
+    mock_col.query.return_value = {
+        "ids": [["chunk-l2"]],
+        "documents": [["L2 document content"]],
+        "metadatas": [[{"kb_id": 10, "document_id": "doc-10"}]],
+        "distances": [[0.80]],  # 1.0 - 0.80 / 2.0 = 0.60
+    }
+    mock_chroma.get_collection.return_value = mock_col
+
+    retriever = ChromaRetriever(
+        chroma_client=mock_chroma, openai_client=mock_openai_client
+    )
+    results = await retriever.search(query="test l2", kb_ids=[10])
+    assert len(results) == 1
+    assert results[0].score == 0.60
+
+
+@pytest.mark.asyncio
+async def test_chroma_retriever_score_clamping(mock_openai_client):
+    from unittest.mock import MagicMock
+
+    mock_chroma = MagicMock()
+    mock_col = MagicMock()
+    mock_col.name = "kb_clamp"
+    mock_col.metadata = {"hnsw:space": "cosine"}
+    mock_col.query.return_value = {
+        "ids": [["chunk-far", "chunk-close"]],
+        "documents": [["Far doc", "Close doc"]],
+        "metadatas": [[{"kb_id": 1}, {"kb_id": 1}]],
+        "distances": [[2.5, -0.5]],  # Far -> 0.0, Close -> 1.0
+    }
+    mock_chroma.get_collection.return_value = mock_col
+
+    retriever = ChromaRetriever(
+        chroma_client=mock_chroma, openai_client=mock_openai_client
+    )
+    results = await retriever.search(query="test clamp", kb_ids=[1])
+    assert len(results) == 2
+    assert results[0].score == 1.0
+    assert results[1].score == 0.0

@@ -104,6 +104,27 @@ class LegacyDataMigrator:
         }
 
     @staticmethod
+    def _sanitize_null_bytes(val: Any) -> Any:
+        """
+        Recursively remove null bytes (\x00 / \u0000) from strings,
+        dicts, and lists to satisfy PostgreSQL UTF-8 text/JSONB constraints.
+        """
+        if isinstance(val, str):
+            return val.replace("\x00", "").replace("\u0000", "")
+        elif isinstance(val, dict):
+            return {
+                LegacyDataMigrator._sanitize_null_bytes(k): (
+                    LegacyDataMigrator._sanitize_null_bytes(v)
+                )
+                for k, v in val.items()
+            }
+        elif isinstance(val, list):
+            return [
+                LegacyDataMigrator._sanitize_null_bytes(item) for item in val
+            ]
+        return val
+
+    @staticmethod
     def _parse_datetime(dt_val: Any) -> Optional[datetime]:
         """
         Safely convert string or raw timestamps into timezone-aware datetime.
@@ -139,8 +160,10 @@ class LegacyDataMigrator:
             for row in rows:
                 values = {
                     "id": row["id"],
-                    "name": row["name"],
-                    "description": row.get("description"),
+                    "name": self._sanitize_null_bytes(row["name"]),
+                    "description": self._sanitize_null_bytes(
+                        row.get("description")
+                    ),
                     "is_active": True,
                     "embedding_model": "text-embedding-3-small",
                     "embedding_dim": 1536,
@@ -175,10 +198,12 @@ class LegacyDataMigrator:
                 values = {
                     "id": row["id"],
                     "knowledge_base_id": kb_id,
-                    "file_name": row["file_name"],
-                    "file_path": row["file_path"],
+                    "file_name": self._sanitize_null_bytes(row["file_name"]),
+                    "file_path": self._sanitize_null_bytes(row["file_path"]),
                     "file_size": row["file_size"],
-                    "content_type": row["content_type"],
+                    "content_type": self._sanitize_null_bytes(
+                        row.get("content_type")
+                    ),
                     "file_hash": row["file_hash"],
                     "status": "INDEXED",
                     "doc_version": None,
@@ -233,6 +258,10 @@ class LegacyDataMigrator:
                             elif not isinstance(chunk_metadata, dict):
                                 chunk_metadata = {}
 
+                            chunk_metadata = self._sanitize_null_bytes(
+                                chunk_metadata
+                            )
+
                             kb_id = m.get("kb_id") or m.get(
                                 "knowledge_base_id"
                             )
@@ -245,7 +274,9 @@ class LegacyDataMigrator:
                                 "kb_id": kb_id,
                                 "document_id": m["document_id"],
                                 "chunk_index": m.get("chunk_index", 0),
-                                "file_name": m.get("file_name", ""),
+                                "file_name": self._sanitize_null_bytes(
+                                    m.get("file_name", "")
+                                ),
                                 "chunk_metadata": chunk_metadata,
                                 "content_hash": content_hash,
                                 "created_at": self._parse_datetime(

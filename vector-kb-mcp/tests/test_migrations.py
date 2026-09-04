@@ -147,16 +147,18 @@ async def test_live_postgresql_alembic_upgrade_downgrade(alembic_ini_path):
     if "postgres" not in settings.DATABASE_URL:
         pytest.skip("Not PostgreSQL; skipping live PostgreSQL test.")
 
+    test_db_url = settings.DATABASE_URL.replace("/akvo_rag", "/akvo_rag_test")
+
     # Check connection to PostgreSQL via asyncpg
     try:
-        engine = create_async_engine(settings.DATABASE_URL, echo=False)
+        engine = create_async_engine(test_db_url, echo=False)
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
     except Exception as exc:
         pytest.skip(f"Live PostgreSQL not reachable ({exc}); skipping test.")
 
     alembic_cfg = Config(str(alembic_ini_path))
-    alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+    alembic_cfg.set_main_option("sqlalchemy.url", test_db_url)
 
     # Clean setup: ensure clean state before starting lifecycle assertions
     try:
@@ -223,18 +225,9 @@ async def test_live_postgresql_alembic_upgrade_downgrade(alembic_ini_path):
     except Exception as exc:
         pytest.fail(f"PostgreSQL migration lifecycle test failed: {exc}")
     finally:
-        # Clean teardown
+        # Ensure target database is left upgraded at head
         try:
-            command.downgrade(alembic_cfg, "base")
+            command.upgrade(alembic_cfg, "head")
         except Exception:
             pass
-        async with engine.begin() as conn:
-            for tbl in [
-                "alembic_version_vkb",
-                "vkb_processing_tasks",
-                "vkb_document_chunks",
-                "vkb_documents",
-                "vkb_knowledge_bases",
-            ]:
-                await conn.execute(text(f"DROP TABLE IF EXISTS {tbl} CASCADE"))
         await engine.dispose()

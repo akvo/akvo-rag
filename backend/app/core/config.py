@@ -18,22 +18,74 @@ class Settings(BaseSettings):
     VERSION: str = "0.1.0"  # Project version
     API_V1_STR: str = "/api"  # API version string
 
-    # MySQL settings
+    # CORS settings (comma-separated origins from env)
+    BACKEND_CORS_ORIGINS: list[str] = [
+        origin.strip()
+        for origin in os.getenv(
+            "BACKEND_CORS_ORIGINS",
+            "http://localhost:3000,http://127.0.0.1:3000",
+        ).split(",")
+        if origin.strip()
+    ]
+
+    # Database (PostgreSQL) settings
+    POSTGRES_SERVER: str = os.getenv(
+        "POSTGRES_SERVER", os.getenv("POSTGRES_HOST", "postgres")
+    )
+    POSTGRES_PORT: int = int(os.getenv("POSTGRES_PORT", "5432"))
+    POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
+    POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "postgres")
+    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "akvo_rag")
+    DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL")
+    SQLALCHEMY_DATABASE_URI: Optional[str] = None
+
+    # Legacy MySQL settings (kept for backwards-compatibility fallback)
     MYSQL_SERVER: str = os.getenv("MYSQL_SERVER", "localhost")
     MYSQL_PORT: int = int(os.getenv("MYSQL_PORT", "3306"))
     MYSQL_USER: str = os.getenv("MYSQL_USER", "ragwebui")
     MYSQL_PASSWORD: str = os.getenv("MYSQL_PASSWORD", "ragwebui")
     MYSQL_DATABASE: str = os.getenv("MYSQL_DATABASE", "ragwebui")
-    SQLALCHEMY_DATABASE_URI: Optional[str] = None
 
     @property
     def get_database_url(self) -> str:
         if self.SQLALCHEMY_DATABASE_URI:
             return self.SQLALCHEMY_DATABASE_URI
-        return (
-            f"mysql+mysqlconnector://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}"
-            f"@{self.MYSQL_SERVER}:{self.MYSQL_PORT}/{self.MYSQL_DATABASE}"
-        )
+        if self.DATABASE_URL:
+            url = self.DATABASE_URL
+            if url.startswith("postgresql+asyncpg://"):
+                return url.replace(
+                    "postgresql+asyncpg://",
+                    "postgresql+psycopg2://",
+                )
+            return url
+        user = self.POSTGRES_USER
+        password = self.POSTGRES_PASSWORD
+        server = self.POSTGRES_SERVER
+        port = self.POSTGRES_PORT
+        db = self.POSTGRES_DB
+        return f"postgresql+psycopg2://{user}:{password}@{server}:{port}/{db}"
+
+    @property
+    def get_async_database_url(self) -> str:
+        if self.DATABASE_URL:
+            url = self.DATABASE_URL
+            if url.startswith("postgresql://"):
+                return url.replace(
+                    "postgresql://",
+                    "postgresql+asyncpg://",
+                )
+            if url.startswith("postgresql+psycopg2://"):
+                return url.replace(
+                    "postgresql+psycopg2://",
+                    "postgresql+asyncpg://",
+                )
+            return url
+        user = self.POSTGRES_USER
+        password = self.POSTGRES_PASSWORD
+        server = self.POSTGRES_SERVER
+        port = self.POSTGRES_PORT
+        db = self.POSTGRES_DB
+        return f"postgresql+asyncpg://{user}:{password}@{server}:{port}/{db}"
 
     # JWT settings
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-here")
@@ -65,6 +117,9 @@ class Settings(BaseSettings):
     # Ollama settings
     OLLAMA_API_BASE: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "deepseek-r1:7b"
+
+    # REDIS settings
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
     # RABBITMQ
     RABBITMQ_USER: str = os.getenv("RABBITMQ_USER", "rabbitmq")
@@ -101,6 +156,15 @@ class Settings(BaseSettings):
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = int(
         os.getenv("PASSWORD_RESET_TOKEN_EXPIRE_MINUTES", "60")
     )
+
+    # MinIO Object Storage
+    MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", "minio:9000")
+    MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+    MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY", "minioadmin")
+    MINIO_BUCKET_DOCUMENTS: str = os.getenv(
+        "MINIO_BUCKET_DOCUMENTS", "documents"
+    )
+    MINIO_SECURE: bool = os.getenv("MINIO_SECURE", "False").lower() == "true"
 
     class Config:
         env_file = ".env"

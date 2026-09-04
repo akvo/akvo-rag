@@ -1,6 +1,14 @@
+"""
+DEPRECATION NOTICE:
+ScopingAgent is deprecated as of TASK-MCP-304.
+All RAG retrieval workflows route directly to Redis RPC via MCPQueueDispatcher.
+This file is maintained for legacy backwards compatibility only.
+"""
+
 import json
 import logging
 import re
+import warnings
 from typing import Dict, Any, Optional
 
 import jsonschema
@@ -22,14 +30,21 @@ def _extract_json(raw_output: str) -> str:
 
 class ScopingAgent:
     """
-    Scoping agent that loads discovery data and asks an LLM
+    [DEPRECATED] Scoping agent that loads discovery data and asks an LLM
     to choose the right MCP server, tool, and parameters.
+    Superseded by direct vector queue routing via MCPQueueDispatcher.
     """
 
     def __init__(
         self,
         discovery_file: str = "mcp_discovery.json",
     ):
+        warnings.warn(
+            "ScopingAgent is deprecated; use direct vector routing "
+            "via MCPQueueDispatcher.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.discovery_file = discovery_file
         self.llm = LLMFactory.create()
 
@@ -61,7 +76,7 @@ class ScopingAgent:
         knowledge_base_ids = scope.get("knowledge_base_ids", [])
 
         kb_instruction = (
-            "Use ONLY the provided knowledge_base_ids and do NOT choose new IDs."
+            "Use ONLY the provided knowledge_base_ids and do NOT choose new IDs."  # noqa
             if knowledge_base_ids
             else "No KB IDs provided; select appropriately."
         )
@@ -91,14 +106,17 @@ class ScopingAgent:
 
         # System prompt header
         system_prompt = f"""
-            You are a strict scoping agent. Your task is to choose the best MCP server, the appropriate tool, and construct the input JSON for the tool according to its inputSchema.
+            You are a strict scoping agent. Your task is to choose the
+            best MCP server, the appropriate tool, and construct the
+            input JSON for the tool according to its inputSchema.
             {kb_instruction}
         """
 
         # System prompt rule
         system_prompt += """
             Follow these rules strictly:
-            1. Always respond with a single valid JSON object with exactly these keys:
+            1. Always respond with a single valid JSON object
+            with exactly these keys:
             {
                 "server_name": "...",
                 "tool_name": "...",
@@ -108,12 +126,16 @@ class ScopingAgent:
             2. Never return anything outside this JSON object.
             - Do NOT include markdown, code fences, explanations, or comments.
             - Do NOT return only part of the keys.
-            - Do NOT hallucinate tool or server names; use only the provided servers_info.
+            - Do NOT hallucinate tool or server names; use only
+            the provided servers_info.
 
-            3. Ensure all required keys in the tool's inputSchema are present in "input".
+            3. Ensure all required keys in the tool's
+            inputSchema are present in "input".
             4. If a parameter is optional, include it only if necessary.
-            5. Do NOT hallucinate tool names or server names. Only use names present in the provided servers_info.
-            6. The "input" must always be a valid JSON object according to the tool's inputSchema.
+            5. Do NOT hallucinate tool names or server names. Only use names
+            present in the provided servers_info.
+            6. The "input" must always be a valid JSON object according to the
+            tool's inputSchema.
 
             Here is the query and servers_info:
 
@@ -215,7 +237,7 @@ class ScopingAgent:
 
         if not server_name or not tool_name:
             logger.warning(
-                f"[ScopingAgent] Invalid empty suggestion values ({server_name}.{tool_name}). Using fallback."
+                f"[ScopingAgent] Invalid empty suggestion values ({server_name}.{tool_name}). Using fallback."  # noqa
             )
             return fallback
 
@@ -224,7 +246,7 @@ class ScopingAgent:
                 discovery_data, server_name, tool_name, tool_input
             ):
                 logger.warning(
-                    "[ScopingAgent] Suggested input schema validation failed. Using fallback."
+                    "[ScopingAgent] Suggested input schema validation failed. Using fallback."  # noqa
                 )
                 return fallback
         except Exception as e:

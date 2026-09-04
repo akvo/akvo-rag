@@ -38,38 +38,43 @@ async def test_worker_initialization_and_stubs(
     assert "get_document" in worker.tool_handlers
     assert "get_processing_tasks" in worker.tool_handlers
 
-    # Test stubs directly
+    # Test tool handlers directly
     res_kbs = await worker.tool_handlers["list_knowledge_bases"]({})
-    assert res_kbs == {"knowledge_bases": []}
+    assert "knowledge_bases" in res_kbs
+    assert isinstance(res_kbs["knowledge_bases"], list)
 
     res_get_kb = await worker.tool_handlers["get_knowledge_base"](
-        {"kb_id": 42}
+        {"kb_id": 999999}
     )
-    assert res_get_kb == {"id": 42, "status": "ACTIVE"}
+    assert res_get_kb["knowledge_base"] is None
 
     res_create_kb = await worker.tool_handlers["create_knowledge_base"](
-        {"name": "New KB"}
+        {"name": "New KB Test"}
     )
     assert res_create_kb["status"] == "created"
+    assert "knowledge_base" in res_create_kb
+    created_id = res_create_kb["kb_id"]
 
     res_update_kb = await worker.tool_handlers["update_knowledge_base"](
-        {"kb_id": 42}
+        {"kb_id": created_id, "name": "Updated KB Test"}
     )
-    assert res_update_kb == {"status": "updated"}
+    assert res_update_kb["status"] == "updated"
 
     res_del_kb = await worker.tool_handlers["delete_knowledge_base"](
-        {"kb_id": 42}
+        {"kb_id": created_id}
     )
-    assert res_del_kb == {"status": "deleted"}
+    assert res_del_kb == {"status": "deleted", "kb_id": created_id}
 
-    res_docs = await worker.tool_handlers["list_documents"]({"kb_id": 42})
-    assert res_docs == {"documents": []}
+    res_docs = await worker.tool_handlers["list_documents"]({"kb_id": 999999})
+    assert "documents" in res_docs
+    assert isinstance(res_docs["documents"], list)
 
-    res_doc = await worker.tool_handlers["get_document"]({"doc_id": "doc-1"})
-    assert res_doc == {"document": {}}
+    res_doc = await worker.tool_handlers["get_document"]({"doc_id": 999999})
+    assert res_doc["document"] is None
 
     res_tasks = await worker.tool_handlers["get_processing_tasks"]({})
-    assert res_tasks == {"tasks": []}
+    assert "tasks" in res_tasks
+    assert isinstance(res_tasks["tasks"], list)
 
 
 @pytest.mark.asyncio
@@ -156,7 +161,8 @@ async def test_worker_rpc_tool_alias(
     resp_raw = await fake_redis.lpop(resp_key)
     resp = json.loads(resp_raw)
     assert resp["status"] == "ok"
-    assert resp["data"] == {"knowledge_bases": []}
+    assert "knowledge_bases" in resp["data"]
+    assert isinstance(resp["data"]["knowledge_bases"], list)
 
 
 @pytest.mark.asyncio

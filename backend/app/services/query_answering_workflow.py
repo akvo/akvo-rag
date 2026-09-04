@@ -14,14 +14,15 @@ from langchain_core.prompts import (
 from langchain.chains.combine_documents import create_stuff_documents_chain
 
 from app.services.llm.llm_factory import LLMFactory
-from mcp_clients.mcp_client_manager import MCPClientManager
-from app.services.scoping_agent import ScopingAgent
+from mcp_clients.queue_dispatcher import MCPQueueDispatcher
 
 # ---------------------------------------------------------------------
-# Logging setup
+# Logging setup & Global Dispatcher
 # ---------------------------------------------------------------------
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+_mcp_dispatcher = MCPQueueDispatcher()
 
 
 # ---------------------------------------------------------------------
@@ -34,15 +35,17 @@ class GraphState(TypedDict, total=False):
     qa_prompt_str: str
     intent: str
     contextual_query: str
+    knowledge_base_ids: List[int]
+    top_k: int
     scope: Dict[str, Any]
     mcp_result: Any
-    context: list
+    context: List[Document]
     answer: str
     error: Optional[str]
 
 
 # ---------------------------------------------------------------------
-# Helper: Decode Base64 MCP Context
+# Helper: Decode Base64 MCP Context (Legacy / UI Compatibility)
 # ---------------------------------------------------------------------
 def decode_mcp_context(base64_context: str) -> List[Document]:
     """Sanitize chat history by removing internal context prefixes.
@@ -160,13 +163,14 @@ async def classify_intent_node(state: GraphState) -> GraphState:
         - \"small_talk\": greetings, casual or social conversation, polite
           chit-chat (e.g., \"hi\", \"how are you\", \"thanks\").
         - \"weather_query\": questions or comments about weather or climate
-          (e.g., \"is it raining\", \"how hot is it\", \"what's the forecast\").
+          (e.g., \"is it raining\", \"how hot is it\",
+          \"what's the forecast\").
         - \"memory_query\": questions about the current conversation,
           previous messages, or what the AI remembers (e.g., \"do you
           remember?\", \"what did we talk about?\").
-        - "knowledge_query": factual or instructional questions that require a
-          knowledge base or reasoning (e.g., "how to plant corn",
-          "what is fertilizer A", "explain soil acidity").
+        - \"knowledge_query\": factual or instructional questions that
+          require a knowledge base or reasoning (e.g., \"how to plant corn\",
+          \"what is fertilizer A\", \"explain soil acidity\").
 
         Return ONLY a valid JSON object, for example:
         {"intent": "small_talk"}
@@ -276,57 +280,99 @@ async def contextualize_node(state: GraphState) -> GraphState:
         return {**state, "error": str(e)}
 
 
-async def scoping_node(state: GraphState) -> GraphState:
-    """Determine the MCP tool scope using ScopingAgent."""
-    if state.get("error"):
-        return state
-
-    try:
-        query = state.get("contextual_query")
-        if not query:
-            raise KeyError("contextual_query missing in state")
-
-        agent = ScopingAgent()
-        scope = await agent.scope_query(
-            query=query, scope=state.get("scope", {})
-        )
-        logger.info(f"Scope determined: {scope}")
-        return {**state, "scope": scope}
-
-    except Exception as e:
-        logger.exception(f"scoping_node failed: {e}")
-        return {**state, "error": str(e)}
-
-
 async def run_mcp_tool_node(state: GraphState) -> GraphState:
-    """Run the MCP tool using the determined scope."""
+    """
+    Executes vector retrieval directly via MCPQueueDispatcher without
+    ScopingAgent or Base64 wrapping.
+    """
     if state.get("error"):
         return state
 
+    query = state.get("contextual_query") or state.get("query", "")
+    knowledge_base_ids = state.get("knowledge_base_ids")
+    if knowledge_base_ids is None and state.get("scope"):
+        scope_obj = state.get("scope", {})
+        knowledge_base_ids = scope_obj.get(
+            "knowledge_base_ids"
+        ) or scope_obj.get("input", {}).get("knowledge_base_ids")
+    if knowledge_base_ids is None:
+        knowledge_base_ids = []
+
+    top_k = state.get("top_k")
+    if top_k is None and state.get("scope"):
+        scope_obj = state.get("scope", {})
+        top_k = scope_obj.get("top_k") or scope_obj.get("input", {}).get(
+            "top_k"
+        )
+    if top_k is None:
+        top_k = 5
+
+    logger.info(
+        f"[run_mcp_tool_node] Querying KBs: {knowledge_base_ids} "
+        f"for query: '{query}'"
+    )
+
     try:
-        manager = MCPClientManager()
-        scope = state.get("scope", {})
-        server_name = scope.get("server_name")
-        tool_name = scope.get("tool_name")
-
-        if not server_name or not tool_name:
-            raise ValueError(
-                f"Invalid scope: server_name={server_name}, "
-                f"tool_name={tool_name}"
-            )
-
-        result = await manager.run_tool(
-            server_name=server_name,
-            tool_name=tool_name,
-            param=scope.get("input", {}),
+        # Direct Redis RPC call to vector-kb-mcp microservice
+        result = await _mcp_dispatcher.call_tool(
+            server_name="knowledge_bases_mcp",
+            tool_name="query_knowledge_base",
+            arguments={
+                "query": query,
+                "knowledge_base_ids": knowledge_base_ids,
+                "kb_ids": knowledge_base_ids,
+                "top_k": top_k,
+                "score_threshold": 0.0,
+            },
         )
 
-        logger.info("MCP tool executed successfully.")
-        return {**state, "mcp_result": result}
+        chunks = result.get("chunks", []) if isinstance(result, dict) else []
+        documents = []
+        for chunk in chunks:
+            if isinstance(chunk, dict):
+                text = (
+                    chunk.get("content")
+                    or chunk.get("text")
+                    or chunk.get("page_content")
+                    or ""
+                )
+                metadata = dict(chunk.get("metadata") or {})
+                if "chunk_id" in chunk:
+                    metadata["chunk_id"] = chunk["chunk_id"]
+                if "document_id" in chunk:
+                    metadata["document_id"] = chunk["document_id"]
+                if "kb_id" in chunk:
+                    metadata["kb_id"] = chunk["kb_id"]
+                if "score" in chunk:
+                    metadata["score"] = chunk["score"]
+                documents.append(
+                    Document(page_content=text, metadata=metadata)
+                )
+            elif hasattr(chunk, "page_content"):
+                documents.append(chunk)
+
+        logger.info(
+            f"[run_mcp_tool_node] Retrieved {len(documents)} "
+            "semantic document chunks"
+        )
+        return {
+            **state,
+            "context": documents,
+            "mcp_result": result,
+            "error": None,
+        }
 
     except Exception as e:
-        logger.exception(f"run_mcp_tool_node failed: {e}")
-        return {**state, "error": str(e)}
+        logger.error(
+            f"[run_mcp_tool_node] MCP tool execution failed: {e}",
+            exc_info=True,
+        )
+        return {
+            **state,
+            "context": [],
+            "mcp_result": None,
+            "error": str(e),
+        }
 
 
 async def error_handler_node(state: GraphState) -> GraphState:
@@ -424,8 +470,11 @@ async def error_handler_node(state: GraphState) -> GraphState:
             }
 
 
-async def post_processing_node(state):
-    """Extract and normalize MCP tool result into Document list format."""
+async def post_processing_node(state: GraphState) -> GraphState:
+    """
+    Extract and normalize MCP tool result into Document list format
+    (Legacy compatibility).
+    """
     if state.get("error"):
         return state
 
@@ -442,70 +491,42 @@ async def post_processing_node(state):
             state["context"] = []
             return state
 
+        # If it's already a dict with chunks from Redis queue dispatcher
+        if isinstance(mcp_result, dict) and "chunks" in mcp_result:
+            chunks = mcp_result.get("chunks", [])
+            docs = []
+            for c in chunks:
+                if isinstance(c, dict):
+                    txt = (
+                        c.get("content")
+                        or c.get("text")
+                        or c.get("page_content")
+                        or ""
+                    )
+                    docs.append(
+                        Document(
+                            page_content=txt,
+                            metadata=c.get("metadata", {}),
+                        )
+                    )
+            state["context"] = docs
+            return state
+
         # --- Try decode Knowledge Base (base64 encoded) context ---
         try:
-            b64_text = mcp_result.content[0].text
+            b64_text = getattr(mcp_result, "content", [None])[0].text
             b64 = json.loads(b64_text)
-            logger.debug(
-                "[post_processing_node] Detected KB/Chroma-style "
-                "base64 context."
-            )
             contexts = decode_mcp_context(
                 base64_context=b64.get("context", "")
             )
             state["context"] = ensure_documents(contexts)
-            logger.info(
-                "[post_processing_node] Successfully decoded base64 context."
-            )
             return state
-
-        except Exception as e:
-            logger.debug(
-                f"[post_processing_node] Not a base64 KB context: {e}"
-            )
-
-        # --- Otherwise, assume it's a REST MCP JSON result ---
-        json_result = None
-
-        if isinstance(mcp_result, dict):
-            logger.debug(
-                "[post_processing_node] Detected dict-based MCP result."
-            )
-            json_result = mcp_result
-
-        elif hasattr(mcp_result, "content"):
-            try:
-                text = getattr(mcp_result.content[0], "text", "")
-                logger.debug(
-                    f"[post_processing_node] Parsing .content text: "
-                    f"{text[:200]}..."
-                )
-                json_result = json.loads(text)
-                logger.info(
-                    "[post_processing_node] Parsed REST MCP JSON result "
-                    "successfully."
-                )
-            except Exception as e:
-                logger.warning(
-                    f"[post_processing_node] Failed to parse REST MCP "
-                    f"result as JSON: {e}"
-                )
-                json_result = {"raw_text": str(mcp_result)}
-
-        else:
-            logger.warning(
-                "[post_processing_node] Unknown MCP result type, wrapping as "
-                "string."
-            )
-            json_result = {"raw_text": str(mcp_result)}
+        except Exception:
+            pass
 
         # Normalize result to Document list
-        docs = ensure_documents(json_result)
+        docs = ensure_documents(mcp_result)
         state["context"] = docs
-        logger.info(
-            f"[post_processing_node] Generated {len(docs)} "
-            f"Document(s) from MCP result."
-        )
 
     except Exception as e:
         logger.exception(
@@ -559,7 +580,7 @@ async def response_generation_node(state: GraphState):
 
 
 # ---------------------------------------------------------------------
-# Conditional routing function
+# Conditional routing functions
 # ---------------------------------------------------------------------
 def check_mcp_success(state: GraphState) -> str:
     """Route to error handler if there's an error, otherwise continue."""
@@ -568,54 +589,62 @@ def check_mcp_success(state: GraphState) -> str:
     return "success"
 
 
-# ---------------------------------------------------------------------
-# Build Workflow Graph
-# ---------------------------------------------------------------------
-workflow = StateGraph(GraphState)
-workflow.add_node("classify_intent", classify_intent_node)
-workflow.add_node("small_talk", small_talk_node)
-workflow.add_node("contextualize", contextualize_node)
-workflow.add_node("scope", scoping_node)
-workflow.add_node("run_mcp", run_mcp_tool_node)
-workflow.add_node("error_handler", error_handler_node)
-workflow.add_node("post_process", post_processing_node)
-workflow.add_node("generate", response_generation_node)
-
-workflow.set_entry_point("classify_intent")
-
-workflow.add_conditional_edges(
-    "classify_intent",
-    lambda s: s.get("intent", "knowledge_query"),
-    {
-        "small_talk": "small_talk",
-        "weather_query": "contextualize",
-        "memory_query": "contextualize",
-        "knowledge_query": "contextualize",
-    },
-)
-
-
 def route_after_contextualize(state: GraphState) -> str:
-    """Route to scope if retrieval is needed, otherwise to generate."""
+    """Route to memory query generation or direct vector retrieval."""
     if state.get("intent") == "memory_query":
         return "memory"
     return "retrieval"
 
 
-workflow.add_conditional_edges(
-    "contextualize",
-    route_after_contextualize,
-    {"memory": "generate", "retrieval": "scope"},
-)
-workflow.add_edge("scope", "run_mcp")
+# ---------------------------------------------------------------------
+# Build Workflow Graph (Clean RAG Pipeline without Scoping bottleneck)
+# ---------------------------------------------------------------------
+def create_rag_graph():
+    """
+    Constructs the streamlined LangGraph for RAG QA:
+    1. classify_intent -> small_talk | contextualize
+    2. contextualize   -> generate (memory_query) | run_mcp (direct Redis RPC)
+    3. run_mcp         -> generate (success) | error_handler (error)
+    """
+    wf = StateGraph(GraphState)
+    wf.add_node("classify_intent", classify_intent_node)
+    wf.add_node("small_talk", small_talk_node)
+    wf.add_node("contextualize", contextualize_node)
+    wf.add_node("run_mcp", run_mcp_tool_node)
+    wf.add_node("error_handler", error_handler_node)
+    wf.add_node("generate", response_generation_node)
 
-# Add conditional routing after run_mcp to handle errors
-workflow.add_conditional_edges(
-    "run_mcp",
-    check_mcp_success,
-    {"success": "post_process", "error": "error_handler"},
-)
+    wf.set_entry_point("classify_intent")
 
-workflow.add_edge("post_process", "generate")
+    wf.add_conditional_edges(
+        "classify_intent",
+        lambda s: s.get("intent", "knowledge_query"),
+        {
+            "small_talk": "small_talk",
+            "weather_query": "contextualize",
+            "memory_query": "contextualize",
+            "knowledge_query": "contextualize",
+        },
+    )
 
+    wf.add_conditional_edges(
+        "contextualize",
+        route_after_contextualize,
+        {"memory": "generate", "retrieval": "run_mcp"},
+    )
+
+    wf.add_conditional_edges(
+        "run_mcp",
+        check_mcp_success,
+        {"success": "generate", "error": "error_handler"},
+    )
+
+    wf.add_edge("small_talk", "__end__")
+    wf.add_edge("error_handler", "__end__")
+    wf.add_edge("generate", "__end__")
+
+    return wf
+
+
+workflow = create_rag_graph()
 query_answering_workflow = workflow.compile()
