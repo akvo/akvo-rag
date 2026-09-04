@@ -1,11 +1,11 @@
 # Feature Specification: Native Async Redis Ingestion Consumer in `vector-kb-mcp`
 
-> **Feature ID:** `016_ing_402_native_async_redis_ingestion_consumer_spec`  
-> **Task Ref:** `TASK-ING-402`  
-> **Target Branch:** `epic/rag-monorepo-mcp`  
-> **Status:** `PROPOSED (Party Mode Approved)`  
-> **Estimated Effort:** `2.0 hrs (Vibe-Coding) / 1.5 days (Traditional)`  
-> **Author:** Antigravity Architect / Vector Ingestion & Microservices Specialist  
+> **Feature ID:** `016_ing_402_native_async_redis_ingestion_consumer_spec`
+> **Task Ref:** `TASK-ING-402`
+> **Target Branch:** `epic/rag-monorepo-mcp`
+> **Status:** `IMPLEMENTED (Verified 94% Coverage)`
+> **Estimated Effort:** `2.0 hrs (Vibe-Coding) / 1.5 days (Traditional)`
+> **Author:** Antigravity Architect / Vector Ingestion & Microservices Specialist
 > **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 4, 7, 8, 9)
 
 ---
@@ -40,13 +40,13 @@ In the legacy architecture, this was handled by heavy synchronous Celery workers
 
 ### 2.1 Four-Way Agent Council Consensus
 
-* **🏗️ Winston (System Architect):**  
+* **🏗️ Winston (System Architect):**
   Isolated collection per knowledge base (`kb_{kb_id}`). Ingestion status machine is strictly atomic: transitions from `PROCESSING` $\rightarrow$ `INDEXED` (with total `chunk_count`) or `FAILED` (with `error_message`). All database mutations run in a single async transaction.
 
-* **💻 Amelia (Senior Developer):**  
+* **💻 Amelia (Senior Developer):**
   Memory-safe in-memory stream processing: Parse directly from MinIO `urllib3` stream without writing to disk. Batch OpenAI embedding calls (up to 100 chunks per request) to prevent API timeouts and optimize token throughput. Implement graceful SIGTERM shutdown so in-flight document processing finishes before container stops.
 
-* **🧪 Murat (Test Architect):**  
+* **🧪 Murat (Test Architect):**
   Comprehensive test scenarios:
   1. Corrupted/unreadable PDF $\rightarrow$ graceful transition to `FAILED` with error log.
   2. Empty text file / scan without text $\rightarrow$ graceful `FAILED` (zero chunks).
@@ -54,7 +54,7 @@ In the legacy architecture, this was handled by heavy synchronous Celery workers
   4. ChromaDB insertion rollback $\rightarrow$ database consistency preserved.
   5. Multi-document concurrent queue processing.
 
-* **🛡️ Rachel (Adversarial Security Red Team):**  
+* **🛡️ Rachel (Adversarial Security Red Team):**
   Security Controls:
   1. **Cross-Tenant Key Guard:** Assert that `minio_key` starts with `kb_{kb_id}/` matching the queue payload to prevent unauthorized cross-tenant file extraction.
   2. **Decompression Bomb Defense:** Enforce a hard ceiling of 25MB on extracted raw text per document.
