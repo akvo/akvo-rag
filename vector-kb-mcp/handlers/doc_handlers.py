@@ -23,7 +23,11 @@ async def handle_list_docs(args: Dict[str, Any]) -> Dict[str, Any]:
     """List documents for a knowledge base."""
     kb_id = args.get("kb_id")
     async with get_db_session() as session:
-        stmt = select(Document).order_by(Document.id.desc())
+        stmt = (
+            select(Document)
+            .options(selectinload(Document.processing_tasks))
+            .order_by(Document.id.desc())
+        )
         if kb_id:
             stmt = stmt.where(Document.knowledge_base_id == kb_id)
         res = await session.execute(stmt)
@@ -38,7 +42,11 @@ async def handle_get_doc(args: Dict[str, Any]) -> Dict[str, Any]:
         return {"error": "Missing document_id", "document": None}
 
     async with get_db_session() as session:
-        stmt = select(Document).where(Document.id == int(doc_id))
+        stmt = (
+            select(Document)
+            .options(selectinload(Document.processing_tasks))
+            .where(Document.id == int(doc_id))
+        )
         res = await session.execute(stmt)
         doc = res.scalar_one_or_none()
         if not doc:

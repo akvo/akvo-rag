@@ -4,6 +4,7 @@ from sqlalchemy.orm import selectinload
 
 from db.session import get_db_session
 from models.knowledge_base import KnowledgeBase
+from models.document import Document
 from handlers.serializers import serialize_kb
 
 
@@ -12,7 +13,11 @@ async def handle_list_kbs(args: Dict[str, Any]) -> Dict[str, Any]:
     async with get_db_session() as session:
         stmt = (
             select(KnowledgeBase)
-            .options(selectinload(KnowledgeBase.documents))
+            .options(
+                selectinload(KnowledgeBase.documents).selectinload(
+                    Document.processing_tasks
+                )
+            )
             .order_by(KnowledgeBase.id.asc())
         )
 
@@ -35,7 +40,11 @@ async def handle_get_kb(args: Dict[str, Any]) -> Dict[str, Any]:
     async with get_db_session() as session:
         stmt = (
             select(KnowledgeBase)
-            .options(selectinload(KnowledgeBase.documents))
+            .options(
+                selectinload(KnowledgeBase.documents).selectinload(
+                    Document.processing_tasks
+                )
+            )
             .where(KnowledgeBase.id == kb_id)
         )
         res = await session.execute(stmt)
