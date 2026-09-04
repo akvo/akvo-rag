@@ -293,9 +293,15 @@ async def test_worker_run_no_redis():
 def test_main_entrypoint():
     with patch(
         "main.VectorMCPWorker.initialize", new_callable=AsyncMock
-    ) as mock_init, patch(
+    ) as mock_rpc_init, patch(
         "main.VectorMCPWorker.run", new_callable=AsyncMock
-    ) as mock_run:
+    ) as mock_rpc_run, patch(
+        "main.IngestionWorker.initialize", new_callable=AsyncMock
+    ) as mock_ing_init, patch(
+        "main.IngestionWorker.run", new_callable=AsyncMock
+    ) as mock_ing_run:
         main()
-        mock_init.assert_awaited_once()
-        mock_run.assert_awaited_once()
+        mock_rpc_init.assert_awaited_once()
+        mock_rpc_run.assert_awaited_once()
+        mock_ing_init.assert_awaited_once()
+        mock_ing_run.assert_awaited_once()
