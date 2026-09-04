@@ -85,6 +85,15 @@ class VectorMCPWorker:
                     api_key=self.settings.OPENAI_API_KEY
                 )
 
+            # 5. Ensure MinIO bucket exists
+            try:
+                from storage.minio_storage import storage_service
+
+                storage_service.ensure_bucket()
+                logger.info("MinIO documents bucket initialized.")
+            except Exception as e:
+                logger.warning("MinIO bucket initialization notice: %s", e)
+
         # 5. Initialize ChromaRetriever if clients are present
         if (
             self.retriever is None
@@ -112,7 +121,6 @@ class VectorMCPWorker:
         return await self.tool_handlers["query_knowledge_base"](args)
 
     async def run(self):
-
         """Run the main async Redis worker event loop."""
         self.running = True
         self._run_task = asyncio.current_task()

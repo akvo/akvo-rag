@@ -81,4 +81,3 @@ def serialize_task(task: ProcessingTask) -> Dict[str, Any]:
             task.updated_at.isoformat() if task.updated_at else None
         ),
     }
-

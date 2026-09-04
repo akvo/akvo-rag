@@ -11,6 +11,10 @@ from handlers.kb_handlers import (
 from handlers.doc_handlers import (
     handle_list_docs,
     handle_get_doc,
+    handle_register_doc,
+    handle_ingest_doc,
+    handle_delete_doc,
+    handle_preview_doc,
     handle_get_tasks,
 )
 from handlers.query_handlers import handle_query_kb
@@ -23,8 +27,15 @@ def build_tool_handlers(
     """
     Build and return the complete tool handler registry map for the worker.
     """
+
     async def _query_handler_wrapper(args: Dict[str, Any]) -> Dict[str, Any]:
         return await handle_query_kb(args, retriever=retriever_getter())
+
+    async def _ingest_handler_wrapper(args: Dict[str, Any]) -> Dict[str, Any]:
+        return await handle_ingest_doc(args, retriever=retriever_getter())
+
+    async def _delete_doc_wrapper(args: Dict[str, Any]) -> Dict[str, Any]:
+        return await handle_delete_doc(args, retriever=retriever_getter())
 
     return {
         "query_knowledge_base": _query_handler_wrapper,
@@ -35,6 +46,11 @@ def build_tool_handlers(
         "delete_knowledge_base": handle_delete_kb,
         "list_documents": handle_list_docs,
         "get_document": handle_get_doc,
+        "register_document": handle_register_doc,
+        "ingest_document": _ingest_handler_wrapper,
+        "process_document": _ingest_handler_wrapper,
+        "delete_document": _delete_doc_wrapper,
+        "preview_documents": handle_preview_doc,
         "get_processing_tasks": handle_get_tasks,
     }
 
@@ -49,6 +65,10 @@ __all__ = [
     "handle_delete_kb",
     "handle_list_docs",
     "handle_get_doc",
+    "handle_register_doc",
+    "handle_ingest_doc",
+    "handle_delete_doc",
+    "handle_preview_doc",
     "handle_get_tasks",
     "serialize_kb",
     "serialize_doc",
