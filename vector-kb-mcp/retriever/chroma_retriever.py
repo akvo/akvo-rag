@@ -96,10 +96,24 @@ class ChromaRetriever:
             )
             ids = results["ids"][0] if results.get("ids") else [""] * len(docs)
 
+            coll_meta = getattr(collection, "metadata", None) or {}
+            if not isinstance(coll_meta, dict):
+                coll_meta = {}
+            space = coll_meta.get("hnsw:space", "l2")
+
             chunks: List[RetrievedChunk] = []
             for doc_text, meta, dist, cid in zip(docs, metas, distances, ids):
-                # Cosine distance to cosine similarity score: 1.0 - distance
-                similarity_score = round(1.0 - float(dist), 4)
+                d = float(dist)
+                if space == "cosine":
+                    similarity_score = round(max(0.0, min(1.0, 1.0 - d)), 4)
+                elif space == "ip":
+                    similarity_score = round(max(0.0, min(1.0, d)), 4)
+                else:
+                    # L2 metric: d = 2 - 2*cos(theta) => cos(theta) = 1 - d/2
+                    similarity_score = round(
+                        max(0.0, min(1.0, 1.0 - (d / 2.0))), 4
+                    )
+
                 meta_dict = meta if isinstance(meta, dict) else {}
 
                 chunks.append(
@@ -202,7 +216,10 @@ class ChromaRetriever:
             return
 
         def _sync_upsert():
-            coll = self.chroma.get_or_create_collection(name=collection_name)
+            coll = self.chroma.get_or_create_collection(
+                name=collection_name,
+                metadata={"hnsw:space": "cosine"},
+            )
             coll.upsert(
                 ids=ids,
                 embeddings=embeddings,

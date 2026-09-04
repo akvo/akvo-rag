@@ -68,6 +68,7 @@ def mock_chroma_client():
     def get_mock_collection(name: str):
         mock_col = MagicMock()
         mock_col.name = name
+        mock_col.metadata = {"hnsw:space": "cosine"}
         if name == "kb_1":
             mock_col.query.return_value = {
                 "ids": [["chunk-1", "chunk-2"]],
