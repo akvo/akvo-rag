@@ -13,8 +13,10 @@ class Settings(BaseSettings):
     REQUEST_QUEUE: str = Field(default="mcp:vector:requests")
     RESPONSE_PREFIX: str = Field(default="mcp:vector:responses")
     RESPONSE_TTL_SECONDS: int = Field(default=60)
+    INGESTION_QUEUE: str = Field(default="document_ingestion")
 
     # Database Configuration (PostgreSQL 17)
+
     DATABASE_URL: str = Field(
         default="postgresql+asyncpg://postgres:postgres@postgres:5432/akvo_rag"
     )

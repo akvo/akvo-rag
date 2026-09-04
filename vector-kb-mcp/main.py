@@ -4,6 +4,7 @@ import signal
 
 from core.config import settings
 from worker import VectorMCPWorker
+from ingestion.worker import IngestionWorker
 
 # Setup logging
 logging.basicConfig(
@@ -14,12 +15,20 @@ logger = logging.getLogger("vector-kb-mcp")
 
 
 async def async_main():
-    worker = VectorMCPWorker()
+    rpc_worker = VectorMCPWorker()
+    await rpc_worker.initialize()
+
+    # Reuse the initialized retriever and
+    # client connections for IngestionWorker
+    ingestion_worker = IngestionWorker(retriever=rpc_worker.retriever)
+    await ingestion_worker.initialize()
+
     loop = asyncio.get_running_loop()
 
     def handle_signal():
         logger.info("Received termination signal.")
-        asyncio.create_task(worker.shutdown())
+        asyncio.create_task(rpc_worker.shutdown())
+        asyncio.create_task(ingestion_worker.shutdown())
 
     for sig in (signal.SIGTERM, signal.SIGINT):
         try:
@@ -28,12 +37,15 @@ async def async_main():
             pass
 
     try:
-        await worker.initialize()
-        await worker.run()
+        await asyncio.gather(rpc_worker.run(), ingestion_worker.run())
     except asyncio.CancelledError:
         pass
     finally:
-        await worker.shutdown()
+        await asyncio.gather(
+            rpc_worker.shutdown(),
+            ingestion_worker.shutdown(),
+            return_exceptions=True,
+        )
 
 
 def main():
@@ -47,4 +59,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-__all__ = ["VectorMCPWorker", "main"]
+__all__ = ["VectorMCPWorker", "IngestionWorker", "main"]
