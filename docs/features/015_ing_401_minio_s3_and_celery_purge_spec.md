@@ -1,11 +1,11 @@
 # Feature Specification: MinIO S3 Client Integration & Legacy Celery/RabbitMQ Purge
 
-> **Feature ID:** `015_ing_401_minio_s3_and_celery_purge_spec`  
-> **Task Ref:** `TASK-ING-401`  
-> **Target Branch:** `epic/rag-monorepo-mcp`  
-> **Status:** `PROPOSED (Party Mode Approved)`  
-> **Estimated Effort:** `1.5 hrs (Vibe-Coding) / 1.0 day (Traditional)`  
-> **Author:** Antigravity Architect / Storage & Ingestion Specialist  
+> **Feature ID:** `015_ing_401_minio_s3_and_celery_purge_spec`
+> **Task Ref:** `TASK-ING-401`
+> **Target Branch:** `epic/rag-monorepo-mcp`
+> **Status:** `PROPOSED (Party Mode Approved)`
+> **Estimated Effort:** `1.5 hrs (Vibe-Coding) / 1.0 day (Traditional)`
+> **Author:** Antigravity Architect / Storage & Ingestion Specialist
 > **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 4, 7, 8, 9)
 
 ---
@@ -40,16 +40,16 @@ The legacy `akvo-rag` document upload pipeline relied on local disk storage (`/m
 
 ### 2.1 Four-Way Agent Council Consensus
 
-* **🏗️ Winston (System Architect):**  
+* **🏗️ Winston (System Architect):**
   Standardized S3 object key structure: `documents/kb_{id}/{doc_uuid}_{sanitized_filename}`. Document state lifecycle is strictly deterministic: `PENDING` $\rightarrow$ `PROCESSING` $\rightarrow$ `INDEXED` / `FAILED`. MinIO bucket `documents/` is auto-initialized on FastAPI application startup if missing.
 
-* **💻 Amelia (Senior Developer):**  
+* **💻 Amelia (Senior Developer):**
   Memory-safe file streaming: Use `UploadFile.file` chunked streaming (64KB chunks) directly to MinIO `put_object(length=-1, part_size=10*1024*1024)` to ensure multi-megabyte PDFs never exhaust container RAM. Replace legacy `FileStorageService` with clean `MinIOService`.
 
-* **🧪 Murat (Test Architect):**  
+* **🧪 Murat (Test Architect):**
   Edge cases to verify: zero-byte uploads, unsupported MIME-types (e.g. `.exe` renamed to `.pdf`), MinIO network blips (connection timeout with exponential retry), and Redis queue serialization verification. All test suites must run offline with mock MinIO fixtures.
 
-* **🛡️ Rachel (Adversarial Security Red Team):**  
+* **🛡️ Rachel (Adversarial Security Red Team):**
   Security Hardening:
   1. Enforce strict 50MB file size ceiling per document.
   2. Sanitize file names using `werkzeug.utils.secure_filename` or regex stripping to prevent S3 key path traversal (`../../`).
@@ -72,17 +72,17 @@ sequenceDiagram
     participant Redis as "Redis Broker (document_ingestion)"
 
     Host->>FastAPI: POST /api/v1/knowledge-bases/{id}/documents/upload (Multipart File)
-    
+
     FastAPI->>FastAPI: Validate file size (<= 50MB), extension & magic bytes
     FastAPI->>FastAPI: Generate document_id = uuid4(), sanitize filename
-    
+
     FastAPI->>MinIO: put_object(bucket="documents", key="kb_{id}/{doc_id}_{filename}", stream)
     MinIO-->>FastAPI: 200 OK (etag, size_bytes)
-    
+
     FastAPI->>PG: INSERT INTO vkb_documents (id, kb_id, filename, minio_key, status='PROCESSING')
-    
+
     FastAPI->>Redis: RPUSH document_ingestion { document_id, kb_id, minio_bucket, minio_key }
-    
+
     FastAPI-->>Host: 202 Accepted { document_id: "doc-123", status: "PROCESSING", filename: "sop.pdf" }
 ```
 
@@ -290,3 +290,45 @@ The following legacy Celery and RabbitMQ files will be permanently deleted:
 - [ ] Document uploads record `PROCESSING` status in PostgreSQL 17 and enqueue to Redis `document_ingestion`.
 - [ ] `celery_app.py`, `tasks/`, and RabbitMQ references are completely purged from backend.
 - [ ] Automated tests pass with $\ge 85\%$ test coverage in $< 10\text{s}$.
+
+---
+
+## 8. Technical Audit & Repository Reconnaissance
+
+### 8.1 Active Code Touchpoints
+
+| Layer | Target File | Action | Description |
+|---|---|:---:|---|
+| **Storage Service** | `backend/app/services/minio_service.py` | `[NEW]` | `MinIOService` with bucket auto-provisioning (`documents/`) & streaming `upload_file`. |
+| **API Endpoint** | `backend/app/api/api_v1/knowledge_base.py` | `[MODIFY]` | Add security validations, MinIO upload, PostgreSQL recording, and Redis queue push to `document_ingestion`. |
+| **Configuration** | `backend/app/core/config.py` | `[MODIFY]` | Clean up RabbitMQ configuration variables (`RABBITMQ_USER`, etc.). |
+| **Dependencies** | `backend/requirements.txt` | `[MODIFY]` | Remove `celery==5.5.3`. Ensure `redis` and `minio` remain active. |
+| **Celery Tasks** | `backend/app/celery_app.py` | `[DELETE]` | Legacy Celery app definition. |
+| **Celery Tasks** | `backend/app/tasks/upload_task.py` | `[DELETE]` | Legacy Celery upload task. |
+| **Celery Tasks** | `backend/app/tasks/chat_task.py` | `[DELETE]` | Legacy Celery chat task. |
+| **Celery Tasks** | `backend/app/tasks/__init__.py` | `[DELETE]` | Legacy Celery task package init. |
+| **Container Scripts** | `backend/entrypoint-celery.sh` | `[DELETE]` | Legacy Celery worker/beat entrypoint. |
+| **Container Dockerfile** | `backend/Dockerfile.celery` | `[DELETE]` | Legacy Celery container Dockerfile. |
+| **Legacy Storage** | `backend/app/services/file_storage_service.py` | `[DELETE / REFACTOR]` | Legacy disk storage (`/mnt/uploads`). |
+| **Unit Tests** | `backend/tests/services/test_minio_service.py` | `[NEW]` | Comprehensive unit test suite for MinIO storage operations. |
+| **Integration Tests** | `backend/tests/api/test_document_upload.py` | `[NEW]` | Contract & validation integration test suite for document upload & Redis queueing. |
+| **Integration Tests** | `backend/tests/integration/test_app_job_endpoints.py` | `[MODIFY]` | Update legacy Celery task mocks to direct / decoupled execution. |
+
+### 8.2 Security & Performance Specifications
+
+1. **Streaming Memory Safety:** Multi-megabyte PDF and DOCX uploads stream via `UploadFile.file` directly to MinIO `put_object(data=stream, length=size, part_size=10*1024*1024)` without loading the entire binary into memory.
+2. **File Validation Guard:**
+   - Strict size ceiling: 50MB per document (400 Bad Request / 413 Payload Too Large if exceeded).
+   - Allowed file extensions: `.pdf`, `.docx`, `.txt`, `.md`.
+   - Magic byte verification: PDF (`%PDF-`), DOCX (`PK\x03\x04`), TXT/MD (UTF-8 encoding).
+3. **Queue Payload Contract:**
+
+   ```json
+   {
+       "document_id": "<uuid-string>",
+       "kb_id": 1,
+       "minio_bucket": "documents",
+       "minio_key": "kb_1/<uuid>_filename.pdf",
+       "filename": "filename.pdf"
+   }
+   ```
