@@ -101,3 +101,18 @@ async def test_kb_mcp_endpoint_service_document_flow():
     # 4. Test delete_document
     del_res = await service.delete_document(kb_id=1, doc_id=42)
     assert del_res == [{"status": "deleted", "doc_id": 42}]
+
+    # 5. Test process_documents fallback when document_id is omitted
+    fallback_payload = [
+        {
+            "upload_id": 202,
+            "file_name": "fallback.docx",
+            "chunk_size": 800,
+            "chunk_overlap": 150,
+        }
+    ]
+    fb_res = await service.process_documents(
+        kb_id=1, upload_results=fallback_payload
+    )
+    assert fb_res["status"] == "processing"
+    assert fb_res["tasks"][0]["task_id"] == 202

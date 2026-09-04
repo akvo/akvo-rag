@@ -128,33 +128,70 @@ async def handle_ingest_doc(
     and save to ChromaDB & PostgreSQL.
     """
     doc_id = args.get("document_id") or args.get("doc_id") or args.get("id")
+    upload_id = args.get("upload_id") or args.get("task_id")
     kb_id = args.get("kb_id")
     chunk_size = args.get("chunk_size", 1000)
     chunk_overlap = args.get("chunk_overlap", 200)
 
-    if not doc_id:
+    if not doc_id and not upload_id:
         return {"error": "Missing document_id", "status": "failed"}
 
     async with get_db_session() as session:
-        stmt = select(Document).where(Document.id == int(doc_id))
-        res = await session.execute(stmt)
-        doc = res.scalar_one_or_none()
+        doc = None
+        task = None
+
+        if doc_id:
+            try:
+                stmt = select(Document).where(Document.id == int(doc_id))
+                res = await session.execute(stmt)
+                doc = res.scalar_one_or_none()
+            except (ValueError, TypeError):
+                doc = None
+
+        if upload_id and not doc:
+            try:
+                task_stmt = select(ProcessingTask).where(
+                    ProcessingTask.id == int(upload_id)
+                )
+                task_res = await session.execute(task_stmt)
+                task = task_res.scalar_one_or_none()
+                if task and task.document_id:
+                    doc_stmt = select(Document).where(
+                        Document.id == task.document_id
+                    )
+                    doc_res = await session.execute(doc_stmt)
+                    doc = doc_res.scalar_one_or_none()
+            except (ValueError, TypeError):
+                task = None
+
         if not doc:
             return {"error": "Document not found", "status": "failed"}
 
         target_kb_id = doc.knowledge_base_id if not kb_id else kb_id
 
         # Find or create processing task
-        task_stmt = (
-            select(ProcessingTask)
-            .where(
-                ProcessingTask.document_id == doc.id,
-                ProcessingTask.job_type == "INGEST_DOCUMENT",
+        if not task and upload_id:
+            try:
+                task_stmt = select(ProcessingTask).where(
+                    ProcessingTask.id == int(upload_id)
+                )
+                task_res = await session.execute(task_stmt)
+                task = task_res.scalar_one_or_none()
+            except (ValueError, TypeError):
+                task = None
+
+        if not task:
+            task_stmt = (
+                select(ProcessingTask)
+                .where(
+                    ProcessingTask.document_id == doc.id,
+                    ProcessingTask.job_type == "INGEST_DOCUMENT",
+                )
+                .order_by(ProcessingTask.id.desc())
             )
-            .order_by(ProcessingTask.id.desc())
-        )
-        task_res = await session.execute(task_stmt)
-        task = task_res.scalars().first()
+            task_res = await session.execute(task_stmt)
+            task = task_res.scalars().first()
+
         if not task:
             task = ProcessingTask(
                 knowledge_base_id=target_kb_id,

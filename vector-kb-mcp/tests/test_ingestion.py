@@ -121,6 +121,43 @@ async def test_handle_ingest_doc(in_memory_db):
 
 
 @pytest.mark.asyncio
+async def test_handle_ingest_doc_task_id_fallback(in_memory_db):
+    # 1. Register doc
+    reg = await handle_register_doc(
+        {
+            "kb_id": 1,
+            "file_name": "guide2.txt",
+            "file_path": "kb_1/guide2.txt",
+            "file_size": 50,
+            "content_type": "text/plain",
+            "file_hash": "hash_guide_2",
+        }
+    )
+    task_id = reg["task_id"]
+
+    mock_retriever = MagicMock()
+    mock_retriever.embed_texts = AsyncMock(return_value=[[0.1] * 1536])
+    mock_retriever.upsert_collection_chunks = AsyncMock()
+
+    with patch("handlers.doc_handlers.storage_service") as mock_storage:
+        mock_storage.download_file_bytes.return_value = (
+            b"Fallback ingestion test text."
+        )
+
+        res = await handle_ingest_doc(
+            {
+                "upload_id": task_id,
+                "task_id": task_id,
+                "kb_id": 1,
+            },
+            retriever=mock_retriever,
+        )
+
+        assert res["status"] == "completed"
+        assert res["document_id"] is not None
+
+
+@pytest.mark.asyncio
 async def test_handle_preview_doc(in_memory_db):
     reg = await handle_register_doc(
         {

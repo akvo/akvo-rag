@@ -240,7 +240,10 @@ export function DocumentUploadSteps({
         .filter((f) => f.status === "uploaded")
         .map((f) => ({
           upload_id: f.uploadId!,
+          document_id: f.documentId ?? f.uploadId!,
           file_name: f.file.name,
+          chunk_size: chunkSize,
+          chunk_overlap: chunkOverlap,
           status: "pending" as const,
           skip_processing: false,
           temp_path: f.tempPath!,

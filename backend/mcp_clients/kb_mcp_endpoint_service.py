@@ -255,23 +255,38 @@ class KnowledgeBaseMCPEndpointService:
         """
         tasks = []
         for idx, res in enumerate(upload_results, start=1):
-            doc_id = res.get("document_id")
-            uid = res.get("upload_id") or doc_id or idx
+            doc_id = (
+                res.get("document_id")
+                or res.get("doc_id")
+                or res.get("id")
+            )
+            uid = (
+                res.get("upload_id")
+                or res.get("task_id")
+                or doc_id
+                or idx
+            )
             tasks.append({"upload_id": uid, "task_id": uid})
 
-            # Trigger async ingestion
-            if doc_id:
-                asyncio.create_task(
-                    self.dispatcher.call_tool(
-                        "knowledge_bases_mcp",
-                        "ingest_document",
-                        {
-                            "document_id": doc_id,
-                            "kb_id": kb_id,
-                            "upload_id": uid,
-                        },
-                    )
+            chunk_size = res.get("chunk_size", 1000)
+            chunk_overlap = res.get("chunk_overlap", 200)
+            target_id = doc_id or uid
+
+            # Trigger async ingestion via Redis RPC
+            asyncio.create_task(
+                self.dispatcher.call_tool(
+                    "knowledge_bases_mcp",
+                    "ingest_document",
+                    {
+                        "document_id": target_id,
+                        "kb_id": kb_id,
+                        "upload_id": uid,
+                        "task_id": uid,
+                        "chunk_size": chunk_size,
+                        "chunk_overlap": chunk_overlap,
+                    },
                 )
+            )
 
         return {"status": "processing", "kb_id": kb_id, "tasks": tasks}
 
