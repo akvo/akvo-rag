@@ -214,6 +214,8 @@ class VectorMCPWorker:
 
     async def shutdown(self):
         """Gracefully shutdown the worker and close connections."""
+        if not self.running and self.redis_client is None:
+            return
         logger.info("Initiating graceful shutdown...")
         self.running = False
         if (
@@ -230,4 +232,5 @@ class VectorMCPWorker:
                     await self.redis_client.close()
             except Exception as e:
                 logger.debug("Error closing redis client: %s", e)
+            self.redis_client = None
         logger.info("Shutdown complete.")

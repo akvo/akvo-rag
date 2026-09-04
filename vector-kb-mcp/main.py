@@ -13,29 +13,35 @@ logging.basicConfig(
 logger = logging.getLogger("vector-kb-mcp")
 
 
-def main():
-    """CLI entrypoint for vector-kb-mcp microservice."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+async def async_main():
     worker = VectorMCPWorker()
+    loop = asyncio.get_running_loop()
 
     def handle_signal():
         logger.info("Received termination signal.")
-        loop.create_task(worker.shutdown())
+        asyncio.create_task(worker.shutdown())
 
-    # Register signal handlers for clean SIGTERM / SIGINT handling
     for sig in (signal.SIGTERM, signal.SIGINT):
         try:
             loop.add_signal_handler(sig, handle_signal)
         except (NotImplementedError, RuntimeError):
-            # Fallback for non-main thread execution
             pass
 
     try:
-        loop.run_until_complete(worker.initialize())
-        loop.run_until_complete(worker.run())
+        await worker.initialize()
+        await worker.run()
+    except asyncio.CancelledError:
+        pass
     finally:
-        loop.close()
+        await worker.shutdown()
+
+
+def main():
+    """CLI entrypoint for vector-kb-mcp microservice."""
+    try:
+        asyncio.run(async_main())
+    except (KeyboardInterrupt, SystemExit):
+        pass
 
 
 if __name__ == "__main__":
