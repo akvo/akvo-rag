@@ -55,7 +55,7 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
     const fetchDocuments = async () => {
       try {
         const data = await api.get(`/api/knowledge-base/${knowledgeBaseId}`);
-        setDocuments(data.documents);
+        setDocuments(data?.documents || []);
       } catch (error) {
         if (error instanceof ApiError) {
           setError(error.message);
