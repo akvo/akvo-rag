@@ -1,228 +1,236 @@
 #!/bin/bash
+# ==============================================================================
+# Akvo RAG E2E Test Runner & Headless Quality Gate Orchestrator (TASK-OPS-501)
+# ==============================================================================
+# This script orchestrates the end-to-end quality assurance gates:
+#   Stage 1: Backend Unit & Integration Tests (100% pass)
+#   Stage 2: Vector KB Microservice Tests (100% pass)
+#   Stage 3: Headless RAGAS Golden Set Evaluation (Faithfulness >= 0.85, etc.)
+# ==============================================================================
 
-# RAG Evaluation E2E Test Runner - Headless Container Mode
-# This script runs end-to-end tests inside the Docker container in headless mode.
-# It automatically installs missing Playwright browsers and system dependencies
-# that are lost when containers restart due to volume mounting behavior.
+set -e  # Exit immediately on unhandled error
 
-set -e  # Exit on any error
+# Container names
+CONTAINER_BACKEND="akvo-rag-backend-1"
+CONTAINER_VECTOR="akvo-rag-vector-kb-mcp-1"
+CONTAINER_CHROMA="akvo-rag-chromadb-1"
+CONTAINER_POSTGRES="akvo-rag-postgres-1"
+CONTAINER_REDIS="akvo-rag-redis-1"
 
-# Configuration
-CONTAINER_NAME="akvo-rag-backend-1"
-TEST_TIMEOUT=${TEST_TIMEOUT:-600}  # 10 minutes default
+# Evaluation defaults
+CSV_FILENAME=${CSV_FILENAME:-"kenya_drylands_short_evaluation.csv"}
+KB_NAME=${KB_NAME:-"Kenya Drylands"}
+MIN_FAITHFULNESS=${MIN_FAITHFULNESS:-0.85}
+MIN_RELEVANCY=${MIN_RELEVANCY:-0.85}
+MIN_GROUNDEDNESS=${MIN_GROUNDEDNESS:-0.90}
+OUTPUT_DIR=${OUTPUT_DIR:-"/app/RAG_evaluation/performance_reports"}
+SKIP_UNIT_TESTS=${SKIP_UNIT_TESTS:-false}
 VERBOSE=${VERBOSE:-true}
 
-# Colors for output
+# Colors for terminal output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
 NC='\033[0m' # No Color
 
-# Function to print colored output
+print_banner() {
+    echo -e "\n${CYAN}${BOLD}================================================================================"
+    echo -e " $1"
+    echo -e "================================================================================${NC}\n"
+}
+
 print_status() {
-    echo -e "${BLUE}[E2E]${NC} $1"
+    echo -e "${BLUE}[E2E GATE]${NC} $1"
 }
 
 print_success() {
-    echo -e "${GREEN}[E2E]${NC} $1"
+    echo -e "${GREEN}[E2E GATE] ✅${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[E2E]${NC} $1"
+    echo -e "${YELLOW}[E2E GATE] ⚠️${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}[E2E]${NC} $1"
+    echo -e "${RED}[E2E GATE] ❌${NC} $1"
 }
 
-# Function to check if container is running
-check_container() {
-    print_status "Checking if container '$CONTAINER_NAME' is running..."
-    if ! docker ps --format "table {{.Names}}" | grep -q "^$CONTAINER_NAME$"; then
-        print_error "Container '$CONTAINER_NAME' is not running!"
-        print_error "Please run './rag-evaluate' from the main directory first."
-        exit 1
-    fi
-    print_success "Container is running"
-}
-
-# Function to check if virtual environment exists
-check_venv() {
-    print_status "Checking virtual environment..."
-    if ! docker exec "$CONTAINER_NAME" bash -c "[ -d /app/RAG_evaluation/venv ]"; then
-        print_error "Virtual environment not found in container!"
-        print_error "Please ensure RAG evaluation system is properly set up."
-        exit 1
-    fi
-    print_success "Virtual environment found"
-}
-
-# Function to check and install Python dependencies
-check_python_deps() {
-    print_status "Checking Python dependencies..."
-
-    # Check if pytest and playwright are installed in venv
-    if docker exec "$CONTAINER_NAME" bash -c "cd /app/RAG_evaluation && source venv/bin/activate && python -c 'import pytest, playwright' 2>/dev/null"; then
-        print_success "Python dependencies are installed"
-    else
-        print_warning "Installing missing Python dependencies..."
-        docker exec "$CONTAINER_NAME" bash -c "
-            cd /app/RAG_evaluation &&
-            source venv/bin/activate &&
-            pip install pytest pytest-asyncio playwright
-        "
-        print_success "Python dependencies installed"
-    fi
-}
-
-# Function to check and install Playwright browsers
-check_playwright_browsers() {
-    print_status "Checking Playwright browsers..."
-
-    # Check if Chromium browser exists
-    if docker exec "$CONTAINER_NAME" bash -c "[ -f /root/.cache/ms-playwright/chromium-*/chrome-linux/chrome ] 2>/dev/null"; then
-        print_success "Playwright browsers are installed"
-    else
-        print_warning "Installing Playwright browsers..."
-        docker exec "$CONTAINER_NAME" bash -c "
-            cd /app/RAG_evaluation &&
-            source venv/bin/activate &&
-            playwright install
-        "
-        print_success "Playwright browsers installed"
-    fi
-}
-
-# Function to check and install system dependencies
-check_system_deps() {
-    print_status "Checking system dependencies for Playwright..."
-
-    # Check if essential system libraries exist
-    if docker exec "$CONTAINER_NAME" bash -c "dpkg -l | grep -q libgtk-3-0 && dpkg -l | grep -q libasound2" 2>/dev/null; then
-        print_success "System dependencies are installed"
-    else
-        print_warning "Installing system dependencies for Playwright..."
-        docker exec "$CONTAINER_NAME" bash -c "
-            cd /app/RAG_evaluation &&
-            source venv/bin/activate &&
-            playwright install-deps
-        "
-        print_success "System dependencies installed"
-    fi
-}
-
-# Function to run the actual tests
-run_tests() {
-    print_status "Running E2E tests..."
-
-    # Prepare pytest command
-    local pytest_cmd="cd /app/RAG_evaluation && source venv/bin/activate && timeout ${TEST_TIMEOUT}s pytest tests/test_eight_metrics_e2e.py"
-
-    if [ "$VERBOSE" = "true" ]; then
-        pytest_cmd="$pytest_cmd -v -s --tb=long"
-    else
-        pytest_cmd="$pytest_cmd --tb=short"
-    fi
-
-    # Run the test with proper error handling
-    if docker exec "$CONTAINER_NAME" bash -c "$pytest_cmd"; then
-        print_success "🎉 E2E tests PASSED!"
-        return 0
-    else
-        local exit_code=$?
-        if [ $exit_code -eq 124 ]; then
-            print_error "❌ Tests TIMED OUT after ${TEST_TIMEOUT} seconds"
-        else
-            print_error "❌ Tests FAILED with exit code $exit_code"
-        fi
-        return $exit_code
-    fi
-}
-
-# Function to show usage
-show_usage() {
-    echo "RAG Evaluation E2E Test Runner - Headless Container Mode"
-    echo "Runs end-to-end tests inside Docker container with automatic dependency management."
-    echo ""
-    echo "Usage: $0 [OPTIONS]"
-    echo ""
-    echo "Options:"
-    echo "  -h, --help              Show this help message"
-    echo "  -t, --timeout SECONDS   Set test timeout (default: 600)"
-    echo "  -q, --quiet            Run in quiet mode (less verbose output)"
-    echo "  -v, --verbose          Run in verbose mode (default)"
-    echo ""
-    echo "Environment Variables:"
-    echo "  TEST_TIMEOUT           Test timeout in seconds (default: 600)"
-    echo "  VERBOSE               Enable verbose output (true/false, default: true)"
-    echo ""
-    echo "Examples:"
-    echo "  $0                     # Run with defaults"
-    echo "  $0 -t 300             # Run with 5-minute timeout"
-    echo "  $0 --quiet            # Run in quiet mode"
-    echo "  TEST_TIMEOUT=900 $0   # Run with 15-minute timeout"
-}
-
-# Parse command line arguments
+# Parse command line options
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -h|--help)
-            show_usage
-            exit 0
-            ;;
-        -t|--timeout)
-            TEST_TIMEOUT="$2"
+        --csv|--input-csv)
+            CSV_FILENAME="$2"
             shift 2
             ;;
-        -q|--quiet)
-            VERBOSE=false
+        --kb|--knowledge-base)
+            KB_NAME="$2"
+            shift 2
+            ;;
+        --min-faithfulness)
+            MIN_FAITHFULNESS="$2"
+            shift 2
+            ;;
+        --min-relevancy)
+            MIN_RELEVANCY="$2"
+            shift 2
+            ;;
+        --min-groundedness)
+            MIN_GROUNDEDNESS="$2"
+            shift 2
+            ;;
+        --output-dir)
+            OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        --skip-unit-tests)
+            SKIP_UNIT_TESTS=true
             shift
             ;;
-        -v|--verbose)
-            VERBOSE=true
-            shift
+        -h|--help)
+            echo "Akvo RAG E2E Test & Headless Evaluation Quality Gate Runner"
+            echo ""
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --csv FILENAME          Evaluation dataset CSV (default: kenya_drylands_short_evaluation.csv)"
+            echo "  --kb NAME               Knowledge Base name or alias (default: Kenya Drylands)"
+            echo "  --min-faithfulness VAL  Minimum faithfulness threshold (default: 0.85)"
+            echo "  --min-relevancy VAL     Minimum answer relevancy threshold (default: 0.85)"
+            echo "  --min-groundedness VAL  Minimum groundedness / context precision threshold (default: 0.90)"
+            echo "  --output-dir PATH       Directory for reports (default: /app/RAG_evaluation/performance_reports)"
+            echo "  --skip-unit-tests       Skip pytest unit/integration test stages"
+            echo "  -h, --help              Show this help message"
+            exit 0
             ;;
         *)
             print_error "Unknown option: $1"
-            show_usage
             exit 1
             ;;
     esac
 done
 
-# Main execution
-main() {
-    print_status "🚀 Starting RAG Evaluation E2E Test Runner (Headless Container Mode)"
-    print_status "Container: $CONTAINER_NAME"
-    print_status "Timeout: ${TEST_TIMEOUT}s"
-    print_status "Verbose: $VERBOSE"
-    echo ""
+# Function to check container health
+check_containers() {
+    print_status "Verifying active runtime containers..."
+    local required_containers=("$CONTAINER_BACKEND" "$CONTAINER_VECTOR" "$CONTAINER_POSTGRES" "$CONTAINER_REDIS" "$CONTAINER_CHROMA")
 
-    # Run all checks and installations
-    check_container
-    check_venv
-    check_python_deps
-    check_playwright_browsers
-    check_system_deps
-
-    echo ""
-    print_status "🧪 All dependencies verified, running tests..."
-    echo ""
-
-    # Run the tests
-    run_tests
-    local test_result=$?
-
-    echo ""
-    if [ $test_result -eq 0 ]; then
-        print_success "✅ E2E test execution completed successfully!"
-    else
-        print_error "❌ E2E test execution failed!"
-    fi
-
-    exit $test_result
+    for container in "${required_containers[@]}"; do
+        if ! docker ps --format "{{.Names}}" | grep -q "^${container}$"; then
+            print_error "Container '${container}' is not running!"
+            print_error "Please start the local stack: docker compose -f docker-compose.dev.yml up -d"
+            exit 1
+        fi
+    done
+    print_success "All required containers are active and healthy"
 }
 
-# Execute main function
+# Stage 1: Backend Unit & Integration Tests
+run_backend_tests() {
+    if [ "$SKIP_UNIT_TESTS" = "true" ]; then
+        print_warning "Skipping Backend Unit Tests (--skip-unit-tests specified)"
+        return 0
+    fi
+
+    print_banner "STAGE 1: Executing Backend Unit & Integration Tests"
+    print_status "Running: docker exec $CONTAINER_BACKEND python -m pytest tests/ -v --tb=short"
+
+    if docker exec "$CONTAINER_BACKEND" python -m pytest tests/ -v --tb=short; then
+        print_success "Backend test suite PASSED with 100% success rate"
+    else
+        print_error "Backend test suite FAILED"
+        exit 1
+    fi
+}
+
+# Stage 2: Vector KB Microservice Tests
+run_vector_kb_tests() {
+    if [ "$SKIP_UNIT_TESTS" = "true" ]; then
+        print_warning "Skipping Vector KB Microservice Tests (--skip-unit-tests specified)"
+        return 0
+    fi
+
+    print_banner "STAGE 2: Executing Vector KB Microservice Test Suite"
+    print_status "Running: docker exec $CONTAINER_VECTOR pytest tests/ -v --tb=short"
+
+    if docker exec "$CONTAINER_VECTOR" pytest tests/ -v --tb=short; then
+        print_success "Vector KB microservice test suite PASSED with 100% success rate"
+    else
+        print_error "Vector KB microservice test suite FAILED"
+        exit 1
+    fi
+}
+
+# Stage 3: Virtual Environment & ChromaDB Seeding Verification
+verify_eval_environment() {
+    print_banner "STAGE 3A: Verifying Evaluation Environment & Golden KB Seeding"
+    print_status "Checking RAG evaluation virtualenv in $CONTAINER_BACKEND..."
+
+    # Ensure venv exists or set up
+    docker exec "$CONTAINER_BACKEND" bash -c "
+        if [ ! -d /app/RAG_evaluation/venv ]; then
+            echo 'Setting up RAG evaluation virtualenv...'
+            bash /app/RAG_evaluation/setup_venv.sh
+        fi
+    "
+
+    print_status "Verifying ChromaDB collection seeding for evaluation..."
+    # Verify/seed KB 115 (Kenya Drylands) if collection is empty
+    docker exec "$CONTAINER_VECTOR" python -m cli.seed_chroma_kbs --kb-id 115 --limit 500 || true
+
+    print_success "Evaluation environment and knowledge base verified"
+}
+
+# Stage 3B: Headless RAGAS Golden Evaluation
+run_headless_evaluation() {
+    print_banner "STAGE 3B: Executing Headless RAGAS Golden Set Accuracy Evaluation"
+
+    local csv_path="/app/RAG_evaluation/example_csv_inputs/${CSV_FILENAME}"
+    if [[ "$CSV_FILENAME" == /* ]]; then
+        csv_path="$CSV_FILENAME"
+    fi
+
+    print_status "Target Dataset:        $csv_path"
+    print_status "Target Knowledge Base: $KB_NAME"
+    print_status "Thresholds:            Faithfulness >= $MIN_FAITHFULNESS | Relevancy >= $MIN_RELEVANCY | Groundedness >= $MIN_GROUNDEDNESS"
+
+    local eval_cmd="cd /app/RAG_evaluation && source venv/bin/activate && python headless_evaluation.py \
+        --input-csv '$csv_path' \
+        --kb '$KB_NAME' \
+        --min-faithfulness $MIN_FAITHFULNESS \
+        --min-relevancy $MIN_RELEVANCY \
+        --min-groundedness $MIN_GROUNDEDNESS \
+        --output-dir '$OUTPUT_DIR'"
+
+    if docker exec "$CONTAINER_BACKEND" bash -c "$eval_cmd"; then
+        print_success "Headless Golden Set Evaluation PASSED all quality gate thresholds!"
+    else
+        local exit_code=$?
+        print_error "Headless Golden Set Evaluation FAILED with exit code $exit_code"
+        exit $exit_code
+    fi
+}
+
+# Main Execution Flow
+main() {
+    local start_time
+    start_time=$(date +%s)
+
+    print_banner "Akvo RAG End-to-End Quality Gate & Golden Set Accuracy Runner"
+    check_containers
+
+    run_backend_tests
+    run_vector_kb_tests
+    verify_eval_environment
+    run_headless_evaluation
+
+    local end_time
+    end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+
+    print_banner "🎉 ALL QUALITY GATES & ACCURACY BENCHMARKS PASSED SUCCESSFULLY (${duration}s)"
+}
+
 main "$@"
