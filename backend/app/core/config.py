@@ -157,6 +157,15 @@ class Settings(BaseSettings):
         os.getenv("PASSWORD_RESET_TOKEN_EXPIRE_MINUTES", "60")
     )
 
+    # MinIO Object Storage
+    MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", "minio:9000")
+    MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+    MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY", "minioadmin")
+    MINIO_BUCKET_DOCUMENTS: str = os.getenv(
+        "MINIO_BUCKET_DOCUMENTS", "documents"
+    )
+    MINIO_SECURE: bool = os.getenv("MINIO_SECURE", "False").lower() == "true"
+
     class Config:
         env_file = ".env"
 

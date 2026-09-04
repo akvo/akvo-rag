@@ -1,5 +1,5 @@
-from typing import List, Any
-from fastapi import APIRouter, Depends, UploadFile, Query
+from typing import List, Optional, Any
+from fastapi import APIRouter, Depends, UploadFile, Query, File, HTTPException
 from sqlalchemy.orm import Session
 import logging
 from pydantic import BaseModel
@@ -140,16 +140,26 @@ async def delete_knowledge_base(
 @router.post("/{kb_id}/documents/upload")
 async def upload_kb_documents(
     kb_id: int,
-    files: List[UploadFile],
+    files: Optional[List[UploadFile]] = File(None),
+    file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Upload multiple documents to MCP.
     """
+    upload_files: List[UploadFile] = []
+    if files:
+        upload_files.extend(files)
+    if file:
+        upload_files.append(file)
+    if not upload_files:
+        raise HTTPException(
+            status_code=400, detail="No files provided for upload"
+        )
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     result = await kb_mcp_endpoint_service.upload_documents(
-        kb_id=kb_id, files=files
+        kb_id=kb_id, files=upload_files
     )
     return result
 

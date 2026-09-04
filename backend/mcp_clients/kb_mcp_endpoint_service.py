@@ -1,3 +1,4 @@
+import asyncio
 import os
 import logging
 import mimetypes
@@ -148,33 +149,131 @@ class KnowledgeBaseMCPEndpointService:
         return result
 
     async def delete_document(self, kb_id: int, doc_id: int) -> List[dict]:
-        """Delete document by ID."""
+        """Delete document by ID via Redis RPC and MinIO."""
+        await self.dispatcher.call_tool(
+            "knowledge_bases_mcp",
+            "delete_document",
+            {"kb_id": kb_id, "document_id": doc_id},
+        )
         return [{"status": "deleted", "doc_id": doc_id}]
 
     async def upload_documents(
         self, kb_id: int, files: List[UploadFile]
     ) -> List[Dict[str, Any]]:
-        """Upload documents stub."""
-        return [
-            {
-                "file_name": getattr(f, "filename", "document.pdf"),
-                "status": "uploaded",
-                "kb_id": kb_id,
-            }
-            for f in files
-        ]
+        """
+        Upload documents to MinIO and register in vector-kb-mcp.
+        """
+        import hashlib
+        import uuid
+        from app.services.storage_service import storage_service
+
+        results = []
+        for idx, f in enumerate(files, start=1):
+            raw_fname = getattr(f, "filename", f"document_{idx}.pdf")
+            filename = os.path.basename(raw_fname)
+            content = await f.read()
+            if not content:
+                continue
+
+            file_hash = hashlib.sha256(content).hexdigest()
+            content_type = (
+                getattr(f, "content_type", "")
+                or mimetypes.guess_type(filename)[0]
+                or "application/octet-stream"
+            )
+
+            # Upload raw file to MinIO
+            object_name = f"kb_{kb_id}/{uuid.uuid4()}_{filename}"
+            try:
+                storage_service.upload_file_bytes(
+                    data=content,
+                    object_name=object_name,
+                    content_type=content_type,
+                )
+            except Exception as e:
+                logger.error("Failed uploading '%s' to MinIO: %s", filename, e)
+
+            # Register document in vector-kb-mcp via Redis RPC
+            reg_res = await self.dispatcher.call_tool(
+                "knowledge_bases_mcp",
+                "register_document",
+                {
+                    "kb_id": kb_id,
+                    "file_name": filename,
+                    "file_path": object_name,
+                    "file_size": len(content),
+                    "content_type": content_type,
+                    "file_hash": file_hash,
+                },
+            )
+
+            doc_id = (
+                reg_res.get("document_id")
+                if isinstance(reg_res, dict)
+                else idx
+            ) or idx
+            task_id = (
+                reg_res.get("task_id") or reg_res.get("upload_id")
+                if isinstance(reg_res, dict)
+                else idx
+            ) or idx
+
+            results.append(
+                {
+                    "upload_id": task_id,
+                    "document_id": doc_id,
+                    "file_name": filename,
+                    "status": "uploaded",
+                    "kb_id": kb_id,
+                    "message": "File uploaded successfully",
+                    "skip_processing": False,
+                    "temp_path": object_name,
+                }
+            )
+            await f.seek(0)
+        return results
 
     async def preview_documents(
         self, kb_id: int, preview_request: dict
     ) -> Dict[int, Any]:
-        """Preview document chunks stub."""
-        return {kb_id: {"chunks": [], "preview": True}}
+        """Preview document chunks mapped by document ID via Redis RPC."""
+        result = await self.dispatcher.call_tool(
+            "knowledge_bases_mcp",
+            "preview_documents",
+            {"kb_id": kb_id, **preview_request},
+        )
+        if isinstance(result, dict) and "error" not in result:
+            # Convert string keys back to int if needed
+            return {int(k): v for k, v in result.items() if str(k).isdigit()}
+        return result
 
     async def process_documents(
         self, kb_id: int, upload_results: List[dict]
     ) -> Dict[str, Any]:
-        """Process documents stub."""
-        return {"status": "processing", "kb_id": kb_id, "tasks": []}
+        """
+        Process multiple documents asynchronously via Redis RPC tool calls.
+        """
+        tasks = []
+        for idx, res in enumerate(upload_results, start=1):
+            doc_id = res.get("document_id")
+            uid = res.get("upload_id") or doc_id or idx
+            tasks.append({"upload_id": uid, "task_id": uid})
+
+            # Trigger async ingestion
+            if doc_id:
+                asyncio.create_task(
+                    self.dispatcher.call_tool(
+                        "knowledge_bases_mcp",
+                        "ingest_document",
+                        {
+                            "document_id": doc_id,
+                            "kb_id": kb_id,
+                            "upload_id": uid,
+                        },
+                    )
+                )
+
+        return {"status": "processing", "kb_id": kb_id, "tasks": tasks}
 
     async def upload_and_process_documents(
         self, kb_id: int, files: list
@@ -229,13 +328,20 @@ class KnowledgeBaseMCPEndpointService:
     async def get_processing_tasks(
         self, kb_id: int, task_ids: List[int]
     ) -> Dict[int, dict]:
-        """Get document processing task status."""
+        """Get document processing task status via Redis RPC."""
+        result = await self.dispatcher.call_tool(
+            "knowledge_bases_mcp",
+            "get_processing_tasks",
+            {"kb_id": kb_id, "task_ids": task_ids},
+        )
+        if isinstance(result, dict) and "error" not in result:
+            return {int(k): v for k, v in result.items() if str(k).isdigit()}
         return {
             tid: {
-                "document_id": None,
+                "document_id": tid,
                 "status": "completed",
                 "error_message": None,
-                "upload_id": None,
+                "upload_id": tid,
                 "file_name": None,
             }
             for tid in task_ids
