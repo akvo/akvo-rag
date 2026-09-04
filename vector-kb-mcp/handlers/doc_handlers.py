@@ -1,4 +1,5 @@
 import logging
+import os
 import uuid
 from typing import Any, Dict, List, Optional
 from sqlalchemy import select
@@ -195,25 +196,66 @@ async def handle_preview_doc(args: Dict[str, Any]) -> Dict[str, Any]:
     doc_ids = args.get("document_ids") or []
     if not doc_ids and args.get("document_id"):
         doc_ids = [args.get("document_id")]
+    file_paths = args.get("file_paths") or []
 
-    response: Dict[int, Any] = {}
+    chunk_size = int(args.get("chunk_size", 1000))
+    chunk_overlap = int(args.get("chunk_overlap", 200))
+    kb_id = int(args.get("kb_id", 1))
+
+    response: Dict[Any, Any] = {}
     async with get_db_session() as session:
+        # Process document IDs (ints, UUID strings, or paths)
         for did in doc_ids:
-            stmt = select(Document).where(Document.id == int(did))
-            res = await session.execute(stmt)
-            doc = res.scalar_one_or_none()
-            if not doc:
+            doc = None
+            file_path = None
+            file_name = None
+            resp_key = did
+
+            if str(did).isdigit():
+                stmt = select(Document).where(Document.id == int(did))
+                res = await session.execute(stmt)
+                doc = res.scalar_one_or_none()
+                if doc:
+                    file_path = doc.file_path
+                    file_name = doc.file_name
+            else:
+                stmt = select(Document).where(
+                    Document.file_path.ilike(f"%{did}%")
+                )
+                res = await session.execute(stmt)
+                doc = res.scalars().first()
+                if doc:
+                    file_path = doc.file_path
+                    file_name = doc.file_name
+
+            is_str_path = isinstance(did, str) and (
+                did.startswith("kb_") or "/" in did
+            )
+            if not file_path and is_str_path:
+                file_path = did
+                file_name = os.path.basename(did)
+
+            if not file_path and file_paths:
+                for fp in file_paths:
+                    if str(did) in fp or len(file_paths) == 1:
+                        file_path = fp
+                        file_name = os.path.basename(fp)
+                        break
+
+            if not file_path:
                 continue
 
             try:
-                raw_bytes = storage_service.download_file_bytes(doc.file_path)
-                parsed_doc = await parse_file_bytes(raw_bytes, doc.file_name)
-                chunker = TextChunker(chunk_size=1000, chunk_overlap=200)
-                chunks = chunker.chunk_document(
-                    parsed_doc, kb_id=doc.knowledge_base_id
+                raw_bytes = storage_service.download_file_bytes(file_path)
+                parsed_doc = await parse_file_bytes(
+                    raw_bytes, file_name or "doc"
                 )
+                chunker = TextChunker(
+                    chunk_size=chunk_size, chunk_overlap=chunk_overlap
+                )
+                chunks = chunker.chunk_document(parsed_doc, kb_id=kb_id)
 
-                response[doc.id] = {
+                response[resp_key] = {
                     "chunks": [
                         {"content": c.content, "metadata": c.metadata}
                         for c in chunks[:5]
@@ -221,16 +263,41 @@ async def handle_preview_doc(args: Dict[str, Any]) -> Dict[str, Any]:
                     "total_chunks": len(chunks),
                 }
             except Exception as e:
-                logger.warning("Preview failed for doc %d: %s", doc.id, e)
-                response[doc.id] = {
+                logger.warning("Preview failed for doc %s: %s", str(did), e)
+                preview_text = (
+                    f"Extracted text preview for {file_name or 'document'}"
+                )
+                response[resp_key] = {
                     "chunks": [
                         {
-                            "content": f"Extracted text preview for {doc.file_name}",  # noqa
-                            "metadata": {"file_name": doc.file_name},
+                            "content": preview_text,
+                            "metadata": {"file_name": file_name or "document"},
                         }
                     ],
                     "total_chunks": 1,
                 }
+
+        # Process any direct file paths
+        for fpath in file_paths:
+            if fpath in response:
+                continue
+            fname = os.path.basename(fpath)
+            try:
+                raw_bytes = storage_service.download_file_bytes(fpath)
+                parsed_doc = await parse_file_bytes(raw_bytes, fname)
+                chunker = TextChunker(
+                    chunk_size=chunk_size, chunk_overlap=chunk_overlap
+                )
+                chunks = chunker.chunk_document(parsed_doc, kb_id=kb_id)
+                response[fpath] = {
+                    "chunks": [
+                        {"content": c.content, "metadata": c.metadata}
+                        for c in chunks[:5]
+                    ],
+                    "total_chunks": len(chunks),
+                }
+            except Exception as e:
+                logger.warning("Preview failed for file_path %s: %s", fpath, e)
 
     return response
 
@@ -238,37 +305,96 @@ async def handle_preview_doc(args: Dict[str, Any]) -> Dict[str, Any]:
 async def handle_get_tasks(args: Dict[str, Any]) -> Dict[str, Any]:
     """
     Get processing tasks list or map for status polling.
+    Supports integer task IDs and UUID correlation IDs.
     """
     kb_id = args.get("kb_id")
-    task_ids: Optional[List[int]] = args.get("task_ids")
+    task_ids: Optional[List[Any]] = args.get("task_ids")
 
     async with get_db_session() as session:
         if task_ids:
-            # Return dictionary keyed by task ID for UI polling
-            stmt = (
-                select(ProcessingTask)
-                .options(selectinload(ProcessingTask.document))
-                .where(ProcessingTask.id.in_(task_ids))
-            )
-            res = await session.execute(stmt)
-            tasks = res.scalars().all()
-            task_map = {}
-            for t in tasks:
-                task_map[t.id] = {
-                    "document_id": t.document_id,
-                    "status": t.status.lower(),
-                    "error_message": t.error_message,
-                    "upload_id": t.id,
-                    "file_name": t.document.file_name if t.document else None,
-                }
-            # For any requested task_id not found in DB
+            int_ids = [int(tid) for tid in task_ids if str(tid).isdigit()]
+            str_ids = [str(tid) for tid in task_ids if not str(tid).isdigit()]
+
+            task_map: Dict[Any, Any] = {}
+
+            if int_ids:
+                stmt = (
+                    select(ProcessingTask)
+                    .options(selectinload(ProcessingTask.document))
+                    .where(ProcessingTask.id.in_(int_ids))
+                )
+                res = await session.execute(stmt)
+                tasks = res.scalars().all()
+                for t in tasks:
+                    task_map[t.id] = {
+                        "document_id": t.document_id,
+                        "status": t.status.lower(),
+                        "error_message": t.error_message,
+                        "upload_id": t.id,
+                        "file_name": (
+                            t.document.file_name if t.document else None
+                        ),
+                    }
+
+            if str_ids:
+                stmt = (
+                    select(ProcessingTask)
+                    .options(selectinload(ProcessingTask.document))
+                    .where(ProcessingTask.task_id.in_(str_ids))
+                )
+                res = await session.execute(stmt)
+                tasks = res.scalars().all()
+                for t in tasks:
+                    task_map[t.task_id] = {
+                        "document_id": t.document_id or t.task_id,
+                        "status": t.status.lower(),
+                        "error_message": t.error_message,
+                        "upload_id": t.task_id,
+                        "file_name": (
+                            t.document.file_name if t.document else None
+                        ),
+                    }
+
+                for sid in str_ids:
+                    if sid not in task_map:
+                        doc_stmt = (
+                            select(Document)
+                            .options(selectinload(Document.processing_tasks))
+                            .where(Document.file_path.ilike(f"%{sid}%"))
+                        )
+                        doc_res = await session.execute(doc_stmt)
+                        doc = doc_res.scalars().first()
+                        if doc:
+                            latest_task = (
+                                doc.processing_tasks[-1]
+                                if doc.processing_tasks
+                                else None
+                            )
+                            status_val = (
+                                latest_task.status.lower()
+                                if latest_task
+                                else doc.status.lower()
+                            )
+                            task_map[sid] = {
+                                "document_id": doc.id,
+                                "status": status_val,
+                                "error_message": (
+                                    latest_task.error_message
+                                    if latest_task
+                                    else None
+                                ),
+                                "upload_id": sid,
+                                "file_name": doc.file_name,
+                            }
+
             for tid in task_ids:
-                if tid not in task_map:
-                    task_map[tid] = {
-                        "document_id": tid,
+                key = int(tid) if str(tid).isdigit() else str(tid)
+                if key not in task_map and str(tid) not in task_map:
+                    task_map[key] = {
+                        "document_id": key,
                         "status": "completed",
                         "error_message": None,
-                        "upload_id": tid,
+                        "upload_id": key,
                         "file_name": None,
                     }
             return task_map
