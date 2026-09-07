@@ -29,6 +29,13 @@ from app.schemas.knowledge import (
     KnowledgeBaseUpdate,
     PreviewRequest,
 )
+from app.services.document_upload_service import (
+    ALLOWED_EXTENSIONS,
+    MAX_FILE_SIZE,
+    process_and_enqueue_upload,
+    sanitize_filename,
+    validate_and_prepare_file,
+)
 from app.services.minio_service import MinIOService, get_minio_service
 from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
@@ -277,79 +284,13 @@ async def upload_kb_documents(
             detail="No files provided for upload",
         )
 
-    # Step 1: Validate all files upfront
-    validated_files = []
-    for f in upload_files:
-        sanitized_name, content_type, file_size = (
-            await validate_and_prepare_file(f)
-        )
-        validated_files.append((f, sanitized_name, content_type, file_size))
-
-    # Step 2: Stream upload to MinIO and push to Redis document_ingestion
-    results = []
-    for f, sanitized_name, content_type, file_size in validated_files:
-        doc_uuid = str(uuid.uuid4())
-        object_name = f"kb_{kb_id}/{doc_uuid}_{sanitized_name}"
-
-        try:
-            upload_meta = minio_service.upload_file(
-                file_data=f.file,
-                object_name=object_name,
-                content_type=content_type,
-                bucket_name="documents",
-            )
-        except Exception as e:
-            logger.error("MinIO upload failed for '%s': %s", sanitized_name, e)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Document storage failed",
-            )
-
-        # Enqueue Task to Redis
-        queue_payload = json.dumps(
-            {
-                "document_id": doc_uuid,
-                "kb_id": kb_id,
-                "minio_bucket": "documents",
-                "minio_key": object_name,
-                "filename": sanitized_name,
-                "file_size": upload_meta.get("size", file_size),
-                "content_type": content_type,
-            }
-        )
-        try:
-            await redis_client.rpush("document_ingestion", queue_payload)
-            logger.info(
-                "Enqueued document '%s' (%s) to Redis queue "
-                "'document_ingestion'",
-                doc_uuid,
-                sanitized_name,
-            )
-        except Exception as e:
-            logger.error("Failed to enqueue ingestion task to Redis: %s", e)
-            minio_service.delete_file(object_name, bucket_name="documents")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to enqueue document processing task",
-            )
-
-        results.append(
-            {
-                "id": doc_uuid,
-                "document_id": doc_uuid,
-                "upload_id": doc_uuid,
-                "filename": sanitized_name,
-                "file_name": sanitized_name,
-                "original_filename": f.filename or sanitized_name,
-                "status": "PROCESSING",
-                "message": f"File '{sanitized_name}' uploaded successfully",
-                "skip_processing": False,
-                "temp_path": object_name,
-                "kb_id": kb_id,
-            }
-        )
-
-    return results[0] if (single_mode and len(results) == 1) else results
+    return await process_and_enqueue_upload(
+        kb_id=kb_id,
+        files=upload_files,
+        minio_service=minio_service,
+        redis_client=redis_client,
+        single_mode=single_mode,
+    )
 
 
 @router.post("/{kb_id}/documents/preview")

@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from mcp_clients.kb_mcp_endpoint_service import (
     KnowledgeBaseMCPEndpointService,
@@ -164,10 +164,22 @@ async def test_upload_and_process_documents_uploadfile(service):
         filename="notes.txt",
         file=BytesIO(b"Soil nitrogen levels are adequate."),
     )
-    result = await service.upload_and_process_documents(kb_id=5, files=[f])
-    assert len(result) == 1
-    assert result[0]["filename"] == "notes.txt"
-    assert result[0]["status"] == "processed"
+    with patch(
+        "app.services.document_upload_service.process_and_enqueue_upload",
+        new_callable=AsyncMock,
+    ) as mock_upload:
+        mock_upload.return_value = [
+            {
+                "id": "uuid-123",
+                "filename": "notes.txt",
+                "status": "PROCESSING",
+                "kb_id": 5,
+            }
+        ]
+        result = await service.upload_and_process_documents(kb_id=5, files=[f])
+        assert len(result) == 1
+        assert result[0]["filename"] == "notes.txt"
+        assert result[0]["status"] == "PROCESSING"
 
 
 @pytest.mark.asyncio

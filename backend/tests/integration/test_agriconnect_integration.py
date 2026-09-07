@@ -12,7 +12,7 @@ from app.api.api_v1.knowledge_base import (
 from app.core.security import get_current_app, get_current_user
 from app.db.session import get_db
 from app.main import app
-from app.models.app import App
+from app.models.app import App, AppKnowledgeBase
 from app.models.user import User
 from mcp_clients.kb_mcp_endpoint_service import (
     KnowledgeBaseMCPEndpointService,
@@ -347,3 +347,95 @@ class TestAgriConnectFullIntegrationLifecycle:
             )
             assert resp.status_code == 400
             assert "header does not match .pdf" in resp.json()["detail"]
+
+    async def test_agriconnect_apps_jobs_upload_integration(
+        self, agriconnect_app_auth, mock_dependencies
+    ):
+        """
+        Verify AgriConnect's external AI service upload contract:
+        POST /api/v1/apps/jobs with
+            payload={"job": "upload", "knowledge_base_id": 101}
+        and files=[("files", (filename, stream, type))].
+        Asserts job is created and background upload task is dispatched.
+        """
+        # The background task (execute_upload_job) creates its own
+        # MinIO/Redis via process_and_enqueue_upload, bypassing FastAPI DI.
+        # Patch at the import site inside kb_mcp_endpoint_service.
+        mock_upload_result = [
+            {
+                "id": "test-doc-uuid",
+                "document_id": "test-doc-uuid",
+                "upload_id": "test-doc-uuid",
+                "filename": "maize_guide.pdf",
+                "file_name": "maize_guide.pdf",
+                "original_filename": "maize_guide.pdf",
+                "status": "PROCESSING",
+                "message": "File 'maize_guide.pdf' uploaded successfully",
+                "skip_processing": False,
+                "temp_path": "kb_101/test-doc-uuid_maize_guide.pdf",
+                "kb_id": 101,
+            }
+        ]
+
+        with patch(
+            "app.services.document_upload_service.process_and_enqueue_upload",
+            new_callable=AsyncMock,
+            return_value=mock_upload_result,
+        ) as mock_enqueue:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://testserver"
+            ) as client:
+                headers = {
+                    "Authorization": "Bearer test_access_token_agriconnect"
+                }
+
+                # Associate KB 101 with current app
+                agriconnect_app_auth["app"].knowledge_bases = [
+                    AppKnowledgeBase(knowledge_base_id=101, is_default=True)
+                ]
+
+                payload = json.dumps(
+                    {
+                        "job": "upload",
+                        "knowledge_base_id": 101,
+                        "callback_params": {
+                            "kb_id": 101,
+                            "source": "agriconnect",
+                        },
+                    }
+                )
+                files = [
+                    (
+                        "files",
+                        (
+                            "maize_guide.pdf",
+                            b"%PDF-1.4\n% Maize pest management notes\n%%EOF",
+                            "application/pdf",
+                        ),
+                    )
+                ]
+
+                resp = await client.post(
+                    "/api/v1/apps/jobs",
+                    data={"payload": payload},
+                    files=files,
+                    headers=headers,
+                )
+
+                assert resp.status_code == 200
+                data = resp.json()
+                assert "job_id" in data
+                assert data["status"] == "pending"
+
+                # Allow background task to execute
+                import asyncio
+
+                await asyncio.sleep(0.1)
+
+                # Verify the centralized upload service was called
+                assert mock_enqueue.called
+                call_kwargs = mock_enqueue.call_args
+                assert call_kwargs[1]["kb_id"] == 101 or (
+                    len(call_kwargs[0]) > 0 and call_kwargs[0][0] == 101
+                )

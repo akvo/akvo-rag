@@ -11,7 +11,7 @@ from app.models.app import App
 from app.schemas import JobResponse
 from app.services.chat_job_service import execute_chat_job
 from app.services.job_service import JobService
-from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
+from app.services.upload_job_service import execute_upload_job
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -167,11 +167,15 @@ async def create_job(
         logger.info(
             "🚀 Dispatching UPLOAD job using KB %s", app_kb.knowledge_base_id
         )
-        kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
         asyncio.create_task(
-            kb_mcp_endpoint_service.upload_and_process_documents(
+            execute_upload_job(
+                db=SessionLocal(),
+                job_id=job_record.id,
                 kb_id=app_kb.knowledge_base_id,
                 files=files or [],
+                callback_url=(
+                    data.get("callback_url") or current_app.upload_callback_url
+                ),
             )
         )
 
