@@ -1,11 +1,5 @@
-import io
-import json
 import logging
-import mimetypes
-import os
-import re
 from typing import Any, List, Optional
-import uuid
 
 from fastapi import (
     APIRouter,
@@ -29,21 +23,12 @@ from app.schemas.knowledge import (
     KnowledgeBaseUpdate,
     PreviewRequest,
 )
-from app.services.document_upload_service import (
-    ALLOWED_EXTENSIONS,
-    MAX_FILE_SIZE,
-    process_and_enqueue_upload,
-    sanitize_filename,
-    validate_and_prepare_file,
-)
+from app.services.document_upload_service import process_and_enqueue_upload
 from app.services.minio_service import MinIOService, get_minio_service
 from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
-ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 
 
 async def get_redis_client():
@@ -53,104 +38,6 @@ async def get_redis_client():
         yield client
     finally:
         await client.aclose()
-
-
-def sanitize_filename(filename: str) -> str:
-    """
-    Sanitize filename to prevent S3 key path traversal and bad characters.
-    """
-    base = os.path.basename(filename).strip()
-    sanitized = re.sub(r"[^a-zA-Z0-9_.-]", "_", base)
-    sanitized = re.sub(r"^\.+", "", sanitized)
-    return sanitized or "document"
-
-
-async def validate_and_prepare_file(file: UploadFile) -> tuple[str, str, int]:
-    """Validate extension, size ceiling, and magic bytes."""
-    raw_filename = file.filename or "uploaded_document"
-    sanitized = sanitize_filename(raw_filename)
-    _, ext = os.path.splitext(sanitized)
-    ext = ext.lower()
-
-    if ext not in ALLOWED_EXTENSIONS:
-        formats = ", ".join(sorted(ALLOWED_EXTENSIONS))
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"Unsupported file format: {ext}. Allowed formats: {formats}"
-            ),
-        )
-
-    # Read up to 8KB header chunk for magic bytes inspection
-    header_chunk = await file.read(8192)
-    if not header_chunk or len(header_chunk) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Uploaded file '{sanitized}' is empty",
-        )
-
-    # Magic Bytes Validation
-    if ext == ".pdf":
-        if not header_chunk.startswith(b"%PDF-"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Invalid file content: header does not match {ext} "
-                    "specification"
-                ),
-            )
-    elif ext == ".docx":
-        if not (
-            header_chunk.startswith(b"PK\x03\x04")
-            or header_chunk.startswith(b"PK\x05\x06")
-            or header_chunk.startswith(b"PK\x07\x08")
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Invalid file content: header does not match {ext} "
-                    "specification"
-                ),
-            )
-    elif ext in [".txt", ".md"]:
-        try:
-            header_chunk.decode("utf-8")
-        except UnicodeDecodeError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Invalid file content: header does not match {ext} "
-                    "UTF-8 text specification"
-                ),
-            )
-
-    # Calculate file size
-    if getattr(file, "size", None) is not None:
-        file_size = file.size
-    elif hasattr(file.file, "seek") and hasattr(file.file, "tell"):
-        file.file.seek(0, io.SEEK_END)
-        file_size = file.file.tell()
-        file.file.seek(0)
-    else:
-        file_size = len(header_chunk)
-
-    if file_size > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"File '{sanitized}' exceeds limit of 50MB "
-                f"(size: {file_size} bytes)"
-            ),
-        )
-
-    # Rewind pointer for MinIO streaming
-    await file.seek(0)
-    content_type = (
-        file.content_type
-        or mimetypes.guess_type(sanitized)[0]
-        or "application/octet-stream"
-    )
-    return sanitized, content_type, file_size
 
 
 class TestRetrievalRequest(BaseModel):
