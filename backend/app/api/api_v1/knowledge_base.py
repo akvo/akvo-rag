@@ -336,8 +336,15 @@ async def upload_kb_documents(
         results.append(
             {
                 "id": doc_uuid,
+                "document_id": doc_uuid,
+                "upload_id": doc_uuid,
                 "filename": sanitized_name,
+                "file_name": sanitized_name,
+                "original_filename": f.filename or sanitized_name,
                 "status": "PROCESSING",
+                "message": f"File '{sanitized_name}' uploaded successfully",
+                "skip_processing": False,
+                "temp_path": object_name,
                 "kb_id": kb_id,
             }
         )
@@ -370,7 +377,7 @@ async def get_processing_tasks(
     current_user: User = Depends(get_current_user),
 ):
     """Get status of multiple processing tasks."""
-    task_id_list = [int(id.strip()) for id in task_ids.split(",")]
+    task_id_list = [id.strip() for id in task_ids.split(",") if id.strip()]
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     result = await kb_mcp_endpoint_service.get_processing_tasks(
         kb_id=kb_id, task_ids=task_id_list

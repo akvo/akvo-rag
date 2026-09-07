@@ -430,9 +430,8 @@ class TestChatJobService:
             state_arg = mock_workflow.ainvoke.call_args[0][0]
             assert (
                 state_arg["qa_prompt_str"]
-                == "QA_PROMPT\n\n**IMPORTANT: Follow these additional rules strictly:**\n\nCustom job prompt"
+                == "QA_PROMPT\n\n**IMPORTANT: Follow these additional rules strictly:**\n\nCustom job prompt"  # noqa
             )
-
 
 
 class TestCitationSuppression:
@@ -448,7 +447,9 @@ class TestCitationSuppression:
         doc.metadata = {"source": source, "page_label": "1"}
         return doc
 
-    async def _run_job_with_workflow(self, mock_db, mock_workflow, data, kb_ids=None):
+    async def _run_job_with_workflow(
+        self, mock_db, mock_workflow, data, kb_ids=None
+    ):
         """Execute a chat job with all external dependencies patched out."""
         from contextlib import ExitStack
 
@@ -461,16 +462,26 @@ class TestCitationSuppression:
                 )
             )
             stack.enter_context(
-                patch.object(chat_job_service.JobService, "update_status_to_running")
+                patch.object(
+                    chat_job_service.JobService, "update_status_to_running"
+                )
             )
             stack.enter_context(
-                patch.object(chat_job_service.JobService, "update_status_to_completed")
+                patch.object(
+                    chat_job_service.JobService, "update_status_to_completed"
+                )
             )
             stack.enter_context(
-                patch.object(chat_job_service.JobService, "update_status_to_failed")
+                patch.object(
+                    chat_job_service.JobService, "update_status_to_failed"
+                )
             )
             stack.enter_context(
-                patch.object(chat_job_service.PromptService, "__init__", return_value=None)
+                patch.object(
+                    chat_job_service.PromptService,
+                    "__init__",
+                    return_value=None,
+                )
             )
             stack.enter_context(
                 patch.object(
@@ -488,16 +499,22 @@ class TestCitationSuppression:
             )
             stack.enter_context(
                 patch.object(
-                    chat_job_service.SystemSettingsService, "__init__", return_value=None
+                    chat_job_service.SystemSettingsService,
+                    "__init__",
+                    return_value=None,
                 )
             )
             stack.enter_context(
                 patch.object(
-                    chat_job_service.SystemSettingsService, "get_top_k", return_value=5
+                    chat_job_service.SystemSettingsService,
+                    "get_top_k",
+                    return_value=5,
                 )
             )
             stack.enter_context(
-                patch.object(chat_job_service, "query_answering_workflow", mock_workflow)
+                patch.object(
+                    chat_job_service, "query_answering_workflow", mock_workflow
+                )
             )
             stack.enter_context(
                 patch(
@@ -526,14 +543,16 @@ class TestCitationSuppression:
         mock_workflow = Mock()
         mock_workflow.ainvoke = AsyncMock(
             return_value={
-                "answer": "Information is missing on why the sky is blue based on the provided context.",
+                "answer": "Information is missing on why the sky is blue based on the provided context.",  # noqa
                 "context": [self._make_context_doc()],
                 "intent": "knowledge_query",
             }
         )
         data = {"chats": [{"role": "user", "content": "Why is the sky blue?"}]}
 
-        result = await self._run_job_with_workflow(mock_db, mock_workflow, data)
+        result = await self._run_job_with_workflow(
+            mock_db, mock_workflow, data
+        )
 
         assert result["citations"] == []
 
@@ -553,9 +572,15 @@ class TestCitationSuppression:
                 "intent": "knowledge_query",
             }
         )
-        data = {"chats": [{"role": "user", "content": "What causes potato blight?"}]}
+        data = {
+            "chats": [
+                {"role": "user", "content": "What causes potato blight?"}
+            ]
+        }
 
-        result = await self._run_job_with_workflow(mock_db, mock_workflow, data)
+        result = await self._run_job_with_workflow(
+            mock_db, mock_workflow, data
+        )
 
         assert len(result["citations"]) == 1
         assert result["citations"][0]["document"] == "agri.pdf"
@@ -576,7 +601,9 @@ class TestCitationSuppression:
         )
         data = {"chats": [{"role": "user", "content": "Hello"}]}
 
-        result = await self._run_job_with_workflow(mock_db, mock_workflow, data)
+        result = await self._run_job_with_workflow(
+            mock_db, mock_workflow, data
+        )
 
         assert result["citations"] == []
 
@@ -603,3 +630,44 @@ class TestCitationSuppression:
 
         # Result should come back normally; kb_ids=[] is passed as-is
         assert isinstance(result, dict)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "answer_text",
+        [
+            "Potato blight is caused by a fungus. [citation:1]",
+            "Potato blight is caused by a fungus. [citation: 1]",
+            "Potato blight is caused by a fungus. [Citation: 1]",
+            "Potato blight is caused by a fungus. [citation: 1, 2]",
+            "Potato blight is caused by a fungus. [[citation:1]]",
+            "Potato blight is caused by a fungus. [citation](1)",
+        ],
+    )
+    async def test_citations_present_for_various_marker_formats(
+        self, mock_db, answer_text
+    ):
+        """
+        Ensure different formatting variants of citation markers (case,
+        whitespace, double brackets, comma lists, markdown style)
+        preserve citations.
+        """
+        mock_workflow = Mock()
+        mock_workflow.ainvoke = AsyncMock(
+            return_value={
+                "answer": answer_text,
+                "context": [self._make_context_doc("Blight info", "agri.pdf")],
+                "intent": "knowledge_query",
+            }
+        )
+        data = {
+            "chats": [
+                {"role": "user", "content": "What causes potato blight?"}
+            ]
+        }
+
+        result = await self._run_job_with_workflow(
+            mock_db, mock_workflow, data
+        )
+
+        assert len(result["citations"]) == 1
+        assert result["citations"][0]["document"] == "agri.pdf"

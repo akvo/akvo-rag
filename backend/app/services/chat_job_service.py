@@ -107,7 +107,9 @@ async def execute_chat_job(
         # when it actually cites a document. If the answer contains no markers
         # (e.g. "Information is missing on..."), the retrieved chunks were not
         # used and must not be reported as citations to the caller.
-        if not re.search(r"\[citation:\d+\]", answer):
+        if not re.search(
+            r"\[\[?\s*[cC]itation(?::\s*[\d,\s]+\]?|\]\(\d+\))", answer
+        ):
             citations = []
 
         output = {"answer": answer, "citations": citations}

@@ -235,7 +235,7 @@ class KnowledgeBaseMCPEndpointService:
 
     async def preview_documents(
         self, kb_id: int, preview_request: dict
-    ) -> Dict[int, Any]:
+    ) -> Dict[Any, Any]:
         """Preview document chunks mapped by document ID via Redis RPC."""
         result = await self.dispatcher.call_tool(
             "knowledge_bases_mcp",
@@ -243,8 +243,13 @@ class KnowledgeBaseMCPEndpointService:
             {"kb_id": kb_id, **preview_request},
         )
         if isinstance(result, dict) and "error" not in result:
-            # Convert string keys back to int if needed
-            return {int(k): v for k, v in result.items() if str(k).isdigit()}
+            formatted = {}
+            for k, v in result.items():
+                if str(k).isdigit():
+                    formatted[int(k)] = v
+                else:
+                    formatted[k] = v
+            return formatted
         return result
 
     async def process_documents(
@@ -256,16 +261,9 @@ class KnowledgeBaseMCPEndpointService:
         tasks = []
         for idx, res in enumerate(upload_results, start=1):
             doc_id = (
-                res.get("document_id")
-                or res.get("doc_id")
-                or res.get("id")
+                res.get("document_id") or res.get("doc_id") or res.get("id")
             )
-            uid = (
-                res.get("upload_id")
-                or res.get("task_id")
-                or doc_id
-                or idx
-            )
+            uid = res.get("upload_id") or res.get("task_id") or doc_id or idx
             tasks.append({"upload_id": uid, "task_id": uid})
 
             chunk_size = res.get("chunk_size", 1000)
@@ -273,6 +271,16 @@ class KnowledgeBaseMCPEndpointService:
             target_id = doc_id or uid
 
             # Trigger async ingestion via Redis RPC
+            fname = (
+                res.get("file_name")
+                or res.get("filename")
+                or res.get("original_filename")
+            )
+            fpath = (
+                res.get("temp_path")
+                or res.get("file_path")
+                or res.get("minio_key")
+            )
             asyncio.create_task(
                 self.dispatcher.call_tool(
                     "knowledge_bases_mcp",
@@ -282,6 +290,11 @@ class KnowledgeBaseMCPEndpointService:
                         "kb_id": kb_id,
                         "upload_id": uid,
                         "task_id": uid,
+                        "file_name": fname,
+                        "filename": fname,
+                        "file_path": fpath,
+                        "temp_path": fpath,
+                        "minio_key": fpath,
                         "chunk_size": chunk_size,
                         "chunk_overlap": chunk_overlap,
                     },
@@ -341,8 +354,8 @@ class KnowledgeBaseMCPEndpointService:
 
     # ---- Processing tasks ----
     async def get_processing_tasks(
-        self, kb_id: int, task_ids: List[int]
-    ) -> Dict[int, dict]:
+        self, kb_id: int, task_ids: List[Any]
+    ) -> Dict[Any, dict]:
         """Get document processing task status via Redis RPC."""
         result = await self.dispatcher.call_tool(
             "knowledge_bases_mcp",
@@ -350,7 +363,10 @@ class KnowledgeBaseMCPEndpointService:
             {"kb_id": kb_id, "task_ids": task_ids},
         )
         if isinstance(result, dict) and "error" not in result:
-            return {int(k): v for k, v in result.items() if str(k).isdigit()}
+            return {
+                int(k) if str(k).isdigit() else str(k): v
+                for k, v in result.items()
+            }
         return {
             tid: {
                 "document_id": tid,

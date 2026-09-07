@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import logging
+import os
 from typing import Any, Dict, List, Optional
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -273,7 +274,9 @@ class IngestionProcessor:
         file_size: int,
         content_type: str,
     ) -> Optional[Document]:
-        """Find existing document or create a new row."""
+        """
+        Find existing document or create a new row with idempotent safety.
+        """
         doc = None
         if isinstance(doc_id_raw, int) or (
             isinstance(doc_id_raw, str) and doc_id_raw.isdigit()
@@ -282,11 +285,24 @@ class IngestionProcessor:
             res = await db.execute(stmt)
             doc = res.scalar_one_or_none()
 
+        if not doc and doc_id_raw and isinstance(doc_id_raw, str):
+            # Try searching Document.file_path for UUID
+            stmt = select(Document).where(
+                Document.file_path.ilike(f"%{doc_id_raw}%")
+            )
+            res = await db.execute(stmt)
+            doc = res.scalars().first()
+
         if not doc and upload_id:
             try:
-                task_stmt = select(ProcessingTask).where(
-                    ProcessingTask.id == int(upload_id)
-                )
+                if str(upload_id).isdigit():
+                    task_stmt = select(ProcessingTask).where(
+                        ProcessingTask.id == int(upload_id)
+                    )
+                else:
+                    task_stmt = select(ProcessingTask).where(
+                        ProcessingTask.task_id == str(upload_id)
+                    )
                 task_res = await db.execute(task_stmt)
                 pt = task_res.scalar_one_or_none()
                 if pt and pt.document_id:
@@ -312,29 +328,61 @@ class IngestionProcessor:
             res = await db.execute(stmt)
             doc = res.scalar_one_or_none()
 
-        if not doc and filename and kb_id:
+        # Derive clean filename if not provided
+        resolved_filename = filename
+        if not resolved_filename and key:
+            base_name = os.path.basename(key)
+            if "_" in base_name and len(base_name.split("_")[0]) in (32, 36):
+                resolved_filename = base_name.split("_", 1)[1]
+            else:
+                resolved_filename = base_name
+
+        if not doc and resolved_filename and kb_id:
             stmt = select(Document).where(
                 Document.knowledge_base_id == kb_id,
-                Document.file_name == filename,
+                Document.file_name == resolved_filename,
             )
             res = await db.execute(stmt)
             doc = res.scalar_one_or_none()
 
         if not doc and kb_id:
-            final_key = key or f"kb_{kb_id}/{filename}"
-            doc = Document(
-                knowledge_base_id=kb_id,
-                file_name=filename or "document.pdf",
-                file_path=final_key,
-                file_size=file_size,
-                content_type=content_type,
-                file_hash=hashlib.sha256(
-                    (filename or "doc").encode()
-                ).hexdigest(),
-                status="PROCESSING",
+            final_name = resolved_filename or "document.pdf"
+            # Final check against unique constraint
+            # (knowledge_base_id, file_name)
+            stmt = select(Document).where(
+                Document.knowledge_base_id == kb_id,
+                Document.file_name == final_name,
             )
-            db.add(doc)
-            await db.flush()
+            res = await db.execute(stmt)
+            existing_doc = res.scalar_one_or_none()
+            if existing_doc:
+                doc = existing_doc
+                if key:
+                    doc.file_path = key
+                if file_size:
+                    doc.file_size = file_size
+                if content_type:
+                    doc.content_type = content_type
+                doc.status = "PROCESSING"
+            else:
+                final_key = key or f"kb_{kb_id}/{final_name}"
+                doc = Document(
+                    knowledge_base_id=kb_id,
+                    file_name=final_name,
+                    file_path=final_key,
+                    file_size=file_size,
+                    content_type=content_type,
+                    file_hash=hashlib.sha256(final_name.encode()).hexdigest(),
+                    status="PROCESSING",
+                )
+                db.add(doc)
+                await db.flush()
+        elif doc and key:
+            doc.file_path = key
+            if file_size:
+                doc.file_size = file_size
+            if content_type:
+                doc.content_type = content_type
 
         return doc
 
@@ -349,8 +397,23 @@ class IngestionProcessor:
         task = None
         if upload_id:
             try:
+                if str(upload_id).isdigit():
+                    task_stmt = select(ProcessingTask).where(
+                        ProcessingTask.id == int(upload_id)
+                    )
+                else:
+                    task_stmt = select(ProcessingTask).where(
+                        ProcessingTask.task_id == str(upload_id)
+                    )
+                task_res = await db.execute(task_stmt)
+                task = task_res.scalar_one_or_none()
+            except (ValueError, TypeError):
+                pass
+
+        if not task and task_id_raw:
+            try:
                 task_stmt = select(ProcessingTask).where(
-                    ProcessingTask.id == int(upload_id)
+                    ProcessingTask.task_id == str(task_id_raw)
                 )
                 task_res = await db.execute(task_stmt)
                 task = task_res.scalar_one_or_none()
