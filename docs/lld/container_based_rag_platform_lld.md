@@ -851,8 +851,9 @@ sequenceDiagram
 | **Phase 5** | **Quality Gates, Golden Set Evaluation, Cleanup & Documentation** | | | |
 | `TASK-OPS-501` | End-to-End Golden Set Accuracy & Legacy Test Gate (Faithfulness $\ge 0.85$) | `backend/RAG_evaluation/` | **2.5 hrs** | 2.0 days |
 | `TASK-CLEAN-502` | Purge Legacy Files, Dead Code, FastMCP/Celery Artifacts & Unused Dependencies | `backend/`, `vector-kb-mcp/` | **1.0 hr** | 0.5 day |
-| `TASK-DOC-503` | Comprehensive Developer Onboarding & Architecture Documentation Alignment | `docs/` & `README.md` | **1.5 hrs** | 1.0 day |
-| **TOTAL** | | | **34.5 hrs (~4.3 working days)** | **26.0 days** |
+| `TASK-INT-503` | Test All Functionalities, Integration with AgriConnect & Backend Test Coverage Gate ($\ge 85\%$) | `backend/tests/` | **2.5 hrs** | 2.0 days |
+| `TASK-DOC-504` | Comprehensive Developer Onboarding & Architecture Documentation Alignment | `docs/` & `README.md` | **1.5 hrs** | 1.0 day |
+| **TOTAL** | | | **37.0 hrs (~4.6 working days)** | **28.0 days** |
 
 ---
 
@@ -1284,7 +1285,26 @@ sequenceDiagram
 
 ---
 
-#### `TASK-DOC-503`: Comprehensive Developer Onboarding & Architecture Documentation Alignment
+#### `TASK-INT-503`: Test All Functionalities, Integration with AgriConnect & Backend Test Coverage Gate ($\ge 85\%$)
+* **Target Path:** `backend/tests/integration/`, `backend/tests/api/`, `backend/tests/`, `docs/qa/`
+* **Vibe-Coding Estimate:** `2.5 hours`
+* **Detailed Description:**  
+  1. Conduct end-to-end integration and regression testing simulating the complete **AgriConnect** host workflow (chat streaming, multi-KB query routing, multipart PDF upload to MinIO S3, background vector indexing, and dynamic prompt overlay application). Enforce 100% backwards compatibility on all public endpoints in Section 7.3.
+  2. Increase overall backend test coverage from the baseline **77% to $\ge 85\%$** by adding targeted unit and integration tests across untested branches in `app/services/`, `app/api/`, and `app/core/` post-cleanup.
+* **Key Touchpoints:**
+  - `backend/tests/integration/test_agriconnect_integration.py` `[NEW]`
+  - `backend/tests/api/test_host_api_backwards_compatibility.py` `[MODIFY]`
+  - `backend/tests/` `[EXPAND]` (Targeted unit tests for branch coverage $\ge 85\%$)
+  - `docs/qa/qa-guide-agriconnect-integration.md` `[NEW]`
+* **User Acceptance Criteria (UAC):**
+  - AgriConnect successfully creates KBs, uploads documents, queries dialogue with dynamic prompt overlays, and receives streaming answers with zero regressions.
+* **Technical Acceptance Criteria (TAC):**
+  - All host API integration tests pass with 100% compliance against Section 7.3 schemas.
+  - Executing `pytest tests/ --cov=app --cov-report=term-missing` reports **$\ge 85\%$ total code coverage** across `backend/app/`.
+
+---
+
+#### `TASK-DOC-504`: Comprehensive Developer Onboarding & Architecture Documentation Alignment
 * **Target Path:** `docs/` & `README.md`
 * **Vibe-Coding Estimate:** `1.5 hours`
 * **Detailed Description:**  

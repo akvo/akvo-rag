@@ -35,7 +35,10 @@ The system depends on an external MCP server (Vector Knowledge Base MCP Server) 
 ### Starting the Development Environment
 
 ```bash
-# Start all services (backend, frontend, db, nginx)
+# Start all services with dc.sh (recommended)
+./dc.sh up -d --build
+
+# Or standard docker compose
 docker compose -f docker-compose.dev.yml up -d --build
 
 # Production mode
@@ -154,12 +157,13 @@ Migrations managed with Alembic:
 - External API endpoints for third-party integrations
 - Requires API key authentication
 
-### MCP Client Discovery
+### MCP Client & Tool Dispatcher
 
-The system discovers MCP tools/resources at startup:
-- **Discovery Manager**: `backend/mcp_clients/`
-- **Result Cache**: `backend/mcp_discovery.json`
-- **Connection**: Configured via `KNOWLEDGE_BASES_MCP` environment variable
+The system defines and routes MCP tools/resources declaratively:
+- **Declarative Config**: `backend/mcp_config.json`
+- **Config Parser**: `backend/app/core/mcp_config.py` (`MCPConfigParser`)
+- **Queue Dispatcher**: `backend/mcp_clients/queue_dispatcher.py` (`MCPQueueDispatcher` via Redis RPC)
+- **Endpoint Adapter**: `backend/mcp_clients/kb_mcp_endpoint_service.py` (`KnowledgeBaseMCPEndpointService`)
 
 ### Testing
 
