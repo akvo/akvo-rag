@@ -79,8 +79,8 @@ In AgriConnect's codebase (`backend/services/external_ai_service.py`), AgriConne
      "app_name": "AgriConnect Local",
      "domain": "agriconnect.local",
      "default_chat_prompt": "You are AgriConnect AI, an expert agronomy advisor supporting smallholder farmers.",
-     "chat_callback": "https://host.docker.internal:8000/api/v1/callbacks/chat",
-     "upload_callback": "https://host.docker.internal:8000/api/v1/callbacks/upload",
+     "chat_callback": "http://host.docker.internal:8000/api/callback/ai",
+     "upload_callback": "http://host.docker.internal:8000/api/callback/kb",
      "callback_token": "local_agriconnect_secret_token"
    }
    ```
@@ -102,7 +102,7 @@ In AgriConnect's codebase (`backend/services/external_ai_service.py`), AgriConne
 
 ### Step 3.2: Configure the Service Token in AgriConnect Swagger
 
-1. Open **[http://localhost:8000/docs](http://localhost:8000/docs)** in your browser.
+1. Open **[http://localhost:8000/api/docs](http://localhost:8000/api/docs)** in your browser.
 2. **Authorize as Admin**:
    - Expand `POST /api/auth/login`, click **"Try it out"**, enter your admin credentials, and click **"Execute"**.
    - Copy the `access_token` from the response.
