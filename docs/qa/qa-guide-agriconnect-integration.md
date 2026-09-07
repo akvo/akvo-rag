@@ -1,157 +1,155 @@
-# QA & Host Integration Guide: AgriConnect and Host Integration (TASK-INT-503)
+# QA & Host Integration Guide: AgriConnect and Akvo RAG Integration (TASK-INT-503)
 
-This guide documents the API contracts, backwards compatibility expectations, and manual verification procedures for integrating AgriConnect with the Akvo RAG service.
-
----
-
-## 1. Overview & Dual Route Mount
-
-To maintain 100% backward compatibility with existing mobile clients, web dashboards, and partner host systems like AgriConnect, Akvo RAG exposes dual endpoint mounts:
-- Legacy `/api/...` prefix
-- Standard Section 7.3 `/api/v1/...` prefix
-
-Both prefixes route to identical FastAPI application routers with identical behavior, headers, serialization schemas, and status codes.
-
-| Resource | Legacy Endpoint | Section 7.3 Canonical Endpoint |
-|---|---|---|
-| Knowledge Bases | `GET /api/knowledge-bases` | `GET /api/v1/knowledge-bases` |
-| Create Knowledge Base | `POST /api/knowledge-bases` | `POST /api/v1/knowledge-bases` |
-| Upload Document | `POST /api/knowledge-bases/{id}/upload` | `POST /api/v1/knowledge-bases/{id}/upload` |
-| Task Status Polling | `GET /api/knowledge-bases/tasks/{task_id}` | `GET /api/v1/knowledge-bases/tasks/{task_id}` |
-| RAG Chat / Dialogue | `POST /api/chat/` | `POST /api/v1/chat/` |
-| Prompt Versioning | `GET /api/prompt` | `GET /api/v1/prompt` |
-| API Keys | `GET /api/api-keys` | `GET /api/v1/api-keys` |
+This comprehensive guide documents the architecture, dual-route API contracts, exact endpoints used by **AgriConnect**, step-by-step local Swagger setup, end-to-end workflows, and automated verification suites.
 
 ---
 
-## 2. Authentication
+## 1. Architectural Overview & Network Topology
 
-Requests must include a Bearer token or API key depending on the service tier.
+Both projects run in independent Docker Compose networks on your local machine:
+
+- **AgriConnect**: Runs on default host ports (`8000`, `3000`, `5432`, `6379`).
+- **Akvo RAG**: Runs on offset host ports (`8010`, `3010`, `5433`, `6380`, `8002`, `9010/9011`).
+
+Because each project operates in its own Docker network (`akvo-rag_default` and `agriconnect_default`), communication from the **AgriConnect backend container** to the **Akvo RAG backend container** routes through the Docker host gateway:
+
+- **Internal Container Gateway**: `http://host.docker.internal:8010`
+- **Host Machine / Browser**: `http://localhost:8010` (Backend API / Swagger) and `http://localhost:3010` (Web UI)
+
+```
+  ┌────────────────────────────────────────────────────────┐
+  │                    Localhost / Mac                     │
+  │                                                        │
+  │   AgriConnect Containers        Akvo RAG Containers    │
+  │   ┌────────────────────┐        ┌────────────────────┐ │
+  │   │ backend:8000       │───────▶│ backend:8000       │ │
+  │   │ (host port 8000)   │        │ (host port 8010)   │ │
+  │   └────────────────────┘        └────────────────────┘ │
+  │              ▲                             ▲           │
+  │              │                             │           │
+  │   http://host.docker.internal:8010         │           │
+  │   (routes via host port 8010)              │           │
+  │                                            │           │
+  └────────────────────────────────────────────┼───────────┘
+                                               │
+                                      Browser / Frontend:
+                                    http://localhost:3010
+```
+
+---
+
+## 2. Which Routes Does AgriConnect Actually Use?
+
+In AgriConnect's codebase (`backend/services/external_ai_service.py`), AgriConnect operates through 4 distinct configurable URLs stored in its `service_tokens` table:
+
+1. **`chat_url` ➔ `POST /api/v1/apps/jobs` (or `/api/apps/jobs`)**:
+   - **How AgriConnect calls it**: AgriConnect sends `multipart/form-data` with `payload={"job": "chat", "chats": [...], "prompt": "...", "callback_params": {...}}`.
+   - **Akvo RAG handling**: Handled by the universal `jobs.router` mounted at `/api/v1/apps/jobs`. It dispatches asynchronous answer synthesis and posts results back to AgriConnect's `chat_callback` webhook.
+
+2. **`upload_url` ➔ `POST /api/v1/apps/jobs` (or `POST /api/v1/apps/upload`)**:
+   - **How AgriConnect calls it**:
+     - *Preferred (Async Job)*: Sends `multipart/form-data` with `payload={"job": "upload", "knowledge_base_id": ...}` and `files=[...]` to `POST /api/v1/apps/jobs`. Notifies AgriConnect's `upload_callback` webhook on completion.
+     - *Direct upload*: Sends `files=[...]` to `POST /api/v1/apps/upload`.
+
+3. **`kb_url` ➔ `http://host.docker.internal:8010/api/v1/apps/knowledge-bases`**:
+   - **How AgriConnect calls it**:
+     - `POST {kb_url}`: Creates a new Knowledge Base under the app (`POST /api/v1/apps/knowledge-bases`).
+     - `GET {kb_url}`: Lists all Knowledge Bases belonging to the app (`GET /api/v1/apps/knowledge-bases`).
+     - `GET {kb_url}/{kb_id}`: Fetches KB details (`GET /api/v1/apps/knowledge-bases/{kb_id}`).
+     - `PATCH {kb_url}/{kb_id}`: Updates KB metadata (`PATCH /api/v1/apps/knowledge-bases/{kb_id}`).
+     - `DELETE {kb_url}/{kb_id}`: Deletes the KB (`DELETE /api/v1/apps/knowledge-bases/{kb_id}`).
+
+4. **`document_url` ➔ `http://host.docker.internal:8010/api/v1/apps/documents`**:
+   - **How AgriConnect calls it**:
+     - `GET {document_url}?kb_id={id}`: Lists indexed documents in a knowledge base.
+     - `DELETE {document_url}?kb_id={id}&doc_id={id}`: Deletes a document from the KB.
+
+---
+
+## 3. Step-by-Step Local Integration Walkthrough (Swagger UI)
+
+### Step 3.1: Register AgriConnect in Akvo RAG
+
+1. Open **[http://localhost:8010/docs](http://localhost:8010/docs)**.
+2. Under the **`apps`** section, expand **`POST /api/v1/apps/register`** (or `POST /api/apps/register`).
+3. Click **"Try it out"**, provide the registration payload:
+
+   ```json
+   {
+     "app_name": "AgriConnect Local",
+     "domain": "agriconnect.local",
+     "default_chat_prompt": "You are AgriConnect AI, an expert agronomy advisor supporting smallholder farmers.",
+     "chat_callback": "https://host.docker.internal:8000/api/v1/callbacks/chat",
+     "upload_callback": "https://host.docker.internal:8000/api/v1/callbacks/upload",
+     "callback_token": "local_agriconnect_secret_token"
+   }
+   ```
+
+4. Click **"Execute"**.
+5. In the **`201 Created`** response, copy the **`access_token`** (starts with `tok_...`):
+
+   ```json
+   {
+     "app_id": "app_H6quogDyGNxQQgIKdg2sog",
+     "client_id": "ac_wClwAYUnO5mIM8DFuztKYQ",
+     "access_token": "tok_example_token_value_here",
+     "scopes": ["jobs.write", "kb.read", "kb.write", "apps.read"],
+     "knowledge_bases": [{"knowledge_base_id": 215, "is_default": true}]
+   }
+   ```
+
+---
+
+### Step 3.2: Configure the Service Token in AgriConnect Swagger
+
+1. Open **[http://localhost:8000/docs](http://localhost:8000/docs)** in your browser.
+2. **Authorize as Admin**:
+   - Expand `POST /api/auth/login`, click **"Try it out"**, enter your admin credentials, and click **"Execute"**.
+   - Copy the `access_token` from the response.
+   - Click the green **"Authorize"** button at the top of the Swagger page, paste the token into **HTTPBearer**, and click **"Authorize"**.
+3. **Inspect Existing Tokens**:
+   - Under `service-tokens`, expand **`GET /api/admin/service-tokens/`** ➔ Click **"Try it out"** ➔ **"Execute"**.
+4. **Create or Update the `akvo-rag` Entry**:
+   - **If creating new**: Expand **`POST /api/admin/service-tokens/`** ➔ **"Try it out"**.
+   - **If updating**: Expand **`PUT /api/admin/service-tokens/{token_id}`** ➔ **"Try it out"** with the token ID.
+   - Enter the exact URLs using the `apps` routes:
+
+     ```json
+     {
+       "service_name": "akvo-rag",
+       "access_token": "tok_PASTE_YOUR_COPIED_TOKEN_HERE",
+       "chat_url": "http://host.docker.internal:8010/api/v1/apps/jobs",
+       "upload_url": "http://host.docker.internal:8010/api/v1/apps/jobs",
+       "kb_url": "http://host.docker.internal:8010/api/v1/apps/knowledge-bases",
+       "document_url": "http://host.docker.internal:8010/api/v1/apps/documents",
+       "default_prompt": "You are AgriConnect AI agronomy advisor supporting smallholder farmers.",
+       "active": 1
+     }
+     ```
+
+   - Click **"Execute"** (returns `200 OK`).
+
+---
+
+## 4. Verification & Testing
+
+### 4.1 Verify Knowledge Base Sync from AgriConnect Swagger
+1. In AgriConnect Swagger ([http://localhost:8000/docs](http://localhost:8000/docs)), navigate to **`knowledge-bases`**.
+2. Expand **`GET /api/knowledge-bases/`** ➔ Click **"Try it out"** ➔ **"Execute"**.
+3. AgriConnect will request `GET http://host.docker.internal:8010/api/v1/apps/knowledge-bases` with `Authorization: Bearer tok_...`.
+4. It will return the list of knowledge bases linked to the AgriConnect app.
+
+### 4.2 Automated Verification Suites
+Run the automated test suites:
 
 ```bash
-# Using JWT Bearer token:
-Authorization: Bearer eyJhbGciOi...
+# 1. Host App registration, token auth & upload lifecycle
+docker exec akvo-rag-backend-1 python -m pytest tests/integration/test_app_endpoints.py -v
 
-# Using API Key header (when configured):
-X-API-KEY: akvo_key_...
-```
-
----
-
-## 3. End-to-End AgriConnect Workflows
-
-### 3.1 Create Knowledge Base for Crop Pest Management
-
-**Request:**
-```bash
-curl -X POST "http://localhost:8000/api/v1/knowledge-bases" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Pest Management & Crop Advisory",
-    "description": "Integrated pest management guidelines and disease diagnostics for smallholder farmers"
-  }'
-```
-
-**Expected Response (`200 OK` or `201 Created`):**
-```json
-{
-  "id": 1,
-  "name": "Pest Management & Crop Advisory",
-  "description": "Integrated pest management guidelines and disease diagnostics for smallholder farmers",
-  "created_at": "2026-09-07T05:50:00Z"
-}
-```
-
----
-
-### 3.2 Upload Technical Advisory Document (Multipart)
-
-Documents must be standard PDF, TXT, or DOCX files. The ingestion worker verifies magic bytes (e.g. `%PDF-1.4`).
-
-**Request:**
-```bash
-curl -X POST "http://localhost:8000/api/v1/knowledge-bases/1/upload" \
-  -H "Authorization: Bearer $TOKEN" \
-  -F "file=@fall_armyworm_control_guide.pdf;type=application/pdf"
-```
-
-**Expected Response (`202 Accepted` or `200 OK`):**
-```json
-{
-  "task_id": "c6a71cb0-4e31-40be-9852-5a907106fe98",
-  "message": "File upload accepted and queued for processing",
-  "status": "processing"
-}
-```
-
----
-
-### 3.3 Poll Ingestion Task Status
-
-**Request:**
-```bash
-curl -X GET "http://localhost:8000/api/v1/knowledge-bases/tasks/c6a71cb0-4e31-40be-9852-5a907106fe98" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-**Expected Response (`200 OK`):**
-```json
-{
-  "task_id": "c6a71cb0-4e31-40be-9852-5a907106fe98",
-  "status": "completed",
-  "progress": 100,
-  "result": {
-    "total_chunks": 42,
-    "vector_count": 42
-  }
-}
-```
-
----
-
-### 3.4 Query Crop Pest Advisory via RAG Chat
-
-Farmers and extension agents ask questions. The system returns an answer enriched with source citations and document references.
-
-**Request:**
-```bash
-curl -X POST "http://localhost:8000/api/v1/chat/" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "How should I treat Fall Armyworm on young maize?",
-    "knowledge_base_ids": [1],
-    "app_id": "agriconnect-mobile-app",
-    "stream": false
-  }'
-```
-
-**Expected Response (`200 OK`):**
-```json
-{
-  "response": "For young maize infested by Fall Armyworm, apply bio-pesticides such as Bacillus thuringiensis (Bt) or neem-based extracts at the early whorl stage. Ensure spraying is targeted into the leaf whorls during early morning or late evening.",
-  "citations": [
-    {
-      "source": "fall_armyworm_control_guide.pdf",
-      "page": 4,
-      "text": "Apply neem extract (5%) or Bt into the whorls of maize seedlings..."
-    }
-  ]
-}
-```
-
----
-
-## 4. Automated Integration Verification Suite
-
-Run the full AgriConnect end-to-end integration and backwards compatibility tests inside the container:
-
-```bash
-# 1. AgriConnect specific end-to-end suite
+# 2. AgriConnect specific end-to-end integration suite
 docker exec akvo-rag-backend-1 python -m pytest tests/integration/test_agriconnect_integration.py -v
 
-# 2. Host API backwards compatibility suite (both /api and /api/v1)
+# 3. Host API backwards compatibility suite (both /api and /api/v1)
 docker exec akvo-rag-backend-1 python -m pytest tests/api/test_host_api_backwards_compatibility.py -v
 ```
 
@@ -160,11 +158,15 @@ docker exec akvo-rag-backend-1 python -m pytest tests/api/test_host_api_backward
 ## 5. Troubleshooting & Gotchas
 
 1. **Routing 404s:**
-   Ensure your reverse proxy (Nginx or Traefik) passes `/api/` and `/api/v1/` routes to the backend without stripping leading path elements.
+   Ensure requests go to port `8010` on the host, or `http://host.docker.internal:8010` from within Docker containers.
 2. **Document Upload Rejections:**
    Ensure uploaded PDF headers start with `%PDF-`. Files with invalid magic bytes will be rejected with `400 Bad Request`.
-3. **Task Queue Latency:**
-   If `task_status` remains `processing` for more than 30 seconds, inspect the ingestion worker logs:
+3. **Ingestion Latency / Stuck Queue:**
+   If `task_status` remains `processing`, inspect the ingestion worker logs:
+
    ```bash
    docker logs akvo-rag-ingestion-worker-1 --tail 50
    ```
+
+4. **Linux Host Gateway (`host.docker.internal`):**
+   If running Docker on Linux, ensure `extra_hosts: ["host.docker.internal:host-gateway"]` is present in `docker-compose.override.yml`. (On macOS Docker Desktop, this works automatically).

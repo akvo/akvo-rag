@@ -474,6 +474,17 @@ async def list_knowledge_bases(
             kb_ids=kb_ids,
         )
 
+        if isinstance(result, dict) and "knowledge_bases" in result:
+            kbs_list = result["knowledge_bases"]
+            total_count = result.get("total", len(kbs_list))
+            page_num = (skip // limit) + 1 if limit > 0 else 1
+            return {
+                "total": total_count,
+                "page": page_num,
+                "size": limit,
+                "data": kbs_list,
+            }
+
         return result
 
     except HTTPException:
