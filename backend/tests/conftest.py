@@ -103,7 +103,12 @@ def mock_redis():
 @pytest.fixture
 def fake_redis():
     """Isolated fake async Redis instance with decoded responses."""
-    return fake_aioredis.FakeRedis(decode_responses=True)
+    from app.api.api_v1.knowledge_base import get_redis_client
+
+    instance = fake_aioredis.FakeRedis(decode_responses=True)
+    app.dependency_overrides[get_redis_client] = lambda: instance
+    yield instance
+    app.dependency_overrides.pop(get_redis_client, None)
 
 
 @pytest.fixture
