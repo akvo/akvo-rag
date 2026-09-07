@@ -79,8 +79,8 @@ In AgriConnect's codebase (`backend/services/external_ai_service.py`), AgriConne
      "app_name": "AgriConnect Local",
      "domain": "agriconnect.local",
      "default_chat_prompt": "You are AgriConnect AI, an expert agronomy advisor supporting smallholder farmers.",
-     "chat_callback": "http://host.docker.internal:8000/api/callback/ai",
-     "upload_callback": "http://host.docker.internal:8000/api/callback/kb",
+     "chat_callback": "https://akvo.ngrok.dev:8000/api/callback/ai",  // or "http://host.docker.internal:8000/api/callback/ai"
+     "upload_callback": "https://akvo.ngrok.dev:8000/api/callback/kb", // or "http://host.docker.internal:8000/api/callback/kb"
      "callback_token": "local_agriconnect_secret_token"
    }
    ```
@@ -133,13 +133,55 @@ In AgriConnect's codebase (`backend/services/external_ai_service.py`), AgriConne
 
 ## 4. Verification & Testing
 
-### 4.1 Verify Knowledge Base Sync from AgriConnect Swagger
+### 4.1 End-to-End Testing via the Web UI
+
+You can verify the integration directly through the browser UIs of both systems:
+
+#### Step 4.1.1: AgriConnect UI — Knowledge Base & Document Management
+
+1. Open the **AgriConnect Web UI** at **[http://localhost:3000](http://localhost:3000)** and log in.
+2. Navigate to the **Knowledge Base** section.
+3. **Verify KB List**: Confirm that the Knowledge Bases associated with your AgriConnect App in Akvo RAG are displayed in the list.
+4. **Create a Knowledge Base**:
+   - Click **"Create Knowledge Base"** / **"New KB"**.
+   - Enter a name (e.g., `Kenya Avocado Extension`) and description.
+   - Change the KB status to active.
+   - Save the KB. AgriConnect calls `POST /api/v1/apps/knowledge-bases` on Akvo RAG.
+5. **Upload Agronomy Documents**:
+   - Open the newly created Knowledge Base.
+   - Click **"Upload Documents"** and select an agricultural PDF/DOCX (e.g., `avocado_fcm_sop.pdf`).
+   - Click **"Upload"**. AgriConnect dispatches an upload job to `POST /api/v1/apps/jobs` on Akvo RAG.
+   - Confirm the document status chip transitions from `Processing` to `Completed` (via background ingestion and webhook callback).
+
+#### Step 4.1.2: AgriConnect UI — Chat & Advisory Simulation
+
+1. In **AgriConnect UI**, navigate to the **Chat Playground** interface.
+2. Start a new conversation linked to the agronomy Knowledge Base.
+3. Ask a domain-specific question based on your uploaded document, for example:
+   > *"How do I control false codling moth in my avocado orchard?"*
+4. **Verify Response & Citations**:
+   - AgriConnect calls Akvo RAG's `POST /api/v1/apps/jobs` (`job: "chat"`).
+   - Akvo RAG processes RAG retrieval, runs citation filtering, and sends the answer back via the chat callback.
+   - Confirm the AI response appears in the chat along with document citations (e.g., `avocado_fcm_sop.pdf`).
+
+#### Step 4.1.3: Akvo RAG Dashboard Verification
+
+1. Open the **Akvo RAG Web UI** at **[http://localhost:3010](http://localhost:3010)** and log in.
+2. Navigate to **Knowledge Bases**:
+   - Confirm the KB created from AgriConnect is listed.
+   - Click into the KB to see the uploaded document chunks and metadata.
+
+---
+
+### 4.2 Verify Knowledge Base Sync from AgriConnect Swagger
+
 1. In AgriConnect Swagger ([http://localhost:8000/docs](http://localhost:8000/docs)), navigate to **`knowledge-bases`**.
 2. Expand **`GET /api/knowledge-bases/`** ➔ Click **"Try it out"** ➔ **"Execute"**.
 3. AgriConnect will request `GET http://host.docker.internal:8010/api/v1/apps/knowledge-bases` with `Authorization: Bearer tok_...`.
 4. It will return the list of knowledge bases linked to the AgriConnect app.
 
-### 4.2 Automated Verification Suites
+### 4.3 Automated Verification Suites
+
 Run the automated test suites:
 
 ```bash
