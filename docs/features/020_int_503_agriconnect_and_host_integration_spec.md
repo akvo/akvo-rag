@@ -184,6 +184,14 @@ The deletion of 14 dead files (including `fastmcp_client_service.py`, `mcp_disco
 
 ---
 
+### 4.4 Endpoint Harmonization & Routing Verification Strategy
+
+Per [`docs/api_routing_audit_and_consolidation_plan.md`](file:///docs/api_routing_audit_and_consolidation_plan.md), `TASK-INT-503` acts as the safety gate validating both canonical `/api/v1/` endpoints and backwards-compatible aliases:
+1. **Canonical Host Routes (`/api/v1/apps/...` & `/api/v1/knowledge-bases`):** Verified to process 100% of AgriConnect traffic without relying on legacy `/api/` (no version) prefixes.
+2. **Dual-Route Parity Assertions:** Ensure that `GET /api/knowledge-base` (frontend path) and `GET /api/v1/knowledge-bases` (REST standard path) return identical schemas and responses.
+
+---
+
 ## 5. Verification & Quality Gates
 
 ### 5.1 Automated Commands
@@ -191,7 +199,7 @@ The deletion of 14 dead files (including `fastmcp_client_service.py`, `mcp_disco
 # 1. Execute AgriConnect end-to-end integration test suite
 docker exec akvo-rag-backend-1 python -m pytest tests/integration/test_agriconnect_integration.py -v
 
-# 2. Execute host API backwards-compatibility assertions
+# 2. Execute host API backwards-compatibility assertions (Section 7.3 & dual routing)
 docker exec akvo-rag-backend-1 python -m pytest tests/api/test_host_api_backwards_compatibility.py -v
 
 # 3. Execute full backend test suite with strict coverage enforcement (>= 85%)
@@ -200,6 +208,7 @@ docker exec akvo-rag-backend-1 python -m pytest tests/ --cov=app --cov-report=te
 
 ### 5.2 QA Deliverables
 - `docs/qa/qa-guide-agriconnect-integration.md` created with step-by-step verification commands, sample curl requests, and validation criteria.
+- `docs/api_routing_audit_and_consolidation_plan.md` cross-verified against live test execution results.
 
 ---
 
@@ -207,10 +216,11 @@ docker exec akvo-rag-backend-1 python -m pytest tests/ --cov=app --cov-report=te
 
 | Subtask ID | Description | Target Files | Vibe Est. | Trad. Est. | Confidence |
 |---|---|---|:---:|:---:|:---:|
-| `SUB-503.1` | Build `test_agriconnect_integration.py` full lifecycle scenario test | `backend/tests/integration/test_agriconnect_integration.py` `[NEW]` | 0.8 hr | 0.6 day | High (98%) |
-| `SUB-503.2` | Expand `test_host_api_backwards_compatibility.py` for Section 7.3 | `backend/tests/api/test_host_api_backwards_compatibility.py` `[MODIFY]` | 0.5 hr | 0.4 day | High (99%) |
+| `SUB-503.1` | Build `test_agriconnect_integration.py` full lifecycle scenario test | `backend/tests/integration/test_agriconnect_integration.py` `[NEW]` | 0.7 hr | 0.5 day | High (98%) |
+| `SUB-503.2` | Expand `test_host_api_backwards_compatibility.py` for Section 7.3 & routing parity | `backend/tests/api/test_host_api_backwards_compatibility.py` `[MODIFY]` | 0.4 hr | 0.3 day | High (99%) |
 | `SUB-503.3` | Author comprehensive AgriConnect integration QA guide | `docs/qa/qa-guide-agriconnect-integration.md` `[NEW]` | 0.4 hr | 0.3 day | High (99%) |
-| `SUB-503.4` | Implement targeted unit tests across `app/services/` and `app/core/` to uplift coverage $\ge 85\%$ | `backend/tests/unit/` `[EXPAND]` | 0.8 hr | 0.7 day | High (96%) |
+| `SUB-503.4` | Implement targeted unit tests across `app/services/` and `app/core/` to uplift coverage $\ge 85\%$ | `backend/tests/unit/` `[EXPAND]` | 0.7 hr | 0.6 day | High (96%) |
+| `SUB-503.5` | Audit & verify canonical `/api/v1/` routes per consolidation plan | `backend/tests/api/`, `docs/api_routing_audit_and_consolidation_plan.md` `[VERIFY]` | 0.3 hr | 0.3 day | High (99%) |
 | **TOTAL** | | | **2.5 hrs** | **2.0 days** | **High** |
 
 ---
@@ -220,6 +230,7 @@ docker exec akvo-rag-backend-1 python -m pytest tests/ --cov=app --cov-report=te
 - [ ] All Section 7.3 host endpoints pass backwards-compatibility assertions with 100% fidelity.
 - [ ] AgriConnect full lifecycle integration test passes with 100% success rate on the clean codebase.
 - [ ] Backend test suite achieves $\ge 85\%$ statement and branch coverage (`--cov-fail-under=85`).
+- [ ] Dual-route parity (`/api/` vs `/api/v1/` and `/knowledge-base` vs `/knowledge-bases`) verified per `docs/api_routing_audit_and_consolidation_plan.md`.
 - [ ] `docs/qa/qa-guide-agriconnect-integration.md` is authored and committed.
 - [ ] Median Redis RPC request-reply overhead remains $< 5\text{ms}$.
 
