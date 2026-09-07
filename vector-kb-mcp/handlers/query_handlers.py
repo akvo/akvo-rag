@@ -12,7 +12,11 @@ async def handle_query_kb(
         raise RuntimeError("ChromaRetriever is not initialized")
 
     query = args.get("query", "")
-    kb_ids = args.get("kb_ids", [])
+    raw_kb_ids = args.get("kb_ids") or args.get("knowledge_base_ids") or []
+    if isinstance(raw_kb_ids, (int, str)):
+        kb_ids = [int(raw_kb_ids)]
+    else:
+        kb_ids = [int(k) for k in raw_kb_ids]
     top_k = args.get("top_k", 4)
     score_threshold = args.get("score_threshold")
 
