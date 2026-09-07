@@ -35,7 +35,10 @@ The system depends on an external MCP server (Vector Knowledge Base MCP Server) 
 ### Starting the Development Environment
 
 ```bash
-# Start all services (backend, frontend, db, nginx)
+# Start all services with dc.sh (recommended)
+./dc.sh up -d --build
+
+# Or standard docker compose
 docker compose -f docker-compose.dev.yml up -d --build
 
 # Production mode
