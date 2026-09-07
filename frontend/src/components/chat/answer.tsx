@@ -357,6 +357,18 @@ export const Answer: FC<{
       );
     }
 
+    // 8. Clean up whitespace between consecutive citation links (e.g. "[citation:1](citation:1) [citation:2](citation:2)" -> "[citation:1](citation:1)[citation:2](citation:2)")
+    text = text.replace(
+      /(\]\(citation:\d+\))\s+(\[citation:\d+\])/g,
+      "$1$2"
+    );
+
+    // 9. Clean up whitespace before punctuation immediately following citations (e.g. "[citation:1] ." -> "[citation:1].", "[citation:1] ," -> "[citation:1],")
+    text = text.replace(
+      /(\[[^\]]+\]\([^\)]+\))\s+([.,;:!?])/g,
+      "$1$2"
+    );
+
     return text;
   }, [markdown, citations]);
 
@@ -494,12 +506,12 @@ export const Answer: FC<{
         citationIndex={citationId}
         citationInfo={citationInfo}
       >
-        <sup className="inline-flex items-baseline mx-0.5 select-none align-super font-sans">
+        <span className="inline-flex items-baseline mx-0.5 select-none align-baseline">
           <span
             role="button"
             tabIndex={0}
             aria-label={`Citation [${citationId}]`}
-            className="inline-flex items-center justify-center font-sans text-[10px] font-semibold text-primary bg-primary/10 hover:bg-primary hover:text-primary-foreground rounded px-1 py-0.5 border border-primary/20 hover:border-primary transition-all duration-150 cursor-pointer select-none leading-none shadow-none"
+            className="inline-flex items-center justify-center font-sans text-[10px] font-semibold text-primary bg-primary/10 hover:bg-primary hover:text-primary-foreground rounded px-1 py-0.5 border border-primary/20 hover:border-primary transition-all duration-150 cursor-pointer select-none leading-none -translate-y-0.5"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -513,7 +525,7 @@ export const Answer: FC<{
           >
             [{citationId}]
           </span>
-        </sup>
+        </span>
       </CitationTooltip>
     );
   };
@@ -531,7 +543,7 @@ export const Answer: FC<{
   }
 
   return (
-    <div className="prose prose-sm max-w-full">
+    <div className="prose prose-sm max-w-full leading-relaxed prose-p:leading-relaxed prose-p:my-2">
       <Markdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
