@@ -186,7 +186,7 @@ The deletion of 14 dead files (including `fastmcp_client_service.py`, `mcp_disco
 
 ### 4.4 Endpoint Harmonization & Routing Verification Strategy
 
-Per [`docs/api_routing_audit_and_consolidation_plan.md`](file:///docs/api_routing_audit_and_consolidation_plan.md), `TASK-INT-503` acts as the safety gate validating both canonical `/api/v1/` endpoints and backwards-compatible aliases:
+Per [`docs/lld/api_routing_audit_and_consolidation_plan.md`](file:///docs/lld/api_routing_audit_and_consolidation_plan.md), `TASK-INT-503` acts as the safety gate validating both canonical `/api/v1/` endpoints and backwards-compatible aliases:
 1. **Canonical Host Routes (`/api/v1/apps/...` & `/api/v1/knowledge-bases`):** Verified to process 100% of AgriConnect traffic without relying on legacy `/api/` (no version) prefixes.
 2. **Dual-Route Parity Assertions:** Ensure that `GET /api/knowledge-base` (frontend path) and `GET /api/v1/knowledge-bases` (REST standard path) return identical schemas and responses.
 
@@ -208,7 +208,7 @@ docker exec akvo-rag-backend-1 python -m pytest tests/ --cov=app --cov-report=te
 
 ### 5.2 QA Deliverables
 - `docs/qa/qa-guide-agriconnect-integration.md` created with step-by-step verification commands, sample curl requests, and validation criteria.
-- `docs/api_routing_audit_and_consolidation_plan.md` cross-verified against live test execution results.
+- `docs/lld/api_routing_audit_and_consolidation_plan.md` cross-verified against live test execution results.
 
 ---
 
