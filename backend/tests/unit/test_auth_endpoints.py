@@ -36,7 +36,7 @@ def test_register_user_success(client: TestClient, mock_db):
     mock_db.refresh.side_effect = fake_refresh
 
     response = client.post(
-        "/api/auth/register",
+        "/api/v1/auth/register",
         json={
             "email": "newuser@example.com",
             "username": "newuser",
@@ -56,7 +56,7 @@ def test_register_duplicate_email(client: TestClient, mock_db):
     )
 
     response = client.post(
-        "/api/auth/register",
+        "/api/v1/auth/register",
         json={
             "email": "existing@example.com",
             "username": "unique",
@@ -79,7 +79,7 @@ def test_register_duplicate_username(client: TestClient, mock_db):
     ]
 
     response = client.post(
-        "/api/auth/register",
+        "/api/v1/auth/register",
         json={
             "email": "unique@example.com",
             "username": "existing_user",
@@ -105,7 +105,7 @@ def test_login_inactive_user(client: TestClient, mock_db):
     )
 
     response = client.post(
-        "/api/auth/token",
+        "/api/v1/auth/token",
         data={"username": "inactive", "password": "pass123"},
     )
     assert response.status_code == 401
@@ -127,7 +127,7 @@ def test_test_token_endpoint(client: TestClient):
     )
     app.dependency_overrides[get_current_user] = lambda: fake_user
 
-    response = client.post("/api/auth/test-token")
+    response = client.post("/api/v1/auth/test-token")
     assert response.status_code == 200
     assert response.json()["email"] == "me@example.com"
 
@@ -147,7 +147,7 @@ def test_user_me_endpoint(client: TestClient):
     )
     app.dependency_overrides[get_current_user] = lambda: fake_user
 
-    response = client.get("/api/auth/me")
+    response = client.get("/api/v1/auth/me")
     assert response.status_code == 200
     assert response.json()["username"] == "me"
 
@@ -173,7 +173,7 @@ def test_update_user_by_email_success(client: TestClient, mock_db):
     )
 
     response = client.put(
-        "/api/auth/user",
+        "/api/v1/auth/user",
         json={
             "email": "target@example.com",
             "username": "targetuser",
@@ -192,7 +192,7 @@ def test_update_user_by_email_not_found(client: TestClient, mock_db):
     mock_db.query.return_value.filter.return_value.first.return_value = None
 
     response = client.put(
-        "/api/auth/user",
+        "/api/v1/auth/user",
         json={
             "email": "nonexistent@example.com",
             "username": "nonexistent",
@@ -217,7 +217,7 @@ def test_forgot_password_active_user(client: TestClient, mock_db, monkeypatch):
     )
 
     response = client.post(
-        "/api/auth/forgot-password",
+        "/api/v1/auth/forgot-password",
         json={"email": "active@example.com"},
     )
     assert response.status_code == 200
@@ -234,7 +234,7 @@ def test_reset_password_success(client: TestClient, mock_db, monkeypatch):
     )
 
     response = client.post(
-        "/api/auth/reset-password",
+        "/api/v1/auth/reset-password",
         json={"token": "valid-tok", "new_password": "NewSecretPassword123!"},
     )
     assert response.status_code == 200
@@ -249,7 +249,7 @@ def test_reset_password_invalid_token(
     )
 
     response = client.post(
-        "/api/auth/reset-password",
+        "/api/v1/auth/reset-password",
         json={"token": "invalid-tok", "new_password": "NewSecretPassword123!"},
     )
     assert response.status_code == 400
@@ -262,7 +262,7 @@ def test_verify_reset_token_success(client: TestClient, mock_db, monkeypatch):
         EmailService, "verify_reset_token", lambda db, tok: user
     )
 
-    response = client.get("/api/auth/verify-reset-token/valid-token-abc")
+    response = client.get("/api/v1/auth/verify-reset-token/valid-token-abc")
     assert response.status_code == 200
     assert response.json()["valid"] is True
     assert response.json()["email"] == "verified@example.com"
@@ -273,7 +273,7 @@ def test_verify_reset_token_invalid(client: TestClient, mock_db, monkeypatch):
         EmailService, "verify_reset_token", lambda db, tok: None
     )
 
-    response = client.get("/api/auth/verify-reset-token/bad-token")
+    response = client.get("/api/v1/auth/verify-reset-token/bad-token")
     assert response.status_code == 400
     assert "Invalid or expired" in response.json()["detail"]
 

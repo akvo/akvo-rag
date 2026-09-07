@@ -264,7 +264,7 @@ class TestHostRESTEndpointsParity:
             lambda: fake_service,
         )
 
-        response = client.get("/api/knowledge-base")
+        response = client.get("/api/v1/knowledge-bases")
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
@@ -274,7 +274,7 @@ class TestHostRESTEndpointsParity:
         assert data[0]["is_superuser"] is True
 
     def test_get_knowledge_base_by_id(self, client: TestClient, monkeypatch):
-        """Test GET /api/knowledge-base/{id} returns single KB object."""
+        """Test GET /api/v1/knowledge-bases/{id} returns single KB object."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={
@@ -294,7 +294,7 @@ class TestHostRESTEndpointsParity:
             lambda: fake_service,
         )
 
-        response = client.get("/api/knowledge-base/42")
+        response = client.get("/api/v1/knowledge-bases/42")
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == 42
@@ -304,7 +304,7 @@ class TestHostRESTEndpointsParity:
     def test_create_knowledge_base_schema(
         self, client: TestClient, monkeypatch
     ):
-        """Test POST /api/knowledge-base creates new KB."""
+        """Test POST /api/v1/knowledge-bases creates new KB."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={
@@ -328,14 +328,14 @@ class TestHostRESTEndpointsParity:
             "description": "Paddy management",
             "embedding_model": "text-embedding-3-small",
         }
-        response = client.post("/api/knowledge-base", json=payload)
+        response = client.post("/api/v1/knowledge-bases", json=payload)
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == 101
         assert data["name"] == "New Rice KB"
 
     def test_delete_knowledge_base(self, client: TestClient, monkeypatch):
-        """Test DELETE /api/knowledge-base/{id} deletes KB."""
+        """Test DELETE /api/v1/knowledge-bases/{id} deletes KB."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={"status": "deleted", "id": 42}
@@ -348,13 +348,14 @@ class TestHostRESTEndpointsParity:
             lambda: fake_service,
         )
 
-        response = client.delete("/api/knowledge-base/42")
+        response = client.delete("/api/v1/knowledge-bases/42")
         assert response.status_code == 200
         data = response.json()
         assert data.get("status") == "deleted"
 
     def test_test_retrieval_endpoint(self, client: TestClient, monkeypatch):
-        """Test POST /api/knowledge-base/test-retrieval performs retrieval."""
+        """Test POST /api/v1/knowledge-bases/test-retrieval
+        performs retrieval."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={
@@ -381,7 +382,7 @@ class TestHostRESTEndpointsParity:
             "top_k": 3,
         }
         response = client.post(
-            "/api/knowledge-base/test-retrieval", json=payload
+            "/api/v1/knowledge-bases/test-retrieval", json=payload
         )
         assert response.status_code == 200
         data = response.json()

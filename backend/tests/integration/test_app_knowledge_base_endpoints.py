@@ -20,7 +20,7 @@ def sample_app_data():
 @pytest.fixture
 def registered_app(client, sample_app_data):
     """Register an app and return credentials."""
-    response = client.post("/api/apps/register", json=sample_app_data)
+    response = client.post("/api/v1/apps/register", json=sample_app_data)
     assert response.status_code == 201
     return response.json()
 
@@ -143,7 +143,7 @@ class TestAppKnowledgeBaseEndpoints:
         }
 
         response = client.post(
-            "/api/apps/knowledge-bases", json=payload, headers=auth_header
+            "/api/v1/apps/knowledge-bases", json=payload, headers=auth_header
         )
 
         assert response.status_code == 201
@@ -170,7 +170,7 @@ class TestAppKnowledgeBaseEndpoints:
         payload = {"name": "Should Fail", "is_default": True}
 
         response = client.post(
-            "/api/apps/knowledge-bases", json=payload, headers=headers
+            "/api/v1/apps/knowledge-bases", json=payload, headers=headers
         )
 
         assert response.status_code == 403
@@ -189,7 +189,7 @@ class TestAppKnowledgeBaseEndpoints:
         }
 
         response = client.patch(
-            f"/api/apps/knowledge-bases/{kb_id}",
+            f"/api/v1/apps/knowledge-bases/{kb_id}",
             json=payload,
             headers=auth_header,
         )
@@ -205,7 +205,7 @@ class TestAppKnowledgeBaseEndpoints:
         """Should return 404 when updating non-existing KB."""
         payload = {"is_default": True}
         response = client.patch(
-            "/api/apps/knowledge-bases/99999",
+            "/api/v1/apps/knowledge-bases/99999",
             json=payload,
             headers=auth_header,
         )
@@ -229,7 +229,9 @@ class TestAppKnowledgeBaseEndpoints:
         payload = {"is_default": True}
 
         response = client.patch(
-            f"/api/apps/knowledge-bases/{kb_id}", json=payload, headers=headers
+            f"/api/v1/apps/knowledge-bases/{kb_id}",
+            json=payload,
+            headers=headers,
         )
 
         assert response.status_code == 403
@@ -254,7 +256,7 @@ class TestAppKnowledgeBaseEndpoints:
         }
 
         response = client.post(
-            "/api/apps/knowledge-bases", json=payload, headers=auth_header
+            "/api/v1/apps/knowledge-bases", json=payload, headers=auth_header
         )
         assert response.status_code == 201
 
@@ -312,7 +314,7 @@ class TestDeleteKnowledgeBaseEndpoint:
 
         kb_id = app.knowledge_bases[0].knowledge_base_id
         response = client.delete(
-            f"/api/apps/knowledge-bases/{kb_id}", headers=auth_header
+            f"/api/v1/apps/knowledge-bases/{kb_id}", headers=auth_header
         )
 
         assert response.status_code == 403
@@ -328,7 +330,7 @@ class TestDeleteKnowledgeBaseEndpoint:
             "is_default": False,
         }
         create_res = client.post(
-            "/api/apps/knowledge-bases", json=payload, headers=auth_header
+            "/api/v1/apps/knowledge-bases", json=payload, headers=auth_header
         )
         assert create_res.status_code == 201
 
@@ -336,7 +338,8 @@ class TestDeleteKnowledgeBaseEndpoint:
             "knowledge_base_id"
         ]
         response = client.delete(
-            f"/api/apps/knowledge-bases/{default_kb_id}", headers=auth_header
+            f"/api/v1/apps/knowledge-bases/{default_kb_id}",
+            headers=auth_header,
         )
 
         assert response.status_code == 403
@@ -352,13 +355,13 @@ class TestDeleteKnowledgeBaseEndpoint:
             "is_default": False,
         }
         create_res = client.post(
-            "/api/apps/knowledge-bases", json=payload, headers=auth_header
+            "/api/v1/apps/knowledge-bases", json=payload, headers=auth_header
         )
         assert create_res.status_code == 201
         kb_to_delete = create_res.json()["knowledge_base_id"]
 
         delete_res = client.delete(
-            f"/api/apps/knowledge-bases/{kb_to_delete}", headers=auth_header
+            f"/api/v1/apps/knowledge-bases/{kb_to_delete}", headers=auth_header
         )
         assert delete_res.status_code == 204
 
@@ -375,7 +378,7 @@ class TestDeleteKnowledgeBaseEndpoint:
         Should return 404 when trying to delete KB not linked to this app.
         """
         response = client.delete(
-            "/api/apps/knowledge-bases/999999", headers=auth_header
+            "/api/v1/apps/knowledge-bases/999999", headers=auth_header
         )
         assert response.status_code == 404
         assert "not found" in response.text.lower()
@@ -391,7 +394,7 @@ class TestListKnowledgeBasesEndpoint:
     ):
         """Should return paginated KB list successfully."""
         response = client.get(
-            "/api/apps/knowledge-bases?skip=0&limit=10",
+            "/api/v1/apps/knowledge-bases?skip=0&limit=10",
             headers=auth_header,
         )
 
@@ -420,7 +423,7 @@ class TestListKnowledgeBasesEndpoint:
     ):
         """Should pass search parameter to MCP."""
         response = client.get(
-            "/api/apps/knowledge-bases?search=library",
+            "/api/v1/apps/knowledge-bases?search=library",
             headers=auth_header,
         )
 
@@ -446,7 +449,7 @@ class TestListKnowledgeBasesEndpoint:
         }
 
         response = client.get(
-            "/api/apps/knowledge-bases?kb_ids=9999",
+            "/api/v1/apps/knowledge-bases?kb_ids=9999",
             headers=auth_header,
         )
         assert response.status_code == 200
@@ -471,7 +474,7 @@ class TestListKnowledgeBasesEndpoint:
             "data": [],
         }
         response = client.get(
-            "/api/apps/knowledge-bases?kb_ids=1&kb_ids=2&kb_ids=3",
+            "/api/v1/apps/knowledge-bases?kb_ids=1&kb_ids=2&kb_ids=3",
             headers=auth_header,
         )
         assert response.status_code == 200
@@ -495,7 +498,7 @@ class TestListKnowledgeBasesEndpoint:
             "data": [],
         }
         response = client.get(
-            "/api/apps/knowledge-bases?search=test&kb_ids=9999",
+            "/api/v1/apps/knowledge-bases?search=test&kb_ids=9999",
             headers=auth_header,
         )
         assert response.status_code == 200
@@ -520,7 +523,7 @@ class TestListKnowledgeBasesEndpoint:
         }
 
         response = client.get(
-            "/api/apps/knowledge-bases",
+            "/api/v1/apps/knowledge-bases",
             headers=auth_header,
         )
 
@@ -544,7 +547,7 @@ class TestListKnowledgeBasesEndpoint:
         headers = {"Authorization": f"Bearer {registered_app['access_token']}"}
 
         response = client.get(
-            "/api/apps/knowledge-bases",
+            "/api/v1/apps/knowledge-bases",
             headers=headers,
         )
 
@@ -556,7 +559,7 @@ class TestListKnowledgeBasesEndpoint:
 
     def test_list_kb_missing_auth(self, client):
         """Should return 401 if no Authorization header."""
-        response = client.get("/api/apps/knowledge-bases")
+        response = client.get("/api/v1/apps/knowledge-bases")
         assert response.status_code == 401
 
     def test_list_kb_mcp_error_raises_500(
@@ -566,7 +569,7 @@ class TestListKnowledgeBasesEndpoint:
         mock_mcp_list_kbs.side_effect = Exception("MCP failure")
 
         response = client.get(
-            "/api/apps/knowledge-bases",
+            "/api/v1/apps/knowledge-bases",
             headers=auth_header,
         )
 
@@ -586,7 +589,7 @@ class TestListDocumentsWithKbId:
 
         kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
         response = client.get(
-            f"/api/apps/documents?kb_id={kb_id}&skip=0&limit=100&search=CDIP",  # noqa
+            f"/api/v1/apps/documents?kb_id={kb_id}&skip=0&limit=100&search=CDIP",  # noqa
             headers=auth_header,
         )
 
@@ -615,7 +618,7 @@ class TestListDocumentsWithKbId:
         kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
 
         response = client.get(
-            "/api/apps/documents"
+            "/api/v1/apps/documents"
             f"?kb_id={kb_id}&skip=20&limit=5&search=test",
             headers=auth_header,
         )
@@ -631,7 +634,7 @@ class TestListDocumentsWithKbId:
 
     def test_list_documents_requires_auth(self, client):
         """Should return 401 when Authorization header is missing."""
-        response = client.get("/api/apps/documents?kb_id=1")
+        response = client.get("/api/v1/apps/documents?kb_id=1")
         assert response.status_code == 401
 
     def test_list_documents_inactive_app_forbidden(
@@ -647,7 +650,7 @@ class TestListDocumentsWithKbId:
         db.commit()
 
         response = client.get(
-            "/api/apps/documents?kb_id=1",
+            "/api/v1/apps/documents?kb_id=1",
             headers={
                 "Authorization": f"Bearer {registered_app['access_token']}"
             },
@@ -682,7 +685,7 @@ class TestGetKnowledgeBaseDetails:
         kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
 
         res = client.get(
-            f"/api/apps/knowledge-bases/{kb_id}",
+            f"/api/v1/apps/knowledge-bases/{kb_id}",
             headers=auth_header,
         )
         assert res.status_code == 200
@@ -702,7 +705,7 @@ class TestGetKnowledgeBaseDetails:
         """Should return 404 when KB is not linked to the app."""
 
         res = client.get(
-            "/api/apps/knowledge-bases/9999",
+            "/api/v1/apps/knowledge-bases/9999",
             headers=auth_header,
         )
         assert res.status_code == 404
@@ -724,7 +727,7 @@ class TestGetKnowledgeBaseDetails:
         kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
 
         res = client.get(
-            f"/api/apps/knowledge-bases/{kb_id}",
+            f"/api/v1/apps/knowledge-bases/{kb_id}",
             headers={
                 "Authorization": f"Bearer {registered_app['access_token']}"
             },
@@ -734,7 +737,7 @@ class TestGetKnowledgeBaseDetails:
 
     def test_get_kb_details_missing_auth_returns_401(self, client):
         """Should return 401 when no auth is provided."""
-        res = client.get("/api/apps/knowledge-bases/1")
+        res = client.get("/api/v1/apps/knowledge-bases/1")
         assert res.status_code == 401
 
     def test_get_kb_details_mcp_error_returns_500(
@@ -748,7 +751,7 @@ class TestGetKnowledgeBaseDetails:
         kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
 
         res = client.get(
-            f"/api/apps/knowledge-bases/{kb_id}",
+            f"/api/v1/apps/knowledge-bases/{kb_id}",
             headers=auth_header,
         )
         assert res.status_code == 500
@@ -781,7 +784,7 @@ class TestDeleteDocumentEndpoint:
         kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
 
         response = client.delete(
-            f"/api/apps/documents?kb_id={kb_id}&doc_id=123",
+            f"/api/v1/apps/documents?kb_id={kb_id}&doc_id=123",
             headers=auth_header,
         )
 
@@ -798,7 +801,7 @@ class TestDeleteDocumentEndpoint:
         """Should return 404 if KB is NOT linked to this app."""
 
         response = client.delete(
-            "/api/apps/documents?kb_id=9999&doc_id=1",
+            "/api/v1/apps/documents?kb_id=9999&doc_id=1",
             headers=auth_header,
         )
 
@@ -824,7 +827,7 @@ class TestDeleteDocumentEndpoint:
         kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
 
         response = client.delete(
-            f"/api/apps/documents?kb_id={kb_id}&doc_id=55",
+            f"/api/v1/apps/documents?kb_id={kb_id}&doc_id=55",
             headers={
                 "Authorization": f"Bearer {registered_app['access_token']}"
             },
@@ -838,7 +841,7 @@ class TestDeleteDocumentEndpoint:
     def test_delete_document_missing_auth_returns_401(self, client):
         """Should return 401 when no Authorization header is provided."""
 
-        response = client.delete("/api/apps/documents?kb_id=1&doc_id=1")
+        response = client.delete("/api/v1/apps/documents?kb_id=1&doc_id=1")
         assert response.status_code == 401
 
     def test_delete_document_mcp_error_returns_500(
@@ -851,7 +854,7 @@ class TestDeleteDocumentEndpoint:
         kb_id = registered_app["knowledge_bases"][0]["knowledge_base_id"]
 
         response = client.delete(
-            f"/api/apps/documents?kb_id={kb_id}&doc_id=123",
+            f"/api/v1/apps/documents?kb_id={kb_id}&doc_id=123",
             headers=auth_header,
         )
 

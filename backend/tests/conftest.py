@@ -8,11 +8,43 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 import fakeredis.aioredis as fake_aioredis
 
+from app.core.config import settings
 from app.main import app
 from app.db.session import get_db
 from app.models.base import Base
 from app.core.mcp_config import MCPConfig
 from mcp_clients.queue_dispatcher import MCPQueueDispatcher
+
+API_PREFIX = settings.API_V1_STR
+
+
+class ApiTestClient(TestClient):
+    """TestClient that transparently supports route requests with or
+    without API_PREFIX.
+    """
+
+    def request(self, method: str, url: str, *args, **kwargs):
+        if (
+            isinstance(url, str)
+            and not url.startswith("http://")
+            and not url.startswith("https://")
+        ):
+            clean_url = url if url.startswith("/") else f"/{url}"
+            # Prefix routes that don't already include API_PREFIX
+            if (
+                not clean_url.startswith(settings.API_V1_STR)
+                and not clean_url.startswith("/openapi")
+                and clean_url not in ("/health", "/api/health", "/")
+            ):
+                clean_url = f"{settings.API_V1_STR}{clean_url}"
+            url = clean_url
+        return super().request(method, url, *args, **kwargs)
+
+
+@pytest.fixture(scope="session")
+def api_prefix():
+    """Canonical API prefix (e.g. /api/v1)."""
+    return settings.API_V1_STR
 
 
 @pytest.fixture(scope="function")

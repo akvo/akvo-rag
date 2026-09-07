@@ -63,7 +63,7 @@ def test_read_api_keys(client: TestClient, monkeypatch):
         lambda db, user_id, skip, limit: [fake_key],
     )
 
-    response = client.get("/api/api-keys")
+    response = client.get("/api/v1/api-keys")
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
@@ -88,7 +88,7 @@ def test_create_api_key_endpoint(client: TestClient, monkeypatch):
         lambda db, user_id, name: fake_key,
     )
 
-    response = client.post("/api/api-keys", json={"name": "Created Key"})
+    response = client.post("/api/v1/api-keys", json={"name": "Created Key"})
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == 2
@@ -125,7 +125,7 @@ def test_update_api_key_success(client: TestClient, monkeypatch):
     )
 
     response = client.put(
-        "/api/api-keys/1", json={"name": "Updated Name", "is_active": False}
+        "/api/v1/api-keys/1", json={"name": "Updated Name", "is_active": False}
     )
     assert response.status_code == 200
     data = response.json()
@@ -138,7 +138,7 @@ def test_update_api_key_not_found(client: TestClient, monkeypatch):
         APIKeyService, "get_api_key", lambda db, api_key_id: None
     )
     response = client.put(
-        "/api/api-keys/999", json={"name": "Missing", "is_active": True}
+        "/api/v1/api-keys/999", json={"name": "Missing", "is_active": True}
     )
     assert response.status_code == 404
     assert response.json()["detail"] == "API key not found"
@@ -159,7 +159,8 @@ def test_update_api_key_forbidden(client: TestClient, monkeypatch):
         APIKeyService, "get_api_key", lambda db, api_key_id: other_user_key
     )
     response = client.put(
-        "/api/api-keys/1", json={"name": "Forbidden Edit", "is_active": True}
+        "/api/v1/api-keys/1",
+        json={"name": "Forbidden Edit", "is_active": True},
     )
     assert response.status_code == 403
     assert response.json()["detail"] == "Not enough permissions"
@@ -183,7 +184,7 @@ def test_delete_api_key_success(client: TestClient, monkeypatch):
         APIKeyService, "delete_api_key", lambda db, api_key: fake_key
     )
 
-    response = client.delete("/api/api-keys/1")
+    response = client.delete("/api/v1/api-keys/1")
     assert response.status_code == 200
     assert response.json()["id"] == 1
 
@@ -202,7 +203,7 @@ def test_delete_api_key_forbidden(client: TestClient, monkeypatch):
     monkeypatch.setattr(
         APIKeyService, "get_api_key", lambda db, api_key_id: other_user_key
     )
-    response = client.delete("/api/api-keys/1")
+    response = client.delete("/api/v1/api-keys/1")
     assert response.status_code == 403
     assert response.json()["detail"] == "Not enough permissions"
 
@@ -211,7 +212,7 @@ def test_delete_api_key_not_found(client: TestClient, monkeypatch):
     monkeypatch.setattr(
         APIKeyService, "get_api_key", lambda db, api_key_id: None
     )
-    response = client.delete("/api/api-keys/999")
+    response = client.delete("/api/v1/api-keys/999")
     assert response.status_code == 404
 
 
@@ -226,7 +227,7 @@ def test_get_top_k_setting_success(client: TestClient, monkeypatch):
         "get_setting",
         lambda self, key: SystemSetting(id=1, key="top_k", value="5"),
     )
-    response = client.get("/api/system-settings/top_k")
+    response = client.get("/api/v1/system-settings/top_k")
     assert response.status_code == 200
     assert response.json()["key"] == "top_k"
     assert response.json()["value"] == "5"
@@ -237,7 +238,7 @@ def test_get_top_k_setting_not_found(client: TestClient, monkeypatch):
         raise ValueError("Setting top_k not found")
 
     monkeypatch.setattr(SystemSettingsService, "get_setting", fake_get_error)
-    response = client.get("/api/system-settings/top_k")
+    response = client.get("/api/v1/system-settings/top_k")
     assert response.status_code == 404
     assert "not found" in response.json()["detail"]
 
@@ -248,7 +249,7 @@ def test_update_top_k_setting_success(client: TestClient, monkeypatch):
         "update_top_k",
         lambda self, val: SystemSetting(id=1, key="top_k", value=str(val)),
     )
-    response = client.put("/api/system-settings/top_k", json={"top_k": 8})
+    response = client.put("/api/v1/system-settings/top_k", json={"top_k": 8})
     assert response.status_code == 200
     assert response.json()["value"] == "8"
 
@@ -260,7 +261,7 @@ def test_update_top_k_setting_error(client: TestClient, monkeypatch):
     monkeypatch.setattr(
         SystemSettingsService, "update_top_k", fake_update_error
     )
-    response = client.put("/api/system-settings/top_k", json={"top_k": 1})
+    response = client.put("/api/v1/system-settings/top_k", json={"top_k": 1})
     assert response.status_code == 404
 
 

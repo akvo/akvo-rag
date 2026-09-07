@@ -16,7 +16,7 @@ except ImportError:
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Akvo RAG"  # Project name
     VERSION: str = "0.1.0"  # Project version
-    API_V1_STR: str = "/api"  # API version string
+    API_V1_STR: str = "/api/v1"  # API version string
 
     # CORS settings (comma-separated origins from env)
     BACKEND_CORS_ORIGINS: list[str] = [

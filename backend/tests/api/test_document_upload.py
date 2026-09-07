@@ -67,7 +67,7 @@ class TestDocumentUploadAPI:
             return_value=fake_redis,
         ):
             response = client.post(
-                "/api/knowledge-base/1/documents/upload", files=files
+                "/api/v1/knowledge-bases/1/documents/upload", files=files
             )
 
         assert response.status_code == 202
@@ -100,7 +100,7 @@ class TestDocumentUploadAPI:
             return_value=fake_redis,
         ):
             response = client.post(
-                "/api/knowledge-base/1/documents/upload", files=files
+                "/api/v1/knowledge-bases/1/documents/upload", files=files
             )
 
         assert response.status_code == 202
@@ -124,7 +124,7 @@ class TestDocumentUploadAPI:
             return_value=fake_redis,
         ):
             response = client.post(
-                "/api/knowledge-base/1/documents/upload", files=files
+                "/api/v1/knowledge-bases/1/documents/upload", files=files
             )
 
         assert response.status_code == 400
@@ -148,7 +148,7 @@ class TestDocumentUploadAPI:
             return_value=fake_redis,
         ):
             response = client.post(
-                "/api/knowledge-base/1/documents/upload", files=files
+                "/api/v1/knowledge-bases/1/documents/upload", files=files
             )
 
         assert response.status_code == 400
@@ -165,7 +165,7 @@ class TestDocumentUploadAPI:
             return_value=fake_redis,
         ):
             response = client.post(
-                "/api/knowledge-base/1/documents/upload", files=files
+                "/api/v1/knowledge-bases/1/documents/upload", files=files
             )
 
         assert response.status_code == 400
@@ -189,7 +189,7 @@ class TestDocumentUploadAPI:
             return_value=fake_redis,
         ):
             response = client.post(
-                "/api/knowledge-base/1/documents/upload", files=files
+                "/api/v1/knowledge-bases/1/documents/upload", files=files
             )
 
         assert response.status_code == 202
@@ -216,7 +216,7 @@ class TestDocumentUploadAPI:
             return_value=fake_redis,
         ):
             response = client.post(
-                "/api/knowledge-base/1/documents/upload", files=files
+                "/api/v1/knowledge-bases/1/documents/upload", files=files
             )
 
         assert response.status_code == 500

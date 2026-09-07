@@ -81,7 +81,7 @@ class TestHostKnowledgeBaseEndpoints:
             lambda: fake_service,
         )
 
-        response = client.get("/api/knowledge-base")
+        response = client.get("/api/v1/knowledge-bases")
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
@@ -93,7 +93,7 @@ class TestHostKnowledgeBaseEndpoints:
     def test_get_knowledge_base_details_contract(
         self, client: TestClient, override_user_auth, monkeypatch
     ):
-        """Test GET /api/knowledge-base/{id} returns single KB object."""
+        """Test GET /api/v1/knowledge-bases/{id} returns single KB object."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={
@@ -113,7 +113,7 @@ class TestHostKnowledgeBaseEndpoints:
             lambda: fake_service,
         )
 
-        response = client.get("/api/knowledge-base/42")
+        response = client.get("/api/v1/knowledge-bases/42")
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == 42
@@ -123,7 +123,8 @@ class TestHostKnowledgeBaseEndpoints:
     def test_create_knowledge_base_contract(
         self, client: TestClient, override_user_auth, monkeypatch
     ):
-        """Test POST /api/knowledge-base creates new KB and returns JSON."""
+        """Test POST /api/v1/knowledge-bases creates new KB
+        and returns JSON."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={
@@ -147,7 +148,7 @@ class TestHostKnowledgeBaseEndpoints:
             "description": "Drip irrigation SOPs",
             "embedding_model": "text-embedding-3-small",
         }
-        response = client.post("/api/knowledge-base", json=payload)
+        response = client.post("/api/v1/knowledge-bases", json=payload)
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == 101
@@ -156,7 +157,7 @@ class TestHostKnowledgeBaseEndpoints:
     def test_update_knowledge_base_contract(
         self, client: TestClient, override_user_auth, monkeypatch
     ):
-        """Test PUT /api/knowledge-base/{id} updates metadata."""
+        """Test PUT /api/v1/knowledge-bases/{id} updates metadata."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={
@@ -179,7 +180,7 @@ class TestHostKnowledgeBaseEndpoints:
             "name": "Updated Irrigation Standard",
             "description": "Updated SOPs",
         }
-        response = client.put("/api/knowledge-base/101", json=payload)
+        response = client.put("/api/v1/knowledge-bases/101", json=payload)
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "Updated Irrigation Standard"
@@ -187,7 +188,7 @@ class TestHostKnowledgeBaseEndpoints:
     def test_delete_knowledge_base_contract(
         self, client: TestClient, override_user_auth, monkeypatch
     ):
-        """Test DELETE /api/knowledge-base/{id} deletes KB."""
+        """Test DELETE /api/v1/knowledge-bases/{id} deletes KB."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={"status": "deleted", "id": 101}
@@ -200,7 +201,7 @@ class TestHostKnowledgeBaseEndpoints:
             lambda: fake_service,
         )
 
-        response = client.delete("/api/knowledge-base/101")
+        response = client.delete("/api/v1/knowledge-bases/101")
         assert response.status_code == 200
         data = response.json()
         assert data.get("status") == "deleted"
@@ -208,7 +209,7 @@ class TestHostKnowledgeBaseEndpoints:
     def test_test_retrieval_endpoint_contract(
         self, client: TestClient, override_user_auth, monkeypatch
     ):
-        """Test POST /api/knowledge-base/test-retrieval returns chunks."""
+        """Test POST /api/v1/knowledge-bases/test-retrieval returns chunks."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={
@@ -235,7 +236,7 @@ class TestHostKnowledgeBaseEndpoints:
             "top_k": 3,
         }
         response = client.post(
-            "/api/knowledge-base/test-retrieval", json=payload
+            "/api/v1/knowledge-bases/test-retrieval", json=payload
         )
         assert response.status_code == 200
         data = response.json()
@@ -321,12 +322,13 @@ class TestHostKnowledgeBaseEndpoints:
     def test_v1_knowledge_bases_parity(
         self, client: TestClient, override_user_auth, monkeypatch
     ):
-        """Verify both /api/knowledge-bases and /api/v1/knowledge-bases
-        return identical data."""
+        """Verify /api/v1/knowledge-bases returns expected data."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={
-                "knowledge_bases": [{"id": 1, "name": "KB 1", "documents": []}]
+                "knowledge_bases": [
+                    {"id": 1, "name": "KB 1", "documents": []}
+                ]
             }
         )
         fake_service = KnowledgeBaseMCPEndpointService(
@@ -337,11 +339,11 @@ class TestHostKnowledgeBaseEndpoints:
             lambda: fake_service,
         )
 
-        resp_api = client.get("/api/knowledge-bases")
         resp_v1 = client.get("/api/v1/knowledge-bases")
-        assert resp_api.status_code == 200
         assert resp_v1.status_code == 200
-        assert resp_api.json() == resp_v1.json()
+        assert resp_v1.json() == [
+            {"id": 1, "name": "KB 1", "documents": [], "is_superuser": True}
+        ]
 
 
 # ---------------------------------------------------------------------
@@ -354,12 +356,12 @@ class TestHostChatAndAppsEndpoints:
     def test_create_chat_session_contract(
         self, client: TestClient, override_user_auth
     ):
-        """Test POST /api/chat creates a new chat session."""
+        """Test POST /api/v1/chat creates a new chat session."""
         payload = {
             "title": "AgriConnect Q&A Session",
             "knowledge_base_ids": [1],
         }
-        response = client.post("/api/chat", json=payload)
+        response = client.post("/api/v1/chat", json=payload)
         assert response.status_code == 200
         data = response.json()
         assert data["title"] == "AgriConnect Q&A Session"
@@ -369,13 +371,13 @@ class TestHostChatAndAppsEndpoints:
     def test_get_chats_list_contract(
         self, client: TestClient, override_user_auth
     ):
-        """Test GET /api/chat lists all user chats."""
+        """Test GET /api/v1/chat lists all user chats."""
         # Create chat first
         client.post(
-            "/api/chat",
+            "/api/v1/chat",
             json={"title": "Session 1", "knowledge_base_ids": [1]},
         )
-        response = client.get("/api/chat")
+        response = client.get("/api/v1/chat")
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
@@ -385,7 +387,7 @@ class TestHostChatAndAppsEndpoints:
     def test_register_app_contract(
         self, client: TestClient, override_user_auth, monkeypatch
     ):
-        """Test POST /api/apps/register creates a new host app."""
+        """Test POST /api/v1/apps/register creates a new host app."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={
@@ -407,7 +409,7 @@ class TestHostChatAndAppsEndpoints:
             "chat_callback": "https://agriconnect.org/api/callback/chat",
             "upload_callback": "https://agriconnect.org/api/callback/upload",
         }
-        response = client.post("/api/apps/register", json=payload)
+        response = client.post("/api/v1/apps/register", json=payload)
         assert response.status_code == 201
         data = response.json()
         assert "app_id" in data

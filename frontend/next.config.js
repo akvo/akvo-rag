@@ -19,7 +19,7 @@ module.exports = {
       },
       {
         source: "/api/:path*",
-        destination: `${backendUrl}/api/:path*`,
+        destination: `${backendUrl}/api/v1/:path*`,
       },
       {
         source: "/openapi/:path*",

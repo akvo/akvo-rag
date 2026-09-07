@@ -142,7 +142,7 @@ def test_create_prompt_endpoint(client: TestClient, monkeypatch):
     )
 
     response = client.post(
-        "/api/prompt/",
+        "/api/v1/prompt/",
         json={
             "name": PromptNameEnum.contextualize_q_system_prompt.value,
             "content": "System template",
@@ -179,7 +179,7 @@ def test_update_prompt_endpoint(client: TestClient, monkeypatch):
     )
 
     response = client.put(
-        f"/api/prompt/{PromptNameEnum.contextualize_q_system_prompt.value}",
+        f"/api/v1/prompt/{PromptNameEnum.contextualize_q_system_prompt.value}",
         json={
             "content": "Updated template",
             "activation_reason": "Version 2 update",
@@ -212,7 +212,7 @@ def test_list_prompts_endpoint(client: TestClient, monkeypatch):
         lambda db: [d1],
     )
 
-    response = client.get("/api/prompt")
+    response = client.get("/api/v1/prompt")
     assert response.status_code == 200
     assert len(response.json()) == 1
     assert (
@@ -245,7 +245,7 @@ def test_get_prompt_endpoint_success(client: TestClient, monkeypatch):
     )
 
     response = client.get(
-        f"/api/prompt/{PromptNameEnum.contextualize_q_system_prompt.value}"
+        f"/api/v1/prompt/{PromptNameEnum.contextualize_q_system_prompt.value}"
     )
     assert response.status_code == 200
     assert (
@@ -260,7 +260,7 @@ def test_get_prompt_endpoint_not_found(client: TestClient, monkeypatch):
         lambda db, name: None,
     )
     response = client.get(
-        f"/api/prompt/{PromptNameEnum.contextualize_q_system_prompt.value}"
+        f"/api/v1/prompt/{PromptNameEnum.contextualize_q_system_prompt.value}"
     )
     assert response.status_code == 404
     assert response.json()["detail"] == "Prompt not found"
@@ -293,7 +293,7 @@ def test_reactivate_prompt_version_success(
 
     prompt_name = PromptNameEnum.contextualize_q_system_prompt.value
     response = client.put(
-        f"/api/prompt/{prompt_name}/reactivate/5",
+        f"/api/v1/prompt/{prompt_name}/reactivate/5",
         json={"reactivation_reason": "Rollback to version 1"},
     )
     assert response.status_code == 200
@@ -308,7 +308,7 @@ def test_reactivate_prompt_version_not_found(client: TestClient, monkeypatch):
     )
     prompt_name = PromptNameEnum.contextualize_q_system_prompt.value
     response = client.put(
-        f"/api/prompt/{prompt_name}/reactivate/5",
+        f"/api/v1/prompt/{prompt_name}/reactivate/5",
         json={"reactivation_reason": "Rollback"},
     )
     assert response.status_code == 404
@@ -336,7 +336,7 @@ def test_reactivate_prompt_version_mismatch(
 
     prompt_name = PromptNameEnum.contextualize_q_system_prompt.value
     response = client.put(
-        f"/api/prompt/{prompt_name}/reactivate/99",
+        f"/api/v1/prompt/{prompt_name}/reactivate/99",
         json={"reactivation_reason": "Rollback"},
     )
     assert response.status_code == 404
