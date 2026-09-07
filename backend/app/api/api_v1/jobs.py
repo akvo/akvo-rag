@@ -1,9 +1,11 @@
 import asyncio
+import io
 import json
 import logging
 from typing import Annotated, List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
+from starlette.datastructures import Headers, UploadFile as StarletteUploadFile
 
 from app.core.security import get_current_app
 from app.db.session import SessionLocal, get_db
@@ -167,12 +169,35 @@ async def create_job(
         logger.info(
             "🚀 Dispatching UPLOAD job using KB %s", app_kb.knowledge_base_id
         )
+
+        in_memory_files = []
+        for f in files or []:
+            if hasattr(f, "read"):
+                if asyncio.iscoroutinefunction(f.read):
+                    content = await f.read()
+                else:
+                    content = f.read()
+            elif hasattr(f, "file") and hasattr(f.file, "read"):
+                content = f.file.read()
+            else:
+                content = b""
+
+            headers = getattr(f, "headers", None) or Headers()
+            in_memory_files.append(
+                StarletteUploadFile(
+                    file=io.BytesIO(content),
+                    size=len(content),
+                    filename=getattr(f, "filename", "unnamed_file"),
+                    headers=headers,
+                )
+            )
+
         asyncio.create_task(
             execute_upload_job(
                 db=SessionLocal(),
                 job_id=job_record.id,
                 kb_id=app_kb.knowledge_base_id,
-                files=files or [],
+                files=in_memory_files,
                 callback_url=(
                     data.get("callback_url") or current_app.upload_callback_url
                 ),

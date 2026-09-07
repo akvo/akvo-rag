@@ -357,7 +357,12 @@ async def test_send_callback_async_no_url():
 
 @pytest.mark.asyncio
 async def test_send_callback_async_success():
-    job = Job(id="job_123", callback_params={"meta": "test"})
+    job = Job(
+        id="job_123",
+        job_type="upload",
+        callback_params='{"meta": "test"}',
+        trace_id="trace_abc",
+    )
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
@@ -376,6 +381,9 @@ async def test_send_callback_async_success():
         assert call_args[1]["json"]["status"] == "completed"
         assert call_args[1]["json"]["output"] == "Uploaded successfully"
         assert call_args[1]["json"]["job_id"] == "job_123"
+        assert call_args[1]["json"]["job"] == "upload"
+        assert call_args[1]["json"]["trace_id"] == "trace_abc"
+        assert call_args[1]["json"]["callback_params"] == {"meta": "test"}
 
 
 @pytest.mark.asyncio
