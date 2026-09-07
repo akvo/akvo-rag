@@ -28,11 +28,7 @@ async def handle_query_kb(
     )
 
     formatted_chunks = [
-        (
-            dataclasses.asdict(c)
-            if dataclasses.is_dataclass(c)
-            else c.__dict__
-        )
+        (dataclasses.asdict(c) if dataclasses.is_dataclass(c) else c.__dict__)
         for c in chunks
     ]
     return {"chunks": formatted_chunks}
