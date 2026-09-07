@@ -243,6 +243,106 @@ class TestHostKnowledgeBaseEndpoints:
         assert len(data["chunks"]) == 1
         assert data["chunks"][0]["chunk_id"] == "chk-001"
 
+    def test_document_upload_contract(
+        self, client: TestClient, override_user_auth, monkeypatch
+    ):
+        """Test POST /api/v1/knowledge-bases/{id}/documents/upload
+        multipart upload."""
+        fake_minio = MagicMock()
+        fake_minio.upload_file.return_value = {
+            "bucket": "documents",
+            "object_name": "kb_10/doc_sop.pdf",
+            "size": 512,
+        }
+        fake_redis = AsyncMock()
+        fake_redis.rpush = AsyncMock(return_value=1)
+        fake_redis.aclose = AsyncMock()
+
+        from app.services.minio_service import get_minio_service
+        from app.api.api_v1.knowledge_base import get_redis_client
+        from app.main import app
+
+        app.dependency_overrides[get_minio_service] = lambda: fake_minio
+        app.dependency_overrides[get_redis_client] = lambda: fake_redis
+
+        files = {
+            "file": (
+                "pest_sop.pdf",
+                b"%PDF-1.4 test bytes",
+                "application/pdf",
+            )
+        }
+        response = client.post(
+            "/api/v1/knowledge-bases/10/documents/upload", files=files
+        )
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "PROCESSING"
+        assert data["kb_id"] == 10
+        assert "pest_sop.pdf" in data["filename"]
+
+        app.dependency_overrides.pop(get_minio_service, None)
+        app.dependency_overrides.pop(get_redis_client, None)
+
+    def test_get_processing_tasks_contract(
+        self, client: TestClient, override_user_auth, monkeypatch
+    ):
+        """Test GET /api/v1/knowledge-bases/{id}/documents/tasks
+        returns task status."""
+        fake_dispatcher = MagicMock()
+        fake_dispatcher.call_tool = AsyncMock(
+            return_value={
+                "tasks": [
+                    {
+                        "task_id": "task-abc",
+                        "status": "INDEXED",
+                        "progress": 1.0,
+                    }
+                ]
+            }
+        )
+        fake_service = KnowledgeBaseMCPEndpointService(
+            dispatcher=fake_dispatcher
+        )
+        monkeypatch.setattr(
+            "app.api.api_v1.knowledge_base.KnowledgeBaseMCPEndpointService",
+            lambda: fake_service,
+        )
+
+        response = client.get(
+            "/api/v1/knowledge-bases/10/documents/tasks?task_ids=task-abc"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "tasks" in data
+        assert data["tasks"][0]["task_id"] == "task-abc"
+        assert data["tasks"][0]["status"] == "INDEXED"
+
+    def test_v1_knowledge_bases_parity(
+        self, client: TestClient, override_user_auth, monkeypatch
+    ):
+        """Verify both /api/knowledge-bases and /api/v1/knowledge-bases
+        return identical data."""
+        fake_dispatcher = MagicMock()
+        fake_dispatcher.call_tool = AsyncMock(
+            return_value={
+                "knowledge_bases": [{"id": 1, "name": "KB 1", "documents": []}]
+            }
+        )
+        fake_service = KnowledgeBaseMCPEndpointService(
+            dispatcher=fake_dispatcher
+        )
+        monkeypatch.setattr(
+            "app.api.api_v1.knowledge_base.KnowledgeBaseMCPEndpointService",
+            lambda: fake_service,
+        )
+
+        resp_api = client.get("/api/knowledge-bases")
+        resp_v1 = client.get("/api/v1/knowledge-bases")
+        assert resp_api.status_code == 200
+        assert resp_v1.status_code == 200
+        assert resp_api.json() == resp_v1.json()
+
 
 # ---------------------------------------------------------------------
 # Chat & App Tenant Endpoints Parity Tests

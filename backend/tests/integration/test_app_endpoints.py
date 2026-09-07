@@ -25,7 +25,8 @@ def mock_mcp_create_kb():
     for any test that calls the /register endpoint.
     """
     with patch(
-        "mcp_clients.kb_mcp_endpoint_service.KnowledgeBaseMCPEndpointService.create_kb",
+        "mcp_clients.kb_mcp_endpoint_service."
+        "KnowledgeBaseMCPEndpointService.create_kb",
         new_callable=AsyncMock,
     ) as mock_create_kb:
         # Default fake KB response
@@ -40,11 +41,13 @@ def mock_mcp_create_kb():
 @pytest.fixture(autouse=True)
 def mock_upload_and_process_documents():
     """
-    Automatically mock KnowledgeBaseMCPEndpointService.upload_and_process_documents
+    Automatically mock
+    KnowledgeBaseMCPEndpointService.upload_and_process_documents
     for any test that calls the /upload endpoint.
     """
     with patch(
-        "mcp_clients.kb_mcp_endpoint_service.KnowledgeBaseMCPEndpointService.upload_and_process_documents",
+        "mcp_clients.kb_mcp_endpoint_service."
+        "KnowledgeBaseMCPEndpointService.upload_and_process_documents",
         new_callable=AsyncMock,
     ) as mock_upload_and_process_documents:
         # Default fake KB response
@@ -63,7 +66,8 @@ def mock_get_documents_upload():
     for any test that calls the /documents endpoint.
     """
     with patch(
-        "mcp_clients.kb_mcp_endpoint_service.KnowledgeBaseMCPEndpointService.get_documents_upload",
+        "mcp_clients.kb_mcp_endpoint_service."
+        "KnowledgeBaseMCPEndpointService.get_documents_upload",
         new_callable=AsyncMock,
     ) as mock_get_documents_upload:
         # ✅ Dummy fake KB response
@@ -175,6 +179,32 @@ class TestAppRegistration:
         assert "kb.read" in data["scopes"]
         assert "kb.write" in data["scopes"]
         assert "apps.read" in data["scopes"]
+
+    def test_register_app_value_error_raises_400(
+        self, client, sample_app_data, monkeypatch
+    ):
+        from app.services.app_service import AppService
+
+        def fake_create_err(*args, **kwargs):
+            raise ValueError("Domain already registered")
+
+        monkeypatch.setattr(AppService, "create_app", fake_create_err)
+        response = client.post("/api/apps/register", json=sample_app_data)
+        assert response.status_code == 400
+        assert "Domain already registered" in response.json()["detail"]
+
+    def test_register_app_generic_error_raises_500(
+        self, client, sample_app_data, monkeypatch
+    ):
+        from app.services.app_service import AppService
+
+        def fake_create_boom(*args, **kwargs):
+            raise RuntimeError("Database connection lost")
+
+        monkeypatch.setattr(AppService, "create_app", fake_create_boom)
+        response = client.post("/api/apps/register", json=sample_app_data)
+        assert response.status_code == 500
+        assert "Failed to register app" in response.json()["detail"]
 
 
 class TestAppMe:
