@@ -1,11 +1,11 @@
 # Feature Specification: Purge Legacy Files, Dead Code & Unused Dependencies
 
-> **Feature ID:** `018_clean_502_purge_legacy_files_and_dead_code_spec`  
-> **Task Ref:** `TASK-CLEAN-502`  
-> **Target Branch:** `epic/rag-monorepo-mcp`  
-> **Status:** `PROPOSED (Party Mode Approved)`  
-> **Estimated Effort:** `1.0 hr (Vibe-Coding) / 0.5 day (Traditional)`  
-> **Author:** Antigravity Architect / Code Quality & Platform Hygiene Specialist  
+> **Feature ID:** `018_clean_502_purge_legacy_files_and_dead_code_spec`
+> **Task Ref:** `TASK-CLEAN-502`
+> **Target Branch:** `epic/rag-monorepo-mcp`
+> **Status:** `PROPOSED (Party Mode Approved)`
+> **Estimated Effort:** `1.0 hr (Vibe-Coding) / 0.5 day (Traditional)`
+> **Author:** Antigravity Architect / Code Quality & Platform Hygiene Specialist
 > **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 8, 9)
 
 ---
@@ -34,16 +34,16 @@ Following the completion of Option C across Phases 1 through 4, several legacy m
 
 ### 2.1 Four-Way Agent Council Consensus
 
-* **🏗️ Winston (System Architect):**  
+* **🏗️ Winston (System Architect):**
   Verification before deletion: Ensure zero active routers, workflows, or seeder scripts retain dangling imports from `mcp_discovery_manager`, `scoping_agent`, or `celery_app`. All MCP routing must be 100% verified through `MCPQueueDispatcher`.
 
-* **💻 Amelia (Senior Developer):**  
+* **💻 Amelia (Senior Developer):**
   Clean requirements trimming: Pin dependencies cleanly in `backend/requirements.txt` and `vector-kb-mcp/requirements.txt`. Rebuild Docker images with `--no-cache` to ensure clean builds without leftover layers.
 
-* **🧪 Murat (Test Architect):**  
+* **🧪 Murat (Test Architect):**
   Run full regression test suite (`pytest tests/ -v`) immediately before and after file deletion to confirm that no test fixtures accidentally depended on legacy task or discovery files.
 
-* **🛡️ Rachel (Adversarial Security Red Team):**  
+* **🛡️ Rachel (Adversarial Security Red Team):**
   Scan for leftover secret or credential references in backup files (`.bak`, `.agriconnect_bak`) before deleting them. Run `pip audit` / Dependabot checks to ensure zero known high/critical CVEs remain in the final slim requirements.
 
 ---
@@ -61,13 +61,28 @@ Following the completion of Option C across Phases 1 through 4, several legacy m
 | `backend/mcp_clients/mcp_discovery_manager.py` | Dynamic Discovery | Superseded by `MCPConfigParser` |
 | `backend/mcp_clients/mcp_servers_config.py` | Legacy Config | Superseded by `MCPConfigParser` |
 | `backend/mcp_clients/rest_mcp_client_service.py` | Legacy REST MCP | Superseded by `MCPQueueDispatcher` |
+| `backend/mcp_clients/mcp_client_manager.py` | Legacy Manager | Only used by legacy `mcp_discovery_manager.py` |
+| `backend/mcp_clients/utils/filter_tool_config.py` | Legacy Tool Filter | Only used by legacy `mcp_client_manager.py` |
+| `backend/mcp_clients/utils/__init__.py` | Legacy Package | Empty legacy package |
 | `backend/app/services/scoping_agent.py` | LangGraph | Redundant LLM scoping call purged in `TASK-MCP-304` |
-| `backend/app/celery_app.py` | Background Tasks | Replaced by Redis native queues |
-| `backend/app/tasks/upload_task.py` | Background Tasks | Replaced by MinIO S3 + Redis Ingestion Worker |
-| `backend/app/tasks/chat_task.py` | Background Tasks | Replaced by direct LangGraph streaming |
-| `backend/app/tasks/test_task.py` | Background Tasks | Deprecated Celery test task |
-| `backend/app/tasks/__init__.py` | Background Tasks | Deprecated tasks package |
-| `backend/entrypoint-celery.sh` | Container Entrypoint | Celery worker container removed from compose |
+| `backend/clean_db.py` | Database Tool | Legacy MySQL-specific script |
+| `backend/diff.py` | Chunk Sync Experiment | Obsolete scratch algorithm script |
+| `backend/celerybeat-schedule` | Background Tasks | Deprecated Celery schedule artifact |
+| `backend/tests/mcp_clients/test_fastmcp_client_service.py` | Unit Tests | Obsolete tests for deleted FastMCP service |
+| `backend/tests/mcp_clients/test_mcp_client_manager.py` | Unit Tests | Obsolete tests for deleted MCP client manager |
+| `backend/tests/mcp_clients/test_mcp_discovery_manager.py` | Unit Tests | Obsolete tests for deleted discovery manager |
+| `backend/tests/services/test_scoping_agent.py` | Unit Tests | Obsolete tests for deleted scoping agent |
+
+---
+
+### 3.2 Files to Modify (`[MODIFY]`)
+
+| File Path | Component | Planned Changes |
+|---|---|---|
+| `backend/entrypoint.sh` | Container Startup | Remove blocking `mcp_discovery_manager` execution block |
+| `backend/requirements.txt` | Dependencies | Remove `mysql-connector-python>=8.0.33` and `fastmcp==2.11.1` |
+| `backend/requirements-test.txt` | Test Dependencies | Add `ruff>=0.1.0` and `flake8>=6.0.0` |
+| `CLAUDE.md` | Architecture Docs | Align MCP discovery section with `mcp_config.json` |
 
 ---
 
@@ -88,17 +103,19 @@ Following the completion of Option C across Phases 1 through 4, several legacy m
 ## 4. Verification & Quality Gates
 
 ### 4.1 Linter & Import Audit Command
+
 ```bash
 # Verify zero unresolved imports or dead symbols
-docker exec akvo-rag-backend-1 python -m ruff check /app
-docker exec akvo-rag-backend-1 python -m flake8 /app --max-line-length=100
+docker exec akvo-rag-backend-1 ruff check --select F /app/app /app/mcp_clients
+docker exec akvo-rag-backend-1 flake8 /app/app /app/mcp_clients --max-line-length=100
 ```
 
 ### 4.2 Test Regression Gate
+
 ```bash
 # Verify entire test suite passes post-cleanup
 docker exec akvo-rag-backend-1 python -m pytest tests/ -v
-docker exec akvo-rag-vector-kb-mcp-1 python -m pytest tests/ -v
+docker exec akvo-rag-vector-kb-mcp-1 pytest tests/ -v
 ```
 
 ---
@@ -117,7 +134,7 @@ docker exec akvo-rag-vector-kb-mcp-1 python -m pytest tests/ -v
 
 ## 6. Definition of Done (DoD)
 
-- [ ] All 14 listed legacy files and backups are permanently deleted from git.
-- [ ] Celery, RabbitMQ, MySQL, and FastMCP packages are removed from `requirements.txt`.
-- [ ] `ruff check .` / `flake8` passes with zero unresolved import errors.
-- [ ] All unit and integration test suites pass with 100% success rate.
+* [ ] All listed legacy files and backups are permanently deleted from git.
+* [ ] MySQL and FastMCP packages are removed from `backend/requirements.txt`.
+* [ ] `ruff check --select F` passes with zero unresolved import or syntax errors.
+* [ ] All unit and integration test suites pass with 100% success rate and zero deprecation warnings.
