@@ -16,14 +16,15 @@ except ImportError:
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Akvo RAG"  # Project name
     VERSION: str = "0.1.0"  # Project version
-    API_V1_STR: str = "/api"  # API version string
+    API_V1_STR: str = "/api/v1"  # API version string
 
     # CORS settings (comma-separated origins from env)
     BACKEND_CORS_ORIGINS: list[str] = [
         origin.strip()
         for origin in os.getenv(
             "BACKEND_CORS_ORIGINS",
-            "http://localhost:3000,http://127.0.0.1:3000",
+            "http://localhost:3000,http://127.0.0.1:3000,"
+            "http://localhost:3010,http://127.0.0.1:3010",
         ).split(",")
         if origin.strip()
     ]
@@ -159,6 +160,11 @@ class Settings(BaseSettings):
         "MINIO_BUCKET_DOCUMENTS", "documents"
     )
     MINIO_SECURE: bool = os.getenv("MINIO_SECURE", "False").lower() == "true"
+
+    # Local development: allow HTTP callback URLs (default: False)
+    ALLOW_HTTP_CALLBACKS: bool = (
+        os.getenv("ALLOW_HTTP_CALLBACKS", "False").lower() == "true"
+    )
 
     class Config:
         env_file = ".env"

@@ -155,7 +155,7 @@ class TestMultiKBJobEndpoints:
             "Authorization": f"Bearer {sample_app_multi_kb.access_token}"
         }
         response = client.post(
-            "/api/apps/jobs", data=chat_payload_with_kb, headers=headers
+            "/api/v1/apps/jobs", data=chat_payload_with_kb, headers=headers
         )
 
         assert response.status_code == 200
@@ -179,7 +179,7 @@ class TestMultiKBJobEndpoints:
             "Authorization": f"Bearer {sample_app_multi_kb.access_token}"
         }
         response = client.post(
-            "/api/apps/jobs", data=chat_payload_invalid_kb, headers=headers
+            "/api/v1/apps/jobs", data=chat_payload_invalid_kb, headers=headers
         )
 
         assert response.status_code == 404
@@ -201,7 +201,7 @@ class TestMultiKBJobEndpoints:
             "Authorization": f"Bearer {sample_app_multi_kb.access_token}"
         }
         response = client.post(
-            "/api/apps/jobs", data=sample_chat_job_payload, headers=headers
+            "/api/v1/apps/jobs", data=sample_chat_job_payload, headers=headers
         )
 
         assert response.status_code == 200
@@ -232,7 +232,7 @@ class TestMultiKBJobEndpoints:
         files = {"files": ("doc.pdf", file_content, "application/pdf")}
 
         response = client.post(
-            "/api/apps/jobs",
+            "/api/v1/apps/jobs",
             data=upload_payload_with_kb,
             files=files,
             headers=headers,
@@ -253,7 +253,9 @@ class TestMultiKBJobEndpoints:
             "Authorization": f"Bearer {sample_app_multi_kb.access_token}"
         }
         response = client.post(
-            "/api/apps/jobs", data=upload_payload_invalid_kb, headers=headers
+            "/api/v1/apps/jobs",
+            data=upload_payload_invalid_kb,
+            headers=headers,
         )
 
         assert response.status_code == 404
@@ -272,7 +274,7 @@ class TestMultiKBJobEndpoints:
             "Authorization": f"Bearer {sample_app_no_default_kb.access_token}"
         }
         response = client.post(
-            "/api/apps/jobs", data=sample_chat_job_payload, headers=headers
+            "/api/v1/apps/jobs", data=sample_chat_job_payload, headers=headers
         )
 
         assert response.status_code == 404
@@ -291,7 +293,7 @@ class TestMultiKBJobEndpoints:
         files = {"files": ("doc.pdf", file_content, "application/pdf")}
 
         response = client.post(
-            "/api/apps/jobs",
+            "/api/v1/apps/jobs",
             data=sample_upload_job_payload,
             files=files,
             headers=headers,

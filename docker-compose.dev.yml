@@ -133,6 +133,7 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ALLOW_HTTP_CALLBACKS=True
       - MCP_CONFIG_PATH=/app/mcp_config.json
     depends_on:
       postgres:

@@ -14,15 +14,40 @@ export class ApiError extends Error {
 }
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+export const API_PREFIX = "/api/v1";
 
 export async function fetchApi(url: string, options: FetchOptions = {}) {
   const { data, headers: customHeaders = {}, ...restOptions } = options;
+
+  // Normalize path if relative
+  let normalizedPath = url;
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    // Ensure leading slash
+    if (!normalizedPath.startsWith("/")) {
+      normalizedPath = `/${normalizedPath}`;
+    }
+
+    // Rewrite /api/v1/ or /api/ to /api/v1/
+    if (normalizedPath.startsWith("/api/v1/")) {
+      // already v1
+    } else if (normalizedPath.startsWith("/api/")) {
+      normalizedPath = `/api/v1${normalizedPath.slice(4)}`;
+    } else if (!normalizedPath.startsWith("/openapi/")) {
+      normalizedPath = `/api/v1${normalizedPath}`;
+    }
+
+    // Auto-normalize singular /knowledge-base to plural /knowledge-bases
+    normalizedPath = normalizedPath.replace(
+      /\/knowledge-base(\/|\?|$)/,
+      "/knowledge-bases$1",
+    );
+  }
 
   // Resolve relative URLs with NEXT_PUBLIC_API_URL
   const fullUrl =
     url.startsWith("http://") || url.startsWith("https://")
       ? url
-      : `${BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+      : `${BASE_URL}${normalizedPath}`;
 
   // Get token from localStorage
   let token = "";

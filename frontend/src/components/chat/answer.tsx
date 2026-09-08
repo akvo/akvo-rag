@@ -15,7 +15,7 @@ import rehypeHighlight from "rehype-highlight";
 import { api } from "@/lib/api";
 import { FileIcon } from "react-file-icon";
 
-interface Citation {
+export interface Citation {
   id: number;
   text: string;
   metadata: Record<string, any>;

@@ -4,6 +4,7 @@ import logging
 import mimetypes
 from typing import Any, Dict, List, Optional
 from fastapi import UploadFile
+from starlette.datastructures import UploadFile as StarletteUploadFile
 import aiofiles
 
 from mcp_clients.queue_dispatcher import MCPQueueDispatcher
@@ -307,28 +308,25 @@ class KnowledgeBaseMCPEndpointService:
         self, kb_id: int, files: list
     ) -> list[dict]:
         """Supports UploadFile or local file paths from Celery."""
-        file_payload = []
+        from app.services.document_upload_service import (
+            process_and_enqueue_upload,
+        )
+
+        upload_files = []
+        local_files = []
+
         for f in files:
-            if isinstance(f, UploadFile):
-                content = await f.read()
-                file_payload.append(
-                    {
-                        "filename": f.filename,
-                        "size": len(content),
-                        "status": "processed",
-                    }
-                )
-                await f.seek(0)
+            if isinstance(f, (UploadFile, StarletteUploadFile)) or (
+                hasattr(f, "filename") and hasattr(f, "read")
+            ):
+                upload_files.append(f)
             elif isinstance(f, str) and os.path.exists(f):
                 if not os.path.isfile(f):
                     raise ValueError(f"Not a valid file: {f}")
                 file_size = os.path.getsize(f)
                 if file_size == 0:
                     raise ValueError(f"Empty file: {f}")
-                async with aiofiles.open(f, "rb") as af:
-                    content = await af.read()
                 filename = os.path.basename(f)
-                content_type, _ = mimetypes.guess_type(filename)
                 supported_extensions = {".pdf", ".docx", ".md", ".txt"}
                 _, ext = os.path.splitext(filename)
                 if ext.lower() not in supported_extensions:
@@ -336,17 +334,35 @@ class KnowledgeBaseMCPEndpointService:
                         f"Unsupported file type: {ext}. "
                         f"Supported types: {supported_extensions}"
                     )
-                file_payload.append(
-                    {
-                        "filename": filename,
-                        "size": len(content),
-                        "type": content_type,
-                        "status": "processed",
-                    }
-                )
+                local_files.append(f)
             else:
                 raise ValueError(f"Invalid file input: {f!r}")
-        return file_payload
+
+        results = []
+        if upload_files:
+            upload_results = await process_and_enqueue_upload(
+                kb_id=kb_id, files=upload_files
+            )
+            if isinstance(upload_results, list):
+                results.extend(upload_results)
+            else:
+                results.append(upload_results)
+
+        for lf in local_files:
+            async with aiofiles.open(lf, "rb") as af:
+                content = await af.read()
+            filename = os.path.basename(lf)
+            content_type, _ = mimetypes.guess_type(filename)
+            results.append(
+                {
+                    "filename": filename,
+                    "size": len(content),
+                    "type": content_type,
+                    "status": "processed",
+                }
+            )
+
+        return results
 
     async def get_documents_upload(self, kb_id: int) -> List[dict]:
         """Get upload tasks status."""
