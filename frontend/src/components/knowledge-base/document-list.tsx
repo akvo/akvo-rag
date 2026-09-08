@@ -219,9 +219,9 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
                   rel="noopener noreferrer"
                 >
                   <button
-                    className="inline-flex items-center justify-center rounded-md bg-blue-100 hover:bg-blue-200 w-8 h-8"
+                    className="inline-flex items-center justify-center rounded-md bg-[#03AD8C]/10 hover:bg-[#03AD8C]/20 w-8 h-8"
                   >
-                    <Eye className="h-4 w-4 text-blue-700" />
+                    <Eye className="h-4 w-4 text-[#027a63]" />
                   </button>
                 </Link> */}
                 {
