@@ -44,7 +44,7 @@ The `add_user.py` script allows you to create or update a user account in the sy
 === Create or Update User ===
 Email: john_doe@example.com
 Is Super User? (y/n): y
-Password: 
+Password:
 ```
 
 This creates or updates the user `john_doe@example.com` and marks them as a superuser.
@@ -66,8 +66,8 @@ This Python script supports three main operation modes:
 Before running the script, set RAG credentials in your shell or environment:
 
 ``` bash
-export RAG_USERNAME="rag_admin"
-export RAG_PASSWORD="RAGadmin1"
+export RAG_USERNAME="your_admin_username"
+export RAG_PASSWORD="your_secure_password"
 ```
 
 ## 🚀 Running the Script
@@ -110,8 +110,8 @@ This Python script supports three main operation modes:
 Before running the script, set RAG credentials in your shell or environment:
 
 ``` bash
-export RAG_USERNAME="rag_admin"
-export RAG_PASSWORD="RAGadmin1"
+export RAG_USERNAME="your_admin_username"
+export RAG_PASSWORD="your_secure_password"
 ```
 
 ## 🚀 Running the Script

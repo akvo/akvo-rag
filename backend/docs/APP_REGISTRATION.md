@@ -1,91 +1,140 @@
-# App Registration & Validation API
+# App Registration & Host Application Integration Guide: Akvo RAG 🌐
 
-Server-to-server app registration and validation system for Akvo RAG.
-
-## Overview
-
-This feature enables external applications to register and obtain credentials for authenticating with the Akvo RAG API. Tokens never expire automatically and are only invalidated when apps are deactivated or revoked.
-
-## Endpoints
-
-### 1. POST `/api/apps/register` - Register New App
-
-Register a new application and receive credentials. The app provides its own `callback_token` which Akvo RAG will use when making callbacks.
-
-**Request:**
-```bash
-curl -X POST http://localhost:8000/api/apps/register \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "app_name": "agriconnect",
-    "domain": "agriconnect.akvo.org/api",
-    "default_chat_prompt": "",
-    "chat_callback": "https://agriconnect.akvo.org/api/ai/callback",
-    "upload_callback": "https://agriconnect.akvo.org/api/kb/callback",
-    "callback_token": "your_secure_callback_token_here"
-  }'
-```
-
-**Response (201):**
-```json
-{
-  "app_id": "app_abc123...",
-  "client_id": "ac_xyz789...",
-  "access_token": "tok_...",
-  "scopes": ["jobs.write", "kb.read", "kb.write", "apps.read"]
-}
-```
-
-**Validation:**
-- Both `chat_callback` and `upload_callback` must be HTTPS URLs
-- `callback_token` is required (this is what Akvo RAG will use to authenticate when calling your callbacks)
-- Returns 422 for invalid URLs
-
-**Token Usage:**
-- Use the returned `access_token` when making requests **TO** Akvo RAG
-- Akvo RAG will use your `callback_token` when making requests **TO** your app's callback URLs
+This comprehensive guide details the architecture, server-to-server app registration, tenant token lifecycle, Knowledge Base management, asynchronous RAG jobs, webhook callback schemas, and ready-to-use SDK code examples for integrating external host applications (such as **AgriConnect**, **CoM**, or third-party web portals) with **Akvo RAG**.
 
 ---
 
-### 2. GET `/api/apps/me` - Validate Token & Get App Info
+## 1. Architectural Overview & Security Model
 
-Validate your access token and retrieve app metadata.
+Akvo RAG provides a multi-tenant API designed specifically for host applications:
+- **Host applications** manage their own end users, authorization, and business logic.
+- **Akvo RAG** serves as the backend AI/retrieval engine for document parsing, semantic vector indexing (ChromaDB + MinIO S3), and tiered LLM answer synthesis.
+- **Authentication**: Host applications authenticate to Akvo RAG using an application-scoped bearer token (`tok_...`). The token is hashed with **Argon2** inside Akvo RAG's database, ensuring zero plaintext token persistence.
+- **Bidirectional Webhooks**: For long-running operations (such as document ingestion and streaming chat generation), Akvo RAG communicates back to the host application via secure webhooks authenticated with a shared `callback_token`.
 
-**Request:**
-```bash
-curl http://localhost:8000/api/apps/me \
-  -H "Authorization: Bearer tok_..."
+```
+ ┌────────────────────────────────┐                 ┌────────────────────────────────┐
+ │     Host Application           │                 │       Akvo RAG Platform        │
+ │   (e.g., AgriConnect / CoM)    │                 │                                │
+ │                                │                 │  ┌──────────────────────────┐  │
+ │  1. Register App               │── POST /apps ──▶│  │ Tenant App Service       │  │
+ │     (Receive `tok_...`)        │◀─ 201 Created ──│  │ (Argon2 Hashed Storage)  │  │
+ │                                │                 │  └─────────────┬────────────┘  │
+ │  2. Create KB & Upload Docs    │── POST /jobs ──▶│                ▼               │
+ │     (Bearer tok_...)           │                 │  ┌──────────────────────────┐  │
+ │                                │                 │  │ Vector KB Worker         │  │
+ │  3. Webhook Ingestion Callback │◀── POST /kb ────│  │ (ChromaDB + MinIO S3)    │  │
+ │     (Bearer callback_token)    │                 │  └─────────────┬────────────┘  │
+ │                                │                 │                ▼               │
+ │  4. Submit Chat Query          │── POST /jobs ──▶│  ┌──────────────────────────┐  │
+ │     (Bearer tok_...)           │                 │  │ Dual-Tier LangGraph      │  │
+ │  5. Webhook Chat Response      │◀── POST /ai ────│  │ (FAST / SYNTHESIS LLM)   │  │
+ └────────────────────────────────┘                 └────────────────────────────────┘
 ```
 
-**Response (200):**
+---
+
+## 2. Network Topology & Base URLs
+
+### Local Development (Docker-to-Docker)
+When running both your host application and Akvo RAG locally in separate Docker Compose networks:
+- **Container-to-Container**: `http://host.docker.internal:8000` (or `http://host.docker.internal:8010` if port-shifted).
+- **Host Machine / Browser / Swagger**: `http://localhost:8000/docs` (or `http://localhost:8010/docs`).
+
+> [!TIP]
+> On Linux Docker setups, add `extra_hosts: ["host.docker.internal:host-gateway"]` to your host app's `docker-compose.yml` to enable `host.docker.internal` routing. On macOS and Windows Docker Desktop, this works out of the box.
+
+### Production Environment
+In production, use the fully qualified domain name (FQDN):
+- **Base URL**: `https://rag.akvo.org/api/v1`
+- **Webhooks**: Must use public HTTPS URLs (e.g. `https://your-host-app.org/api/callback/rag`).
+
+---
+
+## 3. Step-by-Step Integration Walkthrough
+
+### Step 3.1: Register Your Application
+
+Register your host application to obtain an API access token.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/apps/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "app_name": "agriconnect",
+    "domain": "agriconnect.akvo.org",
+    "default_chat_prompt": "You are AgriConnect AI, an expert agronomy advisor supporting smallholder farmers.",
+    "chat_callback": "https://agriconnect.akvo.org/api/callback/ai",
+    "upload_callback": "https://agriconnect.akvo.org/api/callback/kb",
+    "callback_token": "your_secure_random_callback_secret_token"
+  }'
+```
+
+#### Request Payload Fields:
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `app_name` | `string` | ✅ | Unique name identifier for your host application. |
+| `domain` | `string` | ✅ | Primary domain or hostname of your application. |
+| `default_chat_prompt` | `string` | ❌ | Default system persona/prompt override for chat queries. |
+| `chat_callback` | `string` | ❌ | HTTPS webhook URL where chat responses will be delivered. |
+| `upload_callback` | `string` | ❌ | HTTPS webhook URL where document ingestion status updates will be delivered. |
+| `callback_token` | `string` | ✅ | Shared secret token Akvo RAG sends in the `Authorization` header when calling your webhooks. |
+
+#### Response (`201 Created`):
 ```json
 {
-  "app_id": "app_abc123...",
+  "app_id": "app_H6quogDyGNxQQgIKdg2sog",
+  "client_id": "ac_wClwAYUnO5mIM8DFuztKYQ",
+  "access_token": "tok_1a2b3c4d5e6f7g8h9i0j_example_token",
+  "scopes": ["jobs.write", "kb.read", "kb.write", "apps.read"],
+  "knowledge_bases": [
+    {
+      "knowledge_base_id": 101,
+      "name": "agriconnect Default KB",
+      "is_default": true
+    }
+  ]
+}
+```
+
+> [!CAUTION]
+> The `access_token` (`tok_...`) is shown **only once** upon registration. Akvo RAG stores only its Argon2 hash. Store this token securely in your host application's environment configuration (e.g. `RAG_APP_TOKEN`).
+
+---
+
+### Step 3.2: Validate Authentication (`/me`)
+
+Verify that your token is valid and inspect registered metadata:
+
+```bash
+curl -X GET http://localhost:8000/api/v1/apps/me \
+  -H "Authorization: Bearer tok_1a2b3c4d5e6f7g8h9i0j_example_token"
+```
+
+#### Response (`200 OK`):
+```json
+{
+  "app_id": "app_H6quogDyGNxQQgIKdg2sog",
   "app_name": "agriconnect",
-  "domain": "agriconnect.akvo.org/api",
-  "default_chat_prompt": "",
-  "chat_callback_url": "https://agriconnect.akvo.org/api/ai/callback",
-  "upload_callback_url": "https://agriconnect.akvo.org/api/kb/callback",
+  "domain": "agriconnect.akvo.org",
+  "default_chat_prompt": "You are AgriConnect AI, an expert agronomy advisor supporting smallholder farmers.",
+  "chat_callback_url": "https://agriconnect.akvo.org/api/callback/ai",
+  "upload_callback_url": "https://agriconnect.akvo.org/api/callback/kb",
   "scopes": ["jobs.write", "kb.read", "kb.write", "apps.read"],
   "status": "active"
 }
 ```
 
-**Error Responses:**
-- **401** - Invalid or missing token
-- **403** - App is not active (revoked or suspended)
-
 ---
 
-### 3. POST `/api/apps/rotate` - Rotate Tokens
+### Step 3.3: Rotate Credentials (`/rotate`)
 
-Rotate access token and/or callback token. When rotating the callback token, you must provide the new token.
+Rotate access token and/or callback token without re-registering:
 
-**Request:**
 ```bash
-curl -X POST http://localhost:8000/api/apps/rotate \
+curl -X POST http://localhost:8000/api/v1/apps/rotate \
   -H "Authorization: Bearer tok_..." \
-  -H 'Content-Type: application/json' \
+  -H "Content-Type: application/json" \
   -d '{
     "rotate_access_token": true,
     "rotate_callback_token": true,
@@ -93,148 +142,279 @@ curl -X POST http://localhost:8000/api/apps/rotate \
   }'
 ```
 
-**Response (200):**
-```json
-{
-  "app_id": "app_abc123...",
-  "access_token": "tok_new...",
-  "callback_token": null,
-  "message": "Both tokens rotated successfully"
-}
-```
-
-**Notes:**
-- Set either flag to `false` to skip rotating that token
-- If both are `false`, no tokens are rotated
-- `new_callback_token` is **required** when `rotate_callback_token` is `true`
-- The response does not include the callback token (you already provided it)
-- Old access tokens are immediately invalidated upon rotation
-
 ---
 
-### 4. POST `/api/apps/revoke` - Revoke App
+### Step 3.4: Revoke Application (`/revoke`)
 
-Revoke the app immediately. After revocation, all API calls will return 401/403.
+Immediately deactivate the app and invalidate all issued tokens:
 
-**Request:**
 ```bash
-curl -X POST http://localhost:8000/api/apps/revoke \
+curl -X POST http://localhost:8000/api/v1/apps/revoke \
   -H "Authorization: Bearer tok_..."
 ```
 
-**Response:** `204 No Content`
-
-**Notes:**
-- This operation is idempotent
-- After revocation, the app status becomes "revoked"
-- All subsequent API calls with this token will fail
-
 ---
 
-## Security Features
+### Step 3.5: Knowledge Base Management
 
-### Token Generation
-- **Access Token**: 48-byte URL-safe token with `tok_` prefix (generated by Akvo RAG)
-- **Callback Token**: Provided by the app during registration (stored in plaintext)
-- **App ID**: Unique identifier with `app_` prefix
-- **Client ID**: Unique identifier with `ac_` prefix
+Host applications can create and manage their own isolated Knowledge Bases (KBs).
 
-### Token Storage
-- Access tokens stored in plaintext (indexed for fast lookup)
-- Callback tokens stored in plaintext (Akvo RAG needs to send them to your callbacks)
-
-### Token Usage Flow
-1. **App → Akvo RAG**: App uses `access_token` to authenticate requests
-2. **Akvo RAG → App callbacks**: Akvo RAG includes `callback_token` to authenticate callbacks
-
-### Token Lifecycle
-- Tokens **never expire** automatically
-- Tokens are invalidated when:
-  - App is explicitly revoked
-  - App status is set to suspended
-  - Access tokens are rotated (old token is immediately invalidated)
-  - Callback tokens are rotated (you provide the new token)
-
-### Authorization
-- Bearer token authentication via `Authorization` header
-- Status-based access control (only `active` apps can access protected endpoints)
-- Scoped permissions (default: `jobs.write`, `kb.read`, `kb.write`, `apps.read`)
-
----
-
-## Database Schema
-
-### `apps` Table
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | Integer | Primary key |
-| `app_id` | String(64) | Unique app identifier (indexed) |
-| `client_id` | String(64) | Unique client identifier (indexed) |
-| `app_name` | String(255) | Application name |
-| `domain` | String(255) | Application domain |
-| `default_chat_prompt` | Text | Optional default prompt |
-| `chat_callback_url` | String(512) | HTTPS callback URL for chat |
-| `upload_callback_url` | String(512) | HTTPS callback URL for uploads |
-| `access_token` | String(128) | Bearer token (indexed) |
-| `callback_token` | String(255) | Callback token (plaintext) |
-| `scopes` | JSON | Array of permission scopes |
-| `status` | Enum | `active`, `revoked`, or `suspended` |
-| `created_at` | DateTime | Creation timestamp |
-| `updated_at` | DateTime | Last update timestamp |
-
----
-
-## Testing
-
-### Run All Tests
+#### 1. List All Accessible Knowledge Bases
 ```bash
-cd backend
-./test.sh
+curl -X GET http://localhost:8000/api/v1/apps/knowledge-bases \
+  -H "Authorization: Bearer tok_..."
 ```
 
-### Run Unit Tests Only
+#### 2. Create a New Knowledge Base
 ```bash
-./test-unit.sh
+curl -X POST http://localhost:8000/api/v1/apps/knowledge-bases \
+  -H "Authorization: Bearer tok_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Kenya Avocado Extension Guide",
+    "description": "Agronomy knowledge base for avocado pest management and soil health."
+  }'
 ```
 
-### Test Coverage
-- ✅ Service layer: Token generation, hashing, verification
-- ✅ Registration: Happy path + HTTPS validation
-- ✅ `/me` endpoint: Valid token, invalid token, inactive app
-- ✅ Rotation: Access token, callback token, both, none
-- ✅ Revocation: Success, idempotency
-
----
-
-## Migration
-
-Apply the database migration:
-
+#### 3. Update Knowledge Base
 ```bash
-# Automatic (on app startup)
-docker compose up -d
+curl -X PATCH http://localhost:8000/api/v1/apps/knowledge-bases/101 \
+  -H "Authorization: Bearer tok_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Kenya Avocado & Macadamia Guide"
+  }'
+```
 
-# Manual
-docker exec akvo-rag-backend-1 alembic upgrade head
+#### 4. Delete Knowledge Base
+```bash
+curl -X DELETE http://localhost:8000/api/v1/apps/knowledge-bases/101 \
+  -H "Authorization: Bearer tok_..."
 ```
 
 ---
 
-## Implementation Files
+### Step 3.6: Document Ingestion & Uploads
 
-- **Model**: `backend/app/models/app.py`
-- **Schemas**: `backend/app/schemas/app.py`
-- **Service**: `backend/app/services/app_service.py`
-- **Endpoints**: `backend/app/api/api_v1/apps.py`
-- **Security**: `backend/app/core/security.py` (added `get_current_app`)
-- **Migration**: `backend/alembic/versions/a1b2c3d4e5f6_create_apps_table.py`
-- **Tests**:
-  - `backend/tests/services/test_app_service.py`
-  - `backend/tests/integration/test_app_endpoints.py`
+Documents (PDF, DOCX, TXT) uploaded by your host application are processed asynchronously via MinIO S3 and ChromaDB vector indexing.
+
+#### Option A: Submit Asynchronous Upload Job (Recommended)
+```bash
+curl -X POST http://localhost:8000/api/v1/apps/jobs \
+  -H "Authorization: Bearer tok_..." \
+  -F 'payload={"job": "upload", "knowledge_base_id": 101, "callback_params": {"external_doc_id": "doc_991"}}' \
+  -F 'files=@/path/to/avocado_sop.pdf'
+```
+
+#### Option B: Direct Document Upload Endpoint
+```bash
+curl -X POST http://localhost:8000/api/v1/apps/knowledge-bases/101/documents/upload \
+  -H "Authorization: Bearer tok_..." \
+  -F 'file=@/path/to/avocado_sop.pdf'
+```
 
 ---
 
-## Dependencies
+### Step 3.7: AI Chat & Advisory Queries
 
-Standard dependencies from `requirements.txt`. No additional dependencies required for app registration feature.
+Submit questions to Akvo RAG to perform vector search, reranking, and contextual LLM generation.
+
+#### Submit Query Job (SSE or Async Webhook)
+```bash
+curl -X POST http://localhost:8000/api/v1/apps/jobs \
+  -H "Authorization: Bearer tok_..." \
+  -F 'payload={
+    "job": "chat",
+    "knowledge_base_ids": [101],
+    "prompt": "How do I manage False Codling Moth (FCM) on avocado crops?",
+    "chats": [
+      {"role": "user", "content": "What are common pests in Kenya?"},
+      {"role": "assistant", "content": "Common pests include FCM, thrips, and fruit flies."}
+    ],
+    "callback_params": {
+      "session_id": "sess_abc123",
+      "user_id": "usr_farmer_45"
+    }
+  }'
+```
+
+---
+
+## 4. Webhook Callback Specifications
+
+When long-running jobs complete, Akvo RAG posts results to the `upload_callback` and `chat_callback` URLs defined during registration.
+
+### 1. Document Upload Callback Payload (`upload_callback`)
+
+Akvo RAG sends a `POST` request with the following JSON structure:
+
+```json
+{
+  "event": "document_indexed",
+  "app_id": "app_H6quogDyGNxQQgIKdg2sog",
+  "knowledge_base_id": 101,
+  "document_id": "doc_8f93a1c2",
+  "filename": "avocado_sop.pdf",
+  "status": "COMPLETED",
+  "chunks_indexed": 42,
+  "callback_params": {
+    "external_doc_id": "doc_991"
+  },
+  "error": null
+}
+```
+
+### 2. Chat Query Callback Payload (`chat_callback`)
+
+```json
+{
+  "event": "chat_completed",
+  "app_id": "app_H6quogDyGNxQQgIKdg2sog",
+  "response": "To control False Codling Moth (FCM), implement an integrated pest management (IPM) approach including sanitation, pheromone traps, and targeted biological treatments.",
+  "citations": [
+    {
+      "document_name": "avocado_sop.pdf",
+      "chunk_id": "chunk_12",
+      "page_number": 4,
+      "snippet": "Field sanitation is critical: collect and bury all fallen avocado fruits at least 50 cm deep."
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 820,
+    "completion_tokens": 115,
+    "model_tier": "SYNTHESIS"
+  },
+  "callback_params": {
+    "session_id": "sess_abc123",
+    "user_id": "usr_farmer_45"
+  }
+}
+```
+
+### 3. Webhook Authentication Verification
+
+Verify the incoming `Authorization` header against your configured `callback_token`:
+
+```python
+# FastAPI Webhook Receiver Example
+from fastapi import FastAPI, Header, HTTPException, Request
+
+app = FastAPI()
+EXPECTED_CALLBACK_TOKEN = "your_secure_random_callback_secret_token"
+
+@app.post("/api/callback/ai")
+async def handle_rag_ai_callback(request: Request, authorization: str = Header(None)):
+    if not authorization or authorization != f"Bearer {EXPECTED_CALLBACK_TOKEN}":
+        raise HTTPException(status_code=401, detail="Unauthorized callback request")
+
+    data = await request.json()
+    print(f"Received RAG response for session {data['callback_params']['session_id']}: {data['response']}")
+    return {"status": "received"}
+```
+
+---
+
+## 5. Ready-to-Use Host Client SDK Examples
+
+### Python Example (`httpx` / `asyncio`)
+
+```python
+import httpx
+import json
+
+class AkvoRAGClient:
+    def __init__(self, base_url: str, app_token: str):
+        self.base_url = base_url.rstrip("/")
+        self.headers = {"Authorization": f"Bearer {app_token}"}
+
+    async def list_knowledge_bases(self):
+        async with httpx.AsyncClient() as client:
+            res = await client.get(f"{self.base_url}/api/v1/apps/knowledge-bases", headers=self.headers)
+            res.raise_for_status()
+            return res.json()
+
+    async def ask_question(self, kb_id: int, question: str, session_id: str):
+        payload = {
+            "job": "chat",
+            "knowledge_base_ids": [kb_id],
+            "prompt": question,
+            "callback_params": {"session_id": session_id}
+        }
+        async with httpx.AsyncClient() as client:
+            res = await client.post(
+                f"{self.base_url}/api/v1/apps/jobs",
+                headers=self.headers,
+                data={"payload": json.dumps(payload)}
+            )
+            res.raise_for_status()
+            return res.json()
+```
+
+### TypeScript / Node.js Example
+
+```typescript
+import axios from 'axios';
+import FormData from 'form-data';
+import fs from 'fs';
+
+export class AkvoRAGClient {
+  constructor(private baseUrl: string, private appToken: string) {}
+
+  private get headers() {
+    return { Authorization: `Bearer ${this.appToken}` };
+  }
+
+  async getKnowledgeBases() {
+    const response = await axios.get(`${this.baseUrl}/api/v1/apps/knowledge-bases`, {
+      headers: this.headers
+    });
+    return response.data;
+  }
+
+  async uploadDocument(kbId: number, filePath: string) {
+    const form = new FormData();
+    form.append('payload', JSON.stringify({ job: 'upload', knowledge_base_id: kbId }));
+    form.append('files', fs.createReadStream(filePath));
+
+    const response = await axios.post(`${this.baseUrl}/api/v1/apps/jobs`, form, {
+      headers: { ...this.headers, ...form.getHeaders() }
+    });
+    return response.data;
+  }
+}
+```
+
+---
+
+## 6. Verification, Testing & QA Playbook
+
+To test and verify host application endpoints against a live local instance:
+
+1. **Interactive Swagger**:
+   - Navigate to `http://localhost:8000/docs` (or `http://localhost:8010/docs`).
+   - Click the green **Authorize** button, type `Bearer tok_...`, and execute requests under the `apps` section.
+
+2. **Automated Integration Test Suites**:
+   Run the backend verification suite to validate host contracts:
+   ```bash
+   # Test App registration & tenant token auth
+   docker exec akvo-rag-backend-1 python -m pytest tests/integration/test_app_endpoints.py -v
+
+   # Test AgriConnect specific end-to-end integration lifecycle
+   docker exec akvo-rag-backend-1 python -m pytest tests/integration/test_agriconnect_integration.py -v
+
+   # Test Host API backward compatibility
+   docker exec akvo-rag-backend-1 python -m pytest tests/api/test_host_api_backwards_compatibility.py -v
+   ```
+
+---
+
+## 7. Troubleshooting & Common Pitfalls
+
+| Issue | Root Cause | Solution |
+|---|---|---|
+| **`401 Unauthorized`** | Missing or malformed `Authorization` header. | Pass `Authorization: Bearer tok_...` (ensure the `Bearer ` prefix is included). |
+| **`403 Forbidden`** | App token is attempting to access a KB owned by another app. | Ensure requests only target KBs returned by `GET /api/v1/apps/knowledge-bases`. |
+| **`400 Bad Request` on Upload** | Unsupported file format or invalid magic bytes. | Ensure files are valid PDF (`%PDF-`), DOCX, or TXT format. |
+| **Webhook Callback Failing** | Host app container not reachable from RAG container. | Use `http://host.docker.internal:<port>` in local Docker development, or ngrok (`https://....ngrok.dev`). |
+| **`422 Unprocessable Entity`** | Invalid registration callback URL format. | Ensure callback URLs are valid URI strings (HTTPS required in production). |
