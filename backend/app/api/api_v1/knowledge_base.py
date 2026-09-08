@@ -43,7 +43,7 @@ async def get_redis_client():
 class TestRetrievalRequest(BaseModel):
     query: str
     kb_id: int
-    top_k: int
+    top_k: int = 5
 
 
 @router.get(
@@ -284,4 +284,19 @@ async def test_retrieval(
         query=request.query,
         top_k=request.top_k,
     )
-    return result
+    if isinstance(result, dict):
+        chunks = (
+            result.get("chunks")
+            if "chunks" in result
+            else result.get("results", [])
+        )
+    elif isinstance(result, list):
+        chunks = result
+    else:
+        chunks = []
+
+    return {
+        "results": chunks,
+        "chunks": chunks,
+        "total": len(chunks),
+    }
