@@ -36,10 +36,19 @@ jobs:
 
       - name: Check service health
         run: |
-          # Test Frontend
-          curl -f http://localhost:3000/
-          # Test Backend API Health
-          curl -f http://localhost:8000/api/health
+          # Source env to get actual mapped host ports (e.g. FRONTEND_PORT=3010, BACKEND_PORT=8010)
+          set -a
+          source .env
+          set +a
+
+          FE_PORT="${FRONTEND_PORT:-3000}"
+          BE_PORT="${BACKEND_PORT:-8000}"
+
+          echo "Checking Frontend at http://localhost:${FE_PORT}/..."
+          curl -f "http://localhost:${FE_PORT}/"
+
+          echo "Checking Backend API Health at http://localhost:${BE_PORT}/api/health..."
+          curl -f "http://localhost:${BE_PORT}/api/health"
 
       - name: Run backend tests
         run: ./backend/test.sh
