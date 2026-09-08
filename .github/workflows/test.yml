@@ -2,9 +2,15 @@ name: Test Services
 
 on:
   push:
-    branches: [main, "phase-*", "epic/*"]
+    branches:
+      - main
+      - "phase-**"
+      - "epic/**"
   pull_request:
-    branches: [main, "phase-*", "epic/*"]
+    branches:
+      - main
+      - "phase-**"
+      - "epic/**"
 
 jobs:
   test:
