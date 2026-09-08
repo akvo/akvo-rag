@@ -2,9 +2,9 @@ name: Test Services
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'phase-*', 'epic/*']
   pull_request:
-    branches: [main]
+    branches: [main, 'phase-*', 'epic/*']
 
 jobs:
   test:
@@ -14,32 +14,32 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Create env file
-        run: |
-          cp .env.example .env
+        run: cp .env.example .env
 
       - name: Start services
-        run: |
-          docker compose up -d
+        run: docker compose up -d --build
 
       - name: Wait for services to be ready
         run: |
-          echo "Waiting for services to be ready..."
-          sleep 30
-
-      - name: Check services
-        run: |
-          # Check if containers are running
+          echo "Waiting for services to become healthy..."
+          sleep 25
           docker compose ps
 
-          # Test nginx endpoint
-          curl -v http://localhost:80/
+      - name: Seed database prompts
+        run: docker compose exec -T backend python -m app.seeder.seed_prompts
 
-          # Test backend health
-          curl -v http://localhost:80/api/health
+      - name: Check service health
+        run: |
+          # Test Frontend
+          curl -f http://localhost:3000/
+          # Test Backend API Health
+          curl -f http://localhost:8000/api/health
 
       - name: Run backend tests
-        run: |
-          ./backend/test.sh
+        run: ./backend/test.sh
+
+      - name: Run vector-kb-mcp tests
+        run: docker exec akvo-rag-vector-kb-mcp-1 pytest tests/ -v
 
       - name: Show logs if failure
         if: failure()
