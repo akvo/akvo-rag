@@ -309,11 +309,10 @@ For detailed playbooks, see [`docs/troubleshooting.md`](docs/troubleshooting.md)
 |---|---|
 | [`docs/dev-guide.md`](docs/dev-guide.md) | Local setup, hot-reloading, migrations, adding MCP tools, testing |
 | [`docs/architecture_map.md`](docs/architecture_map.md) | Container topology, Redis RPC contracts, MinIO layout, ER diagram, API catalog |
-| [`docs/host-integration-guide.md`](docs/host-integration-guide.md) | Universal host application integration guide, webhooks, and SDK examples |
 | [`docs/admin-guide.md`](docs/admin-guide.md) | Knowledge base management, prompt editing, API key provisioning |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md) | Debugging playbooks for all 7 containers |
 | [`PROMPT_SERVICE.md`](PROMPT_SERVICE.md) | Dynamic prompt versioning and seeding |
-| [`backend/docs/APP_REGISTRATION.md`](backend/docs/APP_REGISTRATION.md) | Host application tenant API integration |
+| [`backend/docs/APP_REGISTRATION.md`](backend/docs/APP_REGISTRATION.md) | Universal host application tenant integration, webhooks, and SDK examples |
 | [`backend/RAG_evaluation/README.md`](backend/RAG_evaluation/README.md) | RAGAS evaluation framework |
 
 ---
