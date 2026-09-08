@@ -40,7 +40,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = fake_ainvoke
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         state = {"query": "Hi there!"}
@@ -58,7 +58,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = fake_ainvoke
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         state = {"query": "What's the weather like?"}
@@ -76,7 +76,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = fake_ainvoke
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         state = {"query": "How do I plant corn?"}
@@ -93,7 +93,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = AsyncMock(side_effect=Exception("llm down"))
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         state = {"query": "something uncertain"}
@@ -122,7 +122,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = fake_ainvoke
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         state = {"query": "test query"}
@@ -142,7 +142,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = fake_ainvoke
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         state: GraphState = {"query": "Hi there!"}
@@ -159,7 +159,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = AsyncMock(side_effect=Exception("LLM down"))
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         state: GraphState = {"query": "Hi!"}
@@ -215,7 +215,7 @@ class TestQueryAnsweringWorkflow:
         )
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: MagicMock(),
+            lambda *args, **kwargs: MagicMock(),
         )
 
         state: GraphState = {
@@ -250,7 +250,7 @@ class TestQueryAnsweringWorkflow:
         )
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: MagicMock(),
+            lambda *args, **kwargs: MagicMock(),
         )
 
         state: GraphState = {
@@ -382,7 +382,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = fake_ainvoke
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         state: GraphState = {
@@ -409,7 +409,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = AsyncMock(side_effect=Exception("LLM down"))
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         state: GraphState = {
@@ -443,7 +443,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = fake_ainvoke
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         state: GraphState = {
@@ -474,7 +474,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = AsyncMock(side_effect=Exception("LLM down"))
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         state: GraphState = {
@@ -509,7 +509,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = fake_ainvoke
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         state: GraphState = {
@@ -538,7 +538,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = fake_ainvoke
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         state: GraphState = {
@@ -607,7 +607,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm = MagicMock()
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         # Mock ChatPromptTemplate
@@ -673,7 +673,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm = MagicMock()
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         fake_qa_prompt = MagicMock()
@@ -756,7 +756,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = fake_ainvoke
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
         monkeypatch.setattr(
             "app.services.query_answering_workflow.llm_instance",
@@ -906,7 +906,7 @@ class TestQueryAnsweringWorkflow:
         fake_llm.ainvoke = fake_ainvoke
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
         monkeypatch.setattr(
             "app.services.query_answering_workflow.llm_instance",
@@ -994,7 +994,7 @@ class TestQueryAnsweringWorkflow:
 
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
         monkeypatch.setattr(
             "app.services.query_answering_workflow._mcp_dispatcher",
@@ -1076,3 +1076,191 @@ class TestQueryAnsweringWorkflow:
         assert "answer" in final_state
         assert "[[citation:1]]" in final_state["answer"]
         assert len(final_state["context"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_node_model_tier_invocations(self, monkeypatch):
+        """
+        Verify each workflow node requests the correct ModelTier:
+        - classify_intent_node: ModelTier.FAST, streaming=False
+        - small_talk_node: ModelTier.FAST, streaming=False
+        - contextualize_node: ModelTier.FAST, streaming=False
+        - error_handler_node: ModelTier.FAST, streaming=False
+        - response_generation_node: ModelTier.SYNTHESIS, streaming=True
+        """
+        from app.services.llm.llm_factory import ModelTier
+
+        created_calls = []
+
+        def tracking_create(**kwargs):
+            created_calls.append(kwargs)
+            fake = MagicMock()
+            fake.ainvoke = AsyncMock(
+                return_value=SimpleNamespace(
+                    content='{"intent": "knowledge_query"}'
+                )
+            )
+            return fake
+
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow.LLMFactory.create",
+            tracking_create,
+        )
+
+        # 1. classify_intent_node
+        created_calls.clear()
+        await classify_intent_node({"query": "What is biochar?"})
+        assert len(created_calls) == 1
+        assert created_calls[0]["model_tier"] == ModelTier.FAST
+        assert created_calls[0]["streaming"] is False
+
+        # 2. small_talk_node
+        created_calls.clear()
+        await small_talk_node({"query": "Hello!"})
+        assert len(created_calls) == 1
+        assert created_calls[0]["model_tier"] == ModelTier.FAST
+        assert created_calls[0]["streaming"] is False
+
+        # 3. contextualize_node
+        created_calls.clear()
+        fake_chain = MagicMock()
+        fake_chain.ainvoke = AsyncMock(
+            return_value=SimpleNamespace(content="What is biochar?")
+        )
+        cpt_patch = (
+            "app.services.query_answering_workflow."
+            "ChatPromptTemplate.from_messages"
+        )
+        monkeypatch.setattr(
+            cpt_patch,
+            lambda msgs: MagicMock(__or__=lambda self, other: fake_chain),
+        )
+        await contextualize_node(
+            {
+                "query": "What is it?",
+                "contextualize_prompt_str": "ctx",
+                "chat_history": [],
+            }
+        )
+        assert len(created_calls) == 1
+        assert created_calls[0]["model_tier"] == ModelTier.FAST
+        assert created_calls[0]["streaming"] is False
+
+        # 4. error_handler_node
+        created_calls.clear()
+        await error_handler_node(
+            {"query": "help", "intent": "knowledge_query", "error": "db down"}
+        )
+        assert len(created_calls) == 1
+        assert created_calls[0]["model_tier"] == ModelTier.FAST
+        assert created_calls[0]["streaming"] is False
+
+        # 5. response_generation_node
+        created_calls.clear()
+
+        async def fake_astream(_):
+            yield "Biochar is charcoal used for soil amendment."
+
+        fake_gen_chain = MagicMock()
+        fake_gen_chain.astream = fake_astream
+        csdc_patch = (
+            "app.services.query_answering_workflow."
+            "create_stuff_documents_chain"
+        )
+        monkeypatch.setattr(
+            csdc_patch,
+            lambda **_: fake_gen_chain,
+        )
+        async for _ in response_generation_node(
+            {
+                "qa_prompt_str": "qa",
+                "contextual_query": "Biochar?",
+                "chat_history": [],
+                "context": [],
+            }
+        ):
+            pass
+        assert len(created_calls) == 1
+        assert created_calls[0]["model_tier"] == ModelTier.SYNTHESIS
+        assert created_calls[0]["streaming"] is True
+
+    @pytest.mark.asyncio
+    async def test_response_generation_prompt_caching_layout(
+        self, monkeypatch
+    ):
+        """
+        Verify response_generation_node builds prompt messages in the order:
+        1. Invariant static system prefix (without dynamic {context})
+        2. Dynamic context ("### Reference Documents / Context:\n{context}")
+        3. MessagesPlaceholder("chat_history")
+        4. User input ("human", "{input}")
+        """
+        from langchain_core.prompts import MessagesPlaceholder
+
+        captured_messages = []
+
+        def fake_from_messages(messages):
+            captured_messages.extend(messages)
+            return MagicMock()
+
+        cpt_patch = (
+            "app.services.query_answering_workflow."
+            "ChatPromptTemplate.from_messages"
+        )
+        monkeypatch.setattr(
+            cpt_patch,
+            fake_from_messages,
+        )
+        monkeypatch.setattr(
+            "app.services.query_answering_workflow.LLMFactory.create",
+            lambda *args, **kwargs: MagicMock(),
+        )
+
+        async def fake_astream(_):
+            yield "Answer text"
+
+        fake_chain = MagicMock()
+        fake_chain.astream = fake_astream
+        csdc_patch = (
+            "app.services.query_answering_workflow."
+            "create_stuff_documents_chain"
+        )
+        monkeypatch.setattr(
+            csdc_patch,
+            lambda **_: fake_chain,
+        )
+
+        raw_prompt = (
+            "You are a helpful assistant.\n\n"
+            "### Provided Context:\n{context}\n\n"
+            "**Important Rules:** Follow citations."
+        )
+
+        state: GraphState = {
+            "qa_prompt_str": raw_prompt,
+            "contextual_query": "How to plant corn?",
+            "chat_history": [],
+            "context": [],
+        }
+
+        async for _ in response_generation_node(state):
+            pass
+
+        assert len(captured_messages) == 4
+        # Message 1: Static prefix with {context} stripped
+        assert captured_messages[0][0] == "system"
+        assert "{context}" not in captured_messages[0][1]
+        assert "You are a helpful assistant" in captured_messages[0][1]
+        assert "Important Rules" in captured_messages[0][1]
+
+        # Message 2: Dynamic context message
+        assert captured_messages[1][0] == "system"
+        assert "{context}" in captured_messages[1][1]
+        assert "Reference Documents" in captured_messages[1][1]
+
+        # Message 3: Chat history
+        assert isinstance(captured_messages[2], MessagesPlaceholder)
+        assert captured_messages[2].variable_name == "chat_history"
+
+        # Message 4: Human input
+        assert captured_messages[3][0] == "human"
+        assert captured_messages[3][1] == "{input}"

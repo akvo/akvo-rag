@@ -291,7 +291,7 @@ export const Answer: FC<{
   const processedMarkdown = useMemo(() => {
     if (!markdown) return "";
     let text = markdown
-      .replace(/<think>/g, "## 💭 深度思考\n```think")
+      .replace(/<think>/g, "## 💭 Thought Process\n```think")
       .replace(/<\/think>/g, "```");
 
     // 1. Normalize [[citation:X]] or [[Citation: X]] -> [citation:X]

@@ -59,17 +59,27 @@ class TestRAGGraphIntegration:
         knowledge_base_ids=[1]. Assert run_mcp_tool_node returns
         List[Document] without calling ScopingAgent.
         """
-        # Mock Intent Classifier LLM
-        fake_classifier_llm = MagicMock()
-        fake_classifier_llm.ainvoke = AsyncMock(
-            return_value=AIMessage(content='{"intent": "knowledge_query"}')
-        )
 
-        # Mock QA / Contextualizer LLM
-        async def fake_qa_invoke(prompt_value, **kwargs):
+        # Mock LLM for intent classification, contextualization, and synthesis
+        async def fake_llm_invoke(*args, **kwargs):
+            prompt_value = args[0] if args else None
+            content = ""
+            if hasattr(prompt_value, "to_messages"):
+                msgs = prompt_value.to_messages()
+                content = str(msgs[0].content) if msgs else ""
+            elif isinstance(prompt_value, list) and len(prompt_value) > 0:
+                first_item = prompt_value[0]
+                content = (
+                    first_item[1]
+                    if isinstance(first_item, tuple)
+                    else getattr(first_item, "content", "")
+                )
+            if "classification" in content.lower():
+                return AIMessage(content='{"intent": "knowledge_query"}')
             return AIMessage(content="How to harvest avocado?")
 
-        fake_qa_llm = RunnableLambda(fake_qa_invoke)
+        fake_llm = RunnableLambda(fake_llm_invoke)
+        fake_llm.ainvoke = AsyncMock(side_effect=fake_llm_invoke)
 
         async def fake_astream(inputs):
             yield "Avocados should be harvested gently [[citation:1]]."
@@ -96,11 +106,11 @@ class TestRAGGraphIntegration:
 
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_classifier_llm,
+            lambda *args, **kwargs: fake_llm,
         )
         monkeypatch.setattr(
             "app.services.query_answering_workflow.llm_instance",
-            fake_qa_llm,
+            fake_llm,
         )
         monkeypatch.setattr(
             "app.services.query_answering_workflow.create_stuff_documents_chain",  # noqa
@@ -210,7 +220,7 @@ class TestRAGGraphIntegration:
 
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_fallback_llm,
+            lambda *args, **kwargs: fake_fallback_llm,
         )
         monkeypatch.setattr(
             "app.services.query_answering_workflow._mcp_dispatcher",
