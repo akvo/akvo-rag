@@ -1,23 +1,23 @@
 # Feature Specification: Developer Onboarding & Documentation Alignment
 
-> **Feature ID:** `019_doc_503_developer_onboarding_and_architecture_alignment_spec`  
-> **Task Ref:** `TASK-DOC-503`  
+> **Feature ID:** `022_doc_505_developer_onboarding_and_architecture_alignment_spec`  
+> **Task Ref:** `TASK-DOC-505` (`[D12]`)  
 > **Target Branch:** `epic/rag-monorepo-mcp`  
 > **Status:** `PROPOSED (Party Mode Approved)`  
 > **Estimated Effort:** `1.5 hrs (Vibe-Coding) / 1.0 day (Traditional)`  
 > **Author:** Antigravity Architect / Lead Technical Writer & DevEx Specialist  
-> **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 7, 8, 9)
+> **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///docs/lld/container_based_rag_platform_lld.md) (Sections 7, 8, 9, 10)
 
 ---
 
 ## 1. Overview & 5W1H Requirements Discovery
 
 ### 1.1 Problem Statement
-The transformation of Akvo-RAG into a container-based monorepo introduces a new operational model: 7 core containers, Redis RPC request-reply queues, declarative `mcp_config.json`, service-owned Alembic schema isolation (`alembic_version` vs `alembic_version_vkb`), and MinIO S3 document storage.
+The transformation of Akvo-RAG into a container-based monorepo introduces a new operational model: 7 core containers, Redis RPC request-reply queues, declarative `mcp_config.json`, service-owned Alembic schema isolation (`alembic_version` vs `alembic_version_vkb`), prompt caching message layouts, and MinIO S3 document storage.
 
 Outdated documentation referencing MySQL 8.0, RabbitMQ, Celery, or FastMCP HTTP reconnect loops creates friction, misleads new developers, and increases onboarding time.
 
-`TASK-DOC-503` updates all project documentation, quickstart manuals, architecture maps, and troubleshooting playbooks to align with the production architecture.
+`TASK-DOC-505` updates all project documentation, quickstart manuals, architecture maps, and troubleshooting playbooks to align with the production architecture.
 
 ### 1.2 5W1H Discovery Lens
 
@@ -26,7 +26,7 @@ Outdated documentation referencing MySQL 8.0, RabbitMQ, Celery, or FastMCP HTTP 
 | **Who** | New developers joining the team, open-source contributors, DevOps engineers, and system administrators. |
 | **What** | Update `README.md`, `docs/dev-guide.md`, `docs/architecture_map.md`, `docs/admin-guide.md`, and `docs/troubleshooting.md` to reflect the 7-container topology and Redis queue IPC. |
 | **Where** | `README.md`, `docs/dev-guide.md`, `docs/architecture_map.md`, `docs/admin-guide.md`, `docs/troubleshooting.md`. |
-| **When** | **Phase 5, Step 3** — the final step of the migration epic. |
+| **When** | **Deliverable D12 / Phase 5, Step 5** — the final documentation and onboarding step of the migration epic. |
 | **Why** | Guarantees that any new engineer can spin up the full platform in $< 15\text{ minutes}$, understand how to add an MCP tool, and execute migrations safely. |
 | **How** | Markdown updates following `.agent/rules/docs-standard.md`, root-relative links, zero credentials, and verified CLI snippets. |
 
@@ -120,10 +120,10 @@ Outdated documentation referencing MySQL 8.0, RabbitMQ, Celery, or FastMCP HTTP 
 
 | Subtask ID | Description | Target Files | Vibe Est. | Trad. Est. | Confidence |
 |---|---|---|:---:|:---:|:---:|
-| `SUB-503.1` | Update `README.md` with 7-container topology & quickstart | `README.md` `[MODIFY]` | 0.4 hr | 0.3 day | High (99%) |
-| `SUB-503.2` | Update `docs/dev-guide.md` & `docs/architecture_map.md` | `docs/dev-guide.md`, `docs/architecture_map.md` `[MODIFY]` | 0.5 hr | 0.3 day | High (99%) |
-| `SUB-503.3` | Update `docs/admin-guide.md` & `docs/troubleshooting.md` | `docs/admin-guide.md`, `docs/troubleshooting.md` `[MODIFY]` | 0.4 hr | 0.3 day | High (99%) |
-| `SUB-503.4` | Docs compliance audit & link verification | `docs/` `[VERIFY]` | 0.2 hr | 0.1 day | High (99%) |
+| `SUB-505.1` | Update `README.md` with 7-container topology & quickstart | `README.md` `[MODIFY]` | 0.4 hr | 0.3 day | High (99%) |
+| `SUB-505.2` | Update `docs/dev-guide.md` & `docs/architecture_map.md` | `docs/dev-guide.md`, `docs/architecture_map.md` `[MODIFY]` | 0.5 hr | 0.3 day | High (99%) |
+| `SUB-505.3` | Update `docs/admin-guide.md` & `docs/troubleshooting.md` | `docs/admin-guide.md`, `docs/troubleshooting.md` `[MODIFY]` | 0.4 hr | 0.3 day | High (99%) |
+| `SUB-505.4` | Docs compliance audit & link verification | `docs/` `[VERIFY]` | 0.2 hr | 0.1 day | High (99%) |
 | **TOTAL** | | | **1.5 hrs** | **1.0 day** | **High** |
 
 ---
@@ -133,3 +133,4 @@ Outdated documentation referencing MySQL 8.0, RabbitMQ, Celery, or FastMCP HTTP 
 - [ ] `README.md` and all 5 living documents in `docs/` reflect the 7-container architecture.
 - [ ] Documentation complies with `.agent/rules/docs-standard.md` (root-relative links, zero secrets).
 - [ ] A new engineer can follow the quickstart guide and start chatting in $< 15\text{ minutes}$.
+

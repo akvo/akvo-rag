@@ -848,12 +848,13 @@ sequenceDiagram
 | **Phase 4** | **Document Ingestion, MinIO Storage & Celery Deletion** | | | |
 | `TASK-ING-401` | Integrate MinIO S3 Client in FastAPI & Purge Legacy Celery/RabbitMQ Code | `backend/app/services/` | **1.5 hrs** | 1.0 day |
 | `TASK-ING-402` | Build Native Async Redis Ingestion Consumer in `vector-kb-mcp` | `vector-kb-mcp/` | **2.0 hrs** | 1.5 days |
-| **Phase 5** | **Quality Gates, Golden Set Evaluation, Cleanup & Documentation** | | | |
+| **Phase 5** | **Quality Gates, Golden Set Evaluation, Optimization, Cleanup & Documentation** | | | |
 | `TASK-OPS-501` | End-to-End Golden Set Accuracy & Legacy Test Gate (Faithfulness $\ge 0.85$) | `backend/RAG_evaluation/` | **2.5 hrs** | 2.0 days |
 | `TASK-CLEAN-502` | Purge Legacy Files, Dead Code, FastMCP/Celery Artifacts & Unused Dependencies | `backend/`, `vector-kb-mcp/` | **1.0 hr** | 0.5 day |
 | `TASK-INT-503` | Test All Functionalities, Integration with AgriConnect & Backend Test Coverage Gate ($\ge 85\%$) | `backend/tests/` | **2.5 hrs** | 2.0 days |
-| `TASK-DOC-504` | Comprehensive Developer Onboarding & Architecture Documentation Alignment | `docs/` & `README.md` | **1.5 hrs** | 1.0 day |
-| **TOTAL** | | | **37.0 hrs (~4.6 working days)** | **28.0 days** |
+| `TASK-PERF-504` | Prompt Caching & Dual-Tier Model Optimization (`gpt-4o-mini` + `gpt-4o`) | `backend/app/services/` | **2.5 hrs** | 2.0 days |
+| `TASK-DOC-505` | Comprehensive Developer Onboarding & Architecture Documentation Alignment | `docs/` & `README.md` | **1.5 hrs** | 1.0 day |
+| **TOTAL** | | | **39.5 hrs (~4.9 working days)** | **30.0 days** |
 
 ---
 
@@ -1304,11 +1305,32 @@ sequenceDiagram
 
 ---
 
-#### `TASK-DOC-504`: Comprehensive Developer Onboarding & Architecture Documentation Alignment
+#### `TASK-PERF-504`: Prompt Caching & Dual-Tier Model Optimization (`gpt-4o-mini` + `gpt-4o`)
+* **Target Path:** `backend/app/core/config.py`, `backend/app/services/llm/llm_factory.py`, `backend/app/services/query_answering_workflow.py`, `backend/app/services/chat_job_service.py`
+* **Vibe-Coding Estimate:** `2.5 hours`
+* **Detailed Description:**  
+  1. Implement dual-tier model resolution in `LLMFactory` (`FAST` via `gpt-4o-mini` for intent classification, query rewriting/contextualization, and small-talk; `SYNTHESIS` via `gpt-4o` for grounded answer generation), cutting pre-retrieval routing latency by ~84% (<500ms).
+  2. Restructure the prompt message sequence in `QueryAnsweringWorkflow` to separate invariant static system rules (`static_system_prompt` $\ge 1,024$ tokens) from dynamic document `{context}` and `{input}`, guaranteeing 100% OpenAI automatic prefix cache hits across recurring tenant queries.
+* **Key Touchpoints:**
+  - `backend/app/core/config.py` `[MODIFY]` (`OPENAI_MODEL_FAST`, `OPENAI_MODEL_SYNTHESIS`)
+  - `backend/app/services/llm/llm_factory.py` `[MODIFY]` (`model_tier` resolver, defaulting to `"synthesis"`)
+  - `backend/app/services/query_answering_workflow.py` `[MODIFY]` (wire `FAST` tier to routing nodes, invariant prompt layout)
+  - `backend/tests/unit/test_llm_factory_tiering.py` `[NEW]`
+  - `backend/tests/services/test_query_answering_workflow.py` `[MODIFY]`
+* **User Acceptance Criteria (UAC):**
+  - Farmer queries and chat callbacks respond significantly faster (pre-retrieval routing $< 1\text{s}$, total response latency reduced by ~40%).
+* **Technical Acceptance Criteria (TAC):**
+  - `LLMFactory.create()` defaults to `"synthesis"` with optional `model_tier="fast"`, preserving 100% backward compatibility with all existing tests.
+  - OpenAI usage metadata reports prompt cache hits on repeated tenant queries.
+  - All unit and integration tests pass with 0 regressions.
+
+---
+
+#### `TASK-DOC-505`: Comprehensive Developer Onboarding & Architecture Documentation Alignment
 * **Target Path:** `docs/` & `README.md`
 * **Vibe-Coding Estimate:** `1.5 hours`
 * **Detailed Description:**  
-  Update all developer documentation, architecture guides, and onboarding manuals to reflect the unified 7-container monorepo architecture, Redis queue-based MCP communication, `mcp_config.json` extensibility, service-owned Alembic schema isolation (`alembic_version` / `alembic_version_vkb`), and troubleshooting playbooks.
+  Update all developer documentation, architecture guides, and onboarding manuals to reflect the unified 7-container monorepo architecture, Redis queue-based MCP communication, `mcp_config.json` extensibility, service-owned Alembic schema isolation (`alembic_version` / `alembic_version_vkb`), prompt caching layout, and troubleshooting playbooks.
 * **Key Touchpoints:**
   - `README.md` `[MODIFY]` (Updated 7-container startup instructions & architecture diagram)
   - `docs/dev-guide.md` `[MODIFY]` (Local setup, watch mode, running migrations, seed prompts)
