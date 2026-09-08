@@ -1,53 +1,241 @@
 # Admin Guide: Akvo RAG
 
-This guide is intended for administrators who manage the Knowledge Bases and users within Akvo RAG.
+This guide is for administrators managing knowledge bases, users, prompts, and application registrations in Akvo RAG.
+
+> **Related docs**: [Developer Guide](dev-guide.md) | [Troubleshooting](troubleshooting.md) | [Architecture Map](architecture_map.md)
+
+---
 
 ## 1. Knowledge Base Management
 
-The Knowledge Base (KB) is the core of the RAG system. It contains the documents that the AI uses to answer questions.
-
-![Knowledge Base List](images/kb-list-detailed.png)
+The Knowledge Base (KB) is the core of the RAG system — the document collection the AI uses to answer questions. Each KB stores semantic vector embeddings in ChromaDB and metadata in PostgreSQL.
 
 ### 1.1 Creating a Knowledge Base
-1.  **Access Knowledge Base Page**: Ensure you are on the **Knowledge Base** management page (accessible via the sidebar).
-2.  **Initialize New KB**: Click the **"New Knowledge Base"** button at the top right of the list.
-3.  **Configure Settings**:
-    *   **Name**: Provide a clear, descriptive title.
-    *   **Description**: Briefly explain the content. This helps the AI understand the context of the documents.
-    *   **Privacy**: Set to **Public** for team-wide access or **Private** for restricted projects.
-4.  **Save**: Click **"Create"** to initialize the vector storage and database entries.
 
-### 1.2 Data Ingestion (Uploading Documents)
-Adding documents is a multi-step process that ensures your data is correctly parsed and indexed.
+1. Go to the **Knowledge Base** page in the sidebar.
+2. Click **"New Knowledge Base"** (top right).
+3. Fill in:
+   - **Name**: Clear, descriptive title (used by the ASQ selector to choose the right KB).
+   - **Description**: Brief explanation of the content. The LLM uses this to determine relevance.
+   - **Privacy**: **Public** (team-wide) or **Private** (restricted).
+4. Click **"Create"** — this initializes vector storage in ChromaDB and the DB entry in PostgreSQL.
 
-1.  **Select a KB**: Click on a Knowledge Base from the list (e.g., "TDT Library").
-2.  **Open Upload Interface**: Click the **"Add Document"** button in the top right corner.
-3.  **Upload Files**:
-    *   Drag and drop files into the dashed area or click to browse your local storage.
-    *   *Supported formats:* PDF, DOCX, TXT, and Markdown (MD).
-4.  **Process**: Click **"Upload Files"**. You can follow the progress through the **Upload**, **Preview**, and **Process** stages.
+### 1.2 Document Upload & Ingestion Pipeline
 
-![KB Detail View](images/kb-detail-docs.png)
+Uploading a document triggers a 3-stage async pipeline:
 
-### 1.3 Managing Documents & Status
-After uploading, you can monitor and manage individual files within the Knowledge Base detail view.
+```
+Upload → [MinIO S3 storage] → register_document (Redis RPC) → ingest_document (Redis queue) → ChromaDB index
+```
 
-*   **Verification (Ingestion Status)**:
-    *   `completed` (Green): The file is successfully indexed and ready for AI queries.
-    *   `processing`: The file is currently being parsed and vectorized in the background.
-    *   `failed` (Red): Ingestion failed; check the file size or format and retry.
-*   **Administration Tasks**:
-    *   **Delete Document**: Click the red trash icon in the **Action** column to remove a specific file.
-    *   **Test Retrieval**: Click the magnifying glass icon next to a KB in the list to test search accuracy before chatting.
-    *   **Delete KB**: Use the trash icon on the main list page to remove an entire collection.
+**Supported formats**: PDF, DOCX, TXT, Markdown (MD)
 
-## 2. User Management
+**To upload documents**:
+1. Click on a KB from the list.
+2. Click **"Add Document"** (top right).
+3. Drag and drop files or click to browse.
+4. Click **"Upload Files"** — the system processes them asynchronously.
 
-Administrators can manage who has access to the system and their roles.
+### 1.3 Document Indexing Status
 
-![User Management](images/user-management.png)
+Monitor document status in the KB detail view:
 
-### 2.1 Managing Users
-- **Active Status**: You can enable or disable user accounts.
-- **Role Assignment**: Assign users as regular users or superusers (administrators).
-- **Approval Flow**: If self-registration is enabled, admins can approve new sign-ups here.
+| Status | Colour | Meaning |
+|--------|--------|---------|
+| `INDEXED` | Green | Successfully indexed — ready for queries |
+| `PROCESSING` | Yellow | Currently parsing and vectorizing |
+| `FAILED` | Red | Ingestion failed — check format/size, then retry |
+| `PENDING` | Grey | Queued, waiting for processing |
+
+**Admin actions per document**:
+- **Delete**: Removes document and all its ChromaDB vector chunks. Use the trash icon in the Action column.
+- **Preview**: View parsed chunks before full indexing.
+- **Test Retrieval**: Magnifying glass icon on the KB list page — tests search accuracy.
+- **Delete KB**: Deletes the entire KB, all documents, and all ChromaDB collections.
+
+### 1.4 Checking Stuck Documents via CLI
+
+If documents are stuck in `PROCESSING`:
+
+```bash
+# Check Redis queue depth
+docker exec akvo-rag-redis-1 redis-cli llen mcp:vector:requests
+
+# View vector-kb-mcp logs for processing errors
+docker compose logs vector-kb-mcp --tail=50
+
+# Inspect MinIO for uploaded files
+docker exec akvo-rag-minio-1 mc ls local/documents/ --recursive
+```
+
+---
+
+## 2. Prompt Management
+
+All RAG prompts (system prompt, synthesis instructions, routing prompts) are managed in the database. **No redeployment is needed** to update a prompt.
+
+### 2.1 Via Admin UI
+
+1. Navigate to **Settings → Prompts** in the sidebar.
+2. Click a prompt definition to view its version history.
+3. Click **"Edit"** to create a new version.
+4. Click **"Activate"** on the new version to make it live immediately.
+
+### 2.2 Via CLI
+
+```bash
+# List current prompt definitions
+docker exec akvo-rag-backend-1 python -c "
+from app.services.prompt_service import PromptService
+from app.db.session import SessionLocal
+db = SessionLocal()
+svc = PromptService(db)
+print(svc.list_definitions())
+db.close()
+"
+
+# Re-seed all prompts from seed files (adds new, does not overwrite active versions)
+docker compose exec backend python -m app.seeder.seed_prompts
+```
+
+---
+
+## 3. User Management
+
+### 3.1 Via Admin UI
+
+Navigate to **Settings → Users**:
+
+- **Enable/Disable** accounts using the toggle.
+- **Role Assignment**: `user` (standard) or `superuser` (administrator with full access).
+- **Approval Flow**: If self-registration is enabled, approve pending sign-ups here.
+
+### 3.2 Creating Admin User via CLI
+
+```bash
+docker compose exec backend python -m app.seeder.seed_admin_user
+```
+
+### 3.3 Password Reset
+
+Users can request password resets via the login page (requires SMTP configuration in `.env`).
+
+---
+
+## 4. Application (Tenant) Registration
+
+Host applications (e.g. AgriConnect, CoM) integrate with Akvo RAG via a tenant API secured by Argon2-hashed application tokens (`tok_...`).
+
+### 4.1 Registering an Application
+
+```bash
+curl -X POST http://localhost:8000/api/v1/apps/register \
+  -H "Authorization: Bearer <admin-jwt-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "AgriConnect",
+    "description": "Akvo AgriConnect host application"
+  }'
+```
+
+**Response**: Returns `token` (the plaintext `tok_...` value shown once) and `app_id`. Store the token securely — it cannot be retrieved again.
+
+### 4.2 Tenant API Endpoints
+
+All tenant endpoints use `Authorization: Bearer tok_...` (not a user JWT):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/apps/knowledge-bases` | List accessible KBs for this app |
+| `POST` | `/api/v1/apps/knowledge-bases/{id}/documents/upload` | Upload document to a KB |
+| `POST` | `/api/v1/apps/jobs` | Submit a RAG query (SSE streaming) |
+
+Full reference: [`backend/docs/APP_REGISTRATION.md`](../backend/docs/APP_REGISTRATION.md)
+
+### 4.3 Token Security Notes
+
+- Tokens are hashed with **Argon2** before storage — the database never holds plaintext tokens.
+- Rotate a token by re-registering the app (generating a new token) and updating the host application's config.
+- Tokens are scoped to their registered app's permitted knowledge bases only.
+
+---
+
+## 5. MinIO Storage Administration
+
+Documents are stored at **MinIO** (S3-compatible) at `http://localhost:9001` (console).
+
+**Default credentials**: configured via `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` in `.env`
+
+### 5.1 Storage Layout
+
+```
+documents/            ← root bucket
+└── kb_{kb_id}/
+    └── {doc_id}_{filename}
+```
+
+### 5.2 CLI Administration
+
+```bash
+# List all documents in a KB
+docker exec akvo-rag-minio-1 mc ls local/documents/kb_3/
+
+# Check MinIO health
+curl http://localhost:9000/minio/health/live
+
+# Clean up orphaned document files (if KB was deleted without proper cleanup)
+docker exec akvo-rag-minio-1 mc rm local/documents/kb_3/ --recursive --force
+```
+
+---
+
+## 6. Database Administration
+
+### 6.1 Backups
+
+```bash
+# Backup PostgreSQL
+docker exec akvo-rag-postgres-1 pg_dump -U postgres akvo_rag > backup_$(date +%Y%m%d).sql
+
+# Restore
+docker exec -i akvo-rag-postgres-1 psql -U postgres akvo_rag < backup_20260908.sql
+```
+
+### 6.2 Migration Status
+
+```bash
+# Backend schema (alembic_version)
+docker exec akvo-rag-backend-1 alembic current
+docker exec akvo-rag-backend-1 alembic history
+
+# Vector KB schema (alembic_version_vkb)
+docker exec akvo-rag-vector-kb-mcp-1 alembic current
+docker exec akvo-rag-vector-kb-mcp-1 alembic history
+```
+
+### 6.3 Direct Database Access
+
+```bash
+docker exec -it akvo-rag-postgres-1 psql -U postgres -d akvo_rag
+```
+
+Useful queries:
+
+```sql
+-- Check all KBs and document counts
+SELECT kb.id, kb.name, COUNT(d.id) AS doc_count
+FROM vkb_knowledge_bases kb
+LEFT JOIN vkb_documents d ON d.kb_id = kb.id
+GROUP BY kb.id, kb.name;
+
+-- Find failed documents
+SELECT id, file_name, status, created_at
+FROM vkb_documents
+WHERE status = 'FAILED';
+
+-- Check active prompt versions
+SELECT pd.name, pv.version, pv.is_active, LEFT(pv.content, 80) AS preview
+FROM prompt_definitions pd
+JOIN prompt_versions pv ON pv.definition_id = pd.id
+WHERE pv.is_active = true;
+```
