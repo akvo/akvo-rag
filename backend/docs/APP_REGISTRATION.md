@@ -47,7 +47,7 @@ When running both your host application and Akvo RAG locally in separate Docker 
 ### Production Environment
 In production, use the fully qualified domain name (FQDN):
 - **Base URL**: `https://rag.akvo.org/api/v1`
-- **Webhooks**: Must use public HTTPS URLs (e.g. `https://your-host-app.org/api/callbacks/rag`).
+- **Webhooks**: Must use public HTTPS URLs (e.g. `https://your-host-app.org/api/callback/rag`).
 
 ---
 
@@ -64,8 +64,8 @@ curl -X POST http://localhost:8000/api/v1/apps/register \
     "app_name": "agriconnect",
     "domain": "agriconnect.akvo.org",
     "default_chat_prompt": "You are AgriConnect AI, an expert agronomy advisor supporting smallholder farmers.",
-    "chat_callback": "https://agriconnect.akvo.org/api/callbacks/ai",
-    "upload_callback": "https://agriconnect.akvo.org/api/callbacks/kb",
+    "chat_callback": "https://agriconnect.akvo.org/api/callback/ai",
+    "upload_callback": "https://agriconnect.akvo.org/api/callback/kb",
     "callback_token": "your_secure_random_callback_secret_token"
   }'
 ```
@@ -118,8 +118,8 @@ curl -X GET http://localhost:8000/api/v1/apps/me \
   "app_name": "agriconnect",
   "domain": "agriconnect.akvo.org",
   "default_chat_prompt": "You are AgriConnect AI, an expert agronomy advisor supporting smallholder farmers.",
-  "chat_callback_url": "https://agriconnect.akvo.org/api/callbacks/ai",
-  "upload_callback_url": "https://agriconnect.akvo.org/api/callbacks/kb",
+  "chat_callback_url": "https://agriconnect.akvo.org/api/callback/ai",
+  "upload_callback_url": "https://agriconnect.akvo.org/api/callback/kb",
   "scopes": ["jobs.write", "kb.read", "kb.write", "apps.read"],
   "status": "active"
 }
@@ -302,7 +302,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 app = FastAPI()
 EXPECTED_CALLBACK_TOKEN = "your_secure_random_callback_secret_token"
 
-@app.post("/api/callbacks/ai")
+@app.post("/api/callback/ai")
 async def handle_rag_ai_callback(request: Request, authorization: str = Header(None)):
     if not authorization or authorization != f"Bearer {EXPECTED_CALLBACK_TOKEN}":
         raise HTTPException(status_code=401, detail="Unauthorized callback request")
@@ -416,5 +416,5 @@ To test and verify host application endpoints against a live local instance:
 | **`401 Unauthorized`** | Missing or malformed `Authorization` header. | Pass `Authorization: Bearer tok_...` (ensure the `Bearer ` prefix is included). |
 | **`403 Forbidden`** | App token is attempting to access a KB owned by another app. | Ensure requests only target KBs returned by `GET /api/v1/apps/knowledge-bases`. |
 | **`400 Bad Request` on Upload** | Unsupported file format or invalid magic bytes. | Ensure files are valid PDF (`%PDF-`), DOCX, or TXT format. |
-| **Webhook Callbacks Failing** | Host app container not reachable from RAG container. | Use `http://host.docker.internal:<port>` in local Docker development, or ngrok (`https://....ngrok.dev`). |
+| **Webhook Callback Failing** | Host app container not reachable from RAG container. | Use `http://host.docker.internal:<port>` in local Docker development, or ngrok (`https://....ngrok.dev`). |
 | **`422 Unprocessable Entity`** | Invalid registration callback URL format. | Ensure callback URLs are valid URI strings (HTTPS required in production). |
