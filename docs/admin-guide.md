@@ -150,7 +150,7 @@ All tenant endpoints use `Authorization: Bearer tok_...` (not a user JWT):
 | `POST` | `/api/v1/apps/knowledge-bases/{id}/documents/upload` | Upload document to a KB |
 | `POST` | `/api/v1/apps/jobs` | Submit a RAG query (SSE streaming) |
 
-Full reference: [`backend/docs/APP_REGISTRATION.md`](../backend/docs/APP_REGISTRATION.md)
+Full reference: [`docs/host-integration-guide.md`](host-integration-guide.md) and [`backend/docs/APP_REGISTRATION.md`](../backend/docs/APP_REGISTRATION.md)
 
 ### 4.3 Token Security Notes
 
