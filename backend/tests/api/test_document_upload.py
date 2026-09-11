@@ -1,6 +1,6 @@
 import io
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -62,13 +62,9 @@ class TestDocumentUploadAPI:
             )
         }
 
-        with patch(
-            "app.api.api_v1.knowledge_base.get_redis_client",
-            return_value=fake_redis,
-        ):
-            response = client.post(
-                "/api/knowledge-base/1/documents/upload", files=files
-            )
+        response = client.post(
+            "/api/v1/knowledge-bases/1/documents/upload", files=files
+        )
 
         assert response.status_code == 202
         data = response.json()
@@ -95,13 +91,9 @@ class TestDocumentUploadAPI:
             ("files", ("notes.txt", io.BytesIO(txt_content), "text/plain")),
         ]
 
-        with patch(
-            "app.api.api_v1.knowledge_base.get_redis_client",
-            return_value=fake_redis,
-        ):
-            response = client.post(
-                "/api/knowledge-base/1/documents/upload", files=files
-            )
+        response = client.post(
+            "/api/v1/knowledge-bases/1/documents/upload", files=files
+        )
 
         assert response.status_code == 202
         data = response.json()
@@ -119,13 +111,9 @@ class TestDocumentUploadAPI:
         sh_content = b"#!/bin/bash\necho 'hello'"
         files = {"file": ("script.sh", io.BytesIO(sh_content), "text/x-sh")}
 
-        with patch(
-            "app.api.api_v1.knowledge_base.get_redis_client",
-            return_value=fake_redis,
-        ):
-            response = client.post(
-                "/api/knowledge-base/1/documents/upload", files=files
-            )
+        response = client.post(
+            "/api/v1/knowledge-bases/1/documents/upload", files=files
+        )
 
         assert response.status_code == 400
         assert "Unsupported file format" in response.json()["detail"]
@@ -143,13 +131,9 @@ class TestDocumentUploadAPI:
             )
         }
 
-        with patch(
-            "app.api.api_v1.knowledge_base.get_redis_client",
-            return_value=fake_redis,
-        ):
-            response = client.post(
-                "/api/knowledge-base/1/documents/upload", files=files
-            )
+        response = client.post(
+            "/api/v1/knowledge-bases/1/documents/upload", files=files
+        )
 
         assert response.status_code == 400
         assert "Invalid file content" in response.json()["detail"]
@@ -160,13 +144,9 @@ class TestDocumentUploadAPI:
         """Should reject zero-byte files with 400 Bad Request."""
         files = {"file": ("empty.txt", io.BytesIO(b""), "text/plain")}
 
-        with patch(
-            "app.api.api_v1.knowledge_base.get_redis_client",
-            return_value=fake_redis,
-        ):
-            response = client.post(
-                "/api/knowledge-base/1/documents/upload", files=files
-            )
+        response = client.post(
+            "/api/v1/knowledge-bases/1/documents/upload", files=files
+        )
 
         assert response.status_code == 400
         assert "empty" in response.json()["detail"].lower()
@@ -184,13 +164,9 @@ class TestDocumentUploadAPI:
             )
         }
 
-        with patch(
-            "app.api.api_v1.knowledge_base.get_redis_client",
-            return_value=fake_redis,
-        ):
-            response = client.post(
-                "/api/knowledge-base/1/documents/upload", files=files
-            )
+        response = client.post(
+            "/api/v1/knowledge-bases/1/documents/upload", files=files
+        )
 
         assert response.status_code == 202
         data = response.json()
@@ -211,13 +187,9 @@ class TestDocumentUploadAPI:
             "file": ("sop.pdf", io.BytesIO(pdf_content), "application/pdf")
         }
 
-        with patch(
-            "app.api.api_v1.knowledge_base.get_redis_client",
-            return_value=fake_redis,
-        ):
-            response = client.post(
-                "/api/knowledge-base/1/documents/upload", files=files
-            )
+        response = client.post(
+            "/api/v1/knowledge-bases/1/documents/upload", files=files
+        )
 
         assert response.status_code == 500
         assert "Document storage failed" in response.json()["detail"]

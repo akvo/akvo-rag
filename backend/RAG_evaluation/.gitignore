@@ -36,8 +36,10 @@ ENV/
 logs/
 
 # Performance monitoring reports
-performance_reports/*.json
+performance_reports/
 *_report_*.json
+latest_evaluation_report.md
+latest_evaluation_report.json
 
 # OS
 .DS_Store

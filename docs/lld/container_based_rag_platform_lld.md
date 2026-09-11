@@ -848,11 +848,14 @@ sequenceDiagram
 | **Phase 4** | **Document Ingestion, MinIO Storage & Celery Deletion** | | | |
 | `TASK-ING-401` | Integrate MinIO S3 Client in FastAPI & Purge Legacy Celery/RabbitMQ Code | `backend/app/services/` | **1.5 hrs** | 1.0 day |
 | `TASK-ING-402` | Build Native Async Redis Ingestion Consumer in `vector-kb-mcp` | `vector-kb-mcp/` | **2.0 hrs** | 1.5 days |
-| **Phase 5** | **Quality Gates, Golden Set Evaluation, Cleanup & Documentation** | | | |
+| **Phase 5** | **Quality Gates, Golden Set Evaluation, Optimization, Cleanup & Documentation** | | | |
 | `TASK-OPS-501` | End-to-End Golden Set Accuracy & Legacy Test Gate (Faithfulness $\ge 0.85$) | `backend/RAG_evaluation/` | **2.5 hrs** | 2.0 days |
 | `TASK-CLEAN-502` | Purge Legacy Files, Dead Code, FastMCP/Celery Artifacts & Unused Dependencies | `backend/`, `vector-kb-mcp/` | **1.0 hr** | 0.5 day |
-| `TASK-DOC-503` | Comprehensive Developer Onboarding & Architecture Documentation Alignment | `docs/` & `README.md` | **1.5 hrs** | 1.0 day |
-| **TOTAL** | | | **34.5 hrs (~4.3 working days)** | **26.0 days** |
+| `TASK-INT-503` | Test All Functionalities, Integration with AgriConnect & Backend Test Coverage Gate ($\ge 85\%$) | `backend/tests/` | **2.5 hrs** | 2.0 days |
+| `TASK-PERF-504` | Prompt Caching & Dual-Tier Model Optimization (`gpt-4o-mini` + `gpt-4o`) | `backend/app/services/` | **2.5 hrs** | 2.0 days |
+| `TASK-DOC-505` | Comprehensive Developer Onboarding & Architecture Documentation Alignment | `docs/` & `README.md` | **1.5 hrs** | 1.0 day |
+| `TASK-PERF-506` | Concurrency & Parallel Execution Hardening (Worker Isolation, SQLite WAL Mode, Streaming Uploads, DB Release & Tenacity Retries) | `vector-kb-mcp/`, `backend/`, `docker-compose.yml` | **3.5 hrs** | 3.0 days |
+| **TOTAL** | | | **43.0 hrs (~5.4 working days)** | **33.0 days** |
 
 ---
 
@@ -1284,11 +1287,51 @@ sequenceDiagram
 
 ---
 
-#### `TASK-DOC-503`: Comprehensive Developer Onboarding & Architecture Documentation Alignment
+#### `TASK-INT-503`: Test All Functionalities, Integration with AgriConnect & Backend Test Coverage Gate ($\ge 85\%$)
+* **Target Path:** `backend/tests/integration/`, `backend/tests/api/`, `backend/tests/`, `docs/qa/`
+* **Vibe-Coding Estimate:** `2.5 hours`
+* **Detailed Description:**  
+  1. Conduct end-to-end integration and regression testing simulating the complete **AgriConnect** host workflow (chat streaming, multi-KB query routing, multipart PDF upload to MinIO S3, background vector indexing, and dynamic prompt overlay application). Enforce 100% backwards compatibility on all public endpoints in Section 7.3.
+  2. Increase overall backend test coverage from the baseline **77% to $\ge 85\%$** by adding targeted unit and integration tests across untested branches in `app/services/`, `app/api/`, and `app/core/` post-cleanup.
+* **Key Touchpoints:**
+  - `backend/tests/integration/test_agriconnect_integration.py` `[NEW]`
+  - `backend/tests/api/test_host_api_backwards_compatibility.py` `[MODIFY]`
+  - `backend/tests/` `[EXPAND]` (Targeted unit tests for branch coverage $\ge 85\%$)
+  - `docs/qa/qa-guide-agriconnect-integration.md` `[NEW]`
+* **User Acceptance Criteria (UAC):**
+  - AgriConnect successfully creates KBs, uploads documents, queries dialogue with dynamic prompt overlays, and receives streaming answers with zero regressions.
+* **Technical Acceptance Criteria (TAC):**
+  - All host API integration tests pass with 100% compliance against Section 7.3 schemas.
+  - Executing `pytest tests/ --cov=app --cov-report=term-missing` reports **$\ge 85\%$ total code coverage** across `backend/app/`.
+
+---
+
+#### `TASK-PERF-504`: Prompt Caching & Dual-Tier Model Optimization (`gpt-4o-mini` + `gpt-4o`)
+* **Target Path:** `backend/app/core/config.py`, `backend/app/services/llm/llm_factory.py`, `backend/app/services/query_answering_workflow.py`, `backend/app/services/chat_job_service.py`
+* **Vibe-Coding Estimate:** `2.5 hours`
+* **Detailed Description:**  
+  1. Implement dual-tier model resolution in `LLMFactory` (`FAST` via `gpt-4o-mini` for intent classification, query rewriting/contextualization, and small-talk; `SYNTHESIS` via `gpt-4o` for grounded answer generation), cutting pre-retrieval routing latency by ~84% (<500ms).
+  2. Restructure the prompt message sequence in `QueryAnsweringWorkflow` to separate invariant static system rules (`static_system_prompt` $\ge 1,024$ tokens) from dynamic document `{context}` and `{input}`, guaranteeing 100% OpenAI automatic prefix cache hits across recurring tenant queries.
+* **Key Touchpoints:**
+  - `backend/app/core/config.py` `[MODIFY]` (`OPENAI_MODEL_FAST`, `OPENAI_MODEL_SYNTHESIS`)
+  - `backend/app/services/llm/llm_factory.py` `[MODIFY]` (`model_tier` resolver, defaulting to `"synthesis"`)
+  - `backend/app/services/query_answering_workflow.py` `[MODIFY]` (wire `FAST` tier to routing nodes, invariant prompt layout)
+  - `backend/tests/unit/test_llm_factory_tiering.py` `[NEW]`
+  - `backend/tests/services/test_query_answering_workflow.py` `[MODIFY]`
+* **User Acceptance Criteria (UAC):**
+  - Farmer queries and chat callbacks respond significantly faster (pre-retrieval routing $< 1\text{s}$, total response latency reduced by ~40%).
+* **Technical Acceptance Criteria (TAC):**
+  - `LLMFactory.create()` defaults to `"synthesis"` with optional `model_tier="fast"`, preserving 100% backward compatibility with all existing tests.
+  - OpenAI usage metadata reports prompt cache hits on repeated tenant queries.
+  - All unit and integration tests pass with 0 regressions.
+
+---
+
+#### `TASK-DOC-505`: Comprehensive Developer Onboarding & Architecture Documentation Alignment
 * **Target Path:** `docs/` & `README.md`
 * **Vibe-Coding Estimate:** `1.5 hours`
 * **Detailed Description:**  
-  Update all developer documentation, architecture guides, and onboarding manuals to reflect the unified 7-container monorepo architecture, Redis queue-based MCP communication, `mcp_config.json` extensibility, service-owned Alembic schema isolation (`alembic_version` / `alembic_version_vkb`), and troubleshooting playbooks.
+  Update all developer documentation, architecture guides, and onboarding manuals to reflect the unified 7-container monorepo architecture, Redis queue-based MCP communication, `mcp_config.json` extensibility, service-owned Alembic schema isolation (`alembic_version` / `alembic_version_vkb`), prompt caching layout, and troubleshooting playbooks.
 * **Key Touchpoints:**
   - `README.md` `[MODIFY]` (Updated 7-container startup instructions & architecture diagram)
   - `docs/dev-guide.md` `[MODIFY]` (Local setup, watch mode, running migrations, seed prompts)
@@ -1299,6 +1342,33 @@ sequenceDiagram
   - A new developer can clone the repository, spin up the entire platform via `docker compose up -d --build` or `docker compose -f docker-compose.dev.yml up -d --build`, run the test suite, and understand how to attach a new MCP tool within 15 minutes.
 * **Technical Acceptance Criteria (TAC):**
   - Documentation complies with `.agent/rules/docs-standard.md` (root-relative paths only, no hardcoded machine paths, zero credentials/API keys).
+
+---
+
+#### `TASK-PERF-506`: Concurrency & Parallel Execution Hardening
+* **Target Path:** `vector-kb-mcp/`, `backend/`, `docker-compose.yml`, `docker-compose.dev.yml`
+* **Vibe-Coding Estimate:** `3.5 hours`
+* **Detailed Description:**  
+  Hardens system performance during heavy parallel load (background document ingestion running concurrently with real-time user chat queries). Resolves 5 major concurrency bottlenecks (`ISSUE-01` through `ISSUE-05` documented in `docs/technical_debt/concurrency_and_performance_audit.md`):
+  1. Decouples fast-path chat query worker (`--mode=query`) from background document ingestion worker (`--mode=ingest`) across `docker-compose.yml` and `docker-compose.dev.yml`.
+  2. Configures ChromaDB SQLite Write-Ahead Logging (`WAL` mode) and reduces batch size to 50 chunks for non-blocking concurrent reads during vector writes.
+  3. Enforces strict 25MB file upload size cap (HTTP 413) and streaming file uploads to eliminate RAM spikes and container OOM crashes (`Exit Code 137`).
+  4. Releases SQLAlchemy DB sessions prior to long async network I/O (MinIO downloads and OpenAI embedding API requests) to prevent DB connection pool exhaustion.
+  5. Wraps OpenAI embedding API calls with `tenacity` exponential backoff retries for HTTP 429 rate limit resilience.
+* **Key Touchpoints:**
+  - `vector-kb-mcp/worker.py` `[MODIFY]` (Dual `--mode=query` vs `--mode=ingest` entrypoints)
+  - `vector-kb-mcp/retriever/chroma_retriever.py` `[MODIFY]` (SQLite WAL mode pragma, batch size 50, tenacity retries)
+  - `vector-kb-mcp/ingestion/processor.py` `[MODIFY]` (Early DB session release before MinIO/OpenAI network I/O)
+  - `backend/app/api/api_v1/jobs.py` `[MODIFY]` (25MB file size limit guard and streaming upload handling)
+  - `docker-compose.yml` & `docker-compose.dev.yml` `[MODIFY]` (Dedicated `vector-kb-mcp-ingestion` service definitions)
+  - `backend/tests/integration/test_parallel_load.py` `[NEW]` (Automated concurrency load test suite)
+* **User Acceptance Criteria (UAC):**
+  - Live chat vector retrieval latency remains under 150ms even while a 20MB document is being ingested in parallel.
+  - File uploads over 25MB return an immediate HTTP 413 error without crashing system memory.
+* **Technical Acceptance Criteria (TAC):**
+  - ChromaDB SQLite WAL mode enabled with zero `database is locked` exceptions under load.
+  - DB connection pools release clean sessions before long external async network calls.
+  - HTTP 429 RateLimit errors on OpenAI embedding calls recover automatically via exponential backoff retries.
 
 ---
 

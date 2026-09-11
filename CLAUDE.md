@@ -4,16 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Akvo RAG is an intelligent dialogue system based on RAG (Retrieval-Augmented Generation) technology. The system combines document retrieval with large language models to provide accurate knowledge-based question answering. It features a FastAPI backend, Next.js frontend, MySQL database, and integrates with an external MCP (Model Context Protocol) server for knowledge base queries.
+Akvo RAG is an intelligent dialogue system based on RAG (Retrieval-Augmented Generation) technology. The system combines document retrieval with large language models to provide accurate knowledge-based question answering. It features a FastAPI backend, Next.js frontend, PostgreSQL 17 database, ChromaDB vector store, MinIO S3 document storage, Redis 7 RPC queues, and an internal `vector-kb-mcp` microservice for knowledge base queries.
 
 ## Architecture
 
 ### Backend (Python FastAPI)
 - **Location**: `backend/`
 - **Framework**: FastAPI with async support
-- **Database**: MySQL 8.0 with Alembic migrations
+- **Database**: PostgreSQL 17 with Alembic migrations (two isolated migration chains: `alembic_version` for backend, `alembic_version_vkb` for `vector-kb-mcp`)
 - **Auth**: JWT + OAuth2
-- **LLM Integration**: Supports OpenAI, DeepSeek, and Ollama (via Langchain)
+- **LLM Integration**: Supports OpenAI, DeepSeek, and Ollama (via LangChain/LangGraph)
 
 ### Frontend (Next.js)
 - **Location**: `frontend/`
@@ -22,7 +22,8 @@ Akvo RAG is an intelligent dialogue system based on RAG (Retrieval-Augmented Gen
 - **AI SDK**: Vercel AI SDK for streaming responses
 
 ### MCP Integration
-The system depends on an external MCP server (Vector Knowledge Base MCP Server) for knowledge base queries. The MCP client discovery manager (`backend/mcp_clients/`) handles connection management and tool/resource discovery.
+
+The system uses an internal `vector-kb-mcp` microservice (containerized FastAPI + asyncpg + ChromaDB client) for knowledge base queries. The backend dispatches tool calls to this service via Redis RPC queues (`mcp:vector:requests` / `mcp:vector:responses:{id}`). Tools are declared declaratively in `backend/mcp_config.json` — no code changes required to add new tools.
 
 ### Key Services
 - **Prompt Service** (`backend/app/services/`): Centralized, database-driven prompt management with versioning
@@ -35,7 +36,10 @@ The system depends on an external MCP server (Vector Knowledge Base MCP Server) 
 ### Starting the Development Environment
 
 ```bash
-# Start all services (backend, frontend, db, nginx)
+# Start all services with dc.sh (recommended)
+./dc.sh up -d --build
+
+# Or standard docker compose
 docker compose -f docker-compose.dev.yml up -d --build
 
 # Production mode
@@ -102,19 +106,16 @@ cd backend/RAG_evaluation
 Copy `.env.example` to `.env` and configure:
 
 **Core Settings:**
-- `MYSQL_SERVER`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`
+- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST` (PostgreSQL 17)
 - `SECRET_KEY`: JWT secret key
 - `ACCESS_TOKEN_EXPIRE_MINUTES`: Token expiry (default: 10080)
-
-**MCP Configuration (Required):**
-- `KNOWLEDGE_BASES_MCP`: MCP server base URL (e.g., `https://api.knowledge.example.com/mcp/`)
-- `KNOWLEDGE_BASES_API_KEY`: MCP authentication key
-- `KNOWLEDGE_BASES_API_ENDPOINT`: MCP API endpoint
+- `REDIS_URL`: Redis connection URL (e.g., `redis://redis:6379/0`)
+- `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`: MinIO S3 credentials
 
 **LLM Provider (Choose one):**
-- OpenAI: `OPENAI_API_KEY`, `OPENAI_API_BASE`, `OPENAI_MODEL`
-- DeepSeek: `DEEPSEEK_API_KEY`, `DEEPSEEK_API_BASE`, `DEEPSEEK_MODEL`
-- Ollama: `OLLAMA_API_BASE`, `OLLAMA_MODEL`
+- OpenAI: `OPENAI_API_KEY`, `OPENAI_API_BASE`, `OPENAI_MODEL`, `OPENAI_MODEL_FAST`, `OPENAI_MODEL_SYNTHESIS`
+- DeepSeek: `DEEPSEEK_API_KEY`, `DEEPSEEK_API_BASE`, `DEEPSEEK_MODEL`, `DEEPSEEK_MODEL_FAST`, `DEEPSEEK_MODEL_SYNTHESIS`
+- Ollama: `OLLAMA_API_BASE`, `OLLAMA_MODEL`, `OLLAMA_MODEL_FAST`, `OLLAMA_MODEL_SYNTHESIS`
 
 Set `CHAT_PROVIDER=openai|deepseek|ollama` to select active provider.
 
@@ -135,10 +136,16 @@ See `PROMPT_SERVICE.md` for detailed documentation.
 
 ### Database Migrations
 
-Migrations managed with Alembic:
-- **Location**: `backend/alembic/versions/`
-- **Auto-run**: Migrations execute automatically on backend container startup
-- **Manual**: `docker exec akvo-rag-backend-1 alembic upgrade head`
+Migrations managed with Alembic — **two independent migration chains**:
+
+| Service | Migration Table | Location |
+|---|---|---|
+| `backend` | `alembic_version` | `backend/alembic/versions/` |
+| `vector-kb-mcp` | `alembic_version_vkb` | `vector-kb-mcp/alembic/versions/` |
+
+- **Auto-run**: Each service runs `alembic upgrade head` on container startup
+- **Manual (backend)**: `docker exec akvo-rag-backend-1 alembic upgrade head`
+- **Manual (vector-kb-mcp)**: `docker exec akvo-rag-vector-kb-mcp-1 alembic upgrade head`
 
 ### API Structure
 
@@ -154,12 +161,13 @@ Migrations managed with Alembic:
 - External API endpoints for third-party integrations
 - Requires API key authentication
 
-### MCP Client Discovery
+### MCP Client & Tool Dispatcher
 
-The system discovers MCP tools/resources at startup:
-- **Discovery Manager**: `backend/mcp_clients/`
-- **Result Cache**: `backend/mcp_discovery.json`
-- **Connection**: Configured via `KNOWLEDGE_BASES_MCP` environment variable
+The system defines and routes MCP tools/resources declaratively:
+- **Declarative Config**: `backend/mcp_config.json`
+- **Config Parser**: `backend/app/core/mcp_config.py` (`MCPConfigParser`)
+- **Queue Dispatcher**: `backend/mcp_clients/queue_dispatcher.py` (`MCPQueueDispatcher` via Redis RPC)
+- **Endpoint Adapter**: `backend/mcp_clients/kb_mcp_endpoint_service.py` (`KnowledgeBaseMCPEndpointService`)
 
 ### Testing
 
@@ -178,18 +186,21 @@ Always run tests inside the Docker container via the provided shell scripts.
 ## Access Points
 
 After starting services:
-- **Frontend**: http://127.0.0.1.nip.io
-- **API Docs**: http://127.0.0.1.nip.io/docs
-- **Health Check**: http://127.0.0.1.nip.io/api/health
+- **Frontend**: http://localhost:3000
+- **API Docs**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **Health Check**: http://localhost:8000/api/health
+- **MinIO Console**: http://localhost:9001
 - **RAG Evaluation Dashboard**: http://localhost:8501 (when `./rag-evaluate` is running)
-- **App Registration API**: http://localhost:8000/api/apps/* (see `backend/docs/APP_REGISTRATION.md`)
 
 ## Common Issues
 
-- **MCP Connection Failures**: Verify `KNOWLEDGE_BASES_MCP` settings and ensure the external MCP server is running
-- **Ollama in Docker**: Use `host.docker.internal` instead of `localhost` (macOS/Windows) or `172.17.0.1` (Linux)
+- **MCP/vector-kb-mcp Timeout**: Check Redis queue depth: `docker exec akvo-rag-redis-1 redis-cli llen mcp:vector:requests`. Restart: `docker compose restart vector-kb-mcp`
+- **Document stuck in PROCESSING**: Vector-kb-mcp logs (`docker compose logs vector-kb-mcp`) will show the ingestion error. Force-reset via psql: `UPDATE vkb_documents SET status='FAILED' WHERE status='PROCESSING';`
+- **Ollama in Docker**: Use `host.docker.internal` instead of `localhost` (macOS/Windows) for `OLLAMA_API_BASE`
 - **RAG Evaluation Cleanup**: Always use `./rag-evaluate-stop` or Ctrl-C to prevent 1-2GB Docker artifact accumulation per session
 - **Playwright Dependencies**: After container restarts, E2E tests may fail. Run `./run_e2e_tests_headless_container.sh` which auto-installs missing dependencies
+- **ChromaDB Permission Error**: `docker compose down chromadb && docker volume rm akvo-rag_chromadb_data && docker compose up -d chromadb` then re-ingest documents
 
 ## Contributing
 
