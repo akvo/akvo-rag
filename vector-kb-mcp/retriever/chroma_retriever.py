@@ -314,13 +314,23 @@ class ChromaRetriever:
         if not ids:
             return
 
+        # Defensive deduplication: ensure unique IDs within the batch
+        unique_ids: List[str] = []
+        seen_ids = set()
+        for idx, cid in enumerate(ids):
+            final_id = cid
+            if final_id in seen_ids:
+                final_id = f"{cid}_{idx}"
+            seen_ids.add(final_id)
+            unique_ids.append(final_id)
+
         def _sync_upsert():
             coll = self.chroma.get_or_create_collection(
                 name=collection_name,
                 metadata={"hnsw:space": "cosine"},
             )
             coll.upsert(
-                ids=ids,
+                ids=unique_ids,
                 embeddings=embeddings,
                 documents=documents,
                 metadatas=metadatas,

@@ -75,6 +75,7 @@ class TextChunker:
                         kb_id=kb_id,
                         file_name=doc.file_name,
                         chunk_content=cleaned_text,
+                        chunk_index=chunk_idx,
                         chunk_metadata=meta,
                     )
 
