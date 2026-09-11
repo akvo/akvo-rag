@@ -854,7 +854,9 @@ sequenceDiagram
 | `TASK-INT-503` | Test All Functionalities, Integration with AgriConnect & Backend Test Coverage Gate ($\ge 85\%$) | `backend/tests/` | **2.5 hrs** | 2.0 days |
 | `TASK-PERF-504` | Prompt Caching & Dual-Tier Model Optimization (`gpt-4o-mini` + `gpt-4o`) | `backend/app/services/` | **2.5 hrs** | 2.0 days |
 | `TASK-DOC-505` | Comprehensive Developer Onboarding & Architecture Documentation Alignment | `docs/` & `README.md` | **1.5 hrs** | 1.0 day |
-| **TOTAL** | | | **39.5 hrs (~4.9 working days)** | **30.0 days** |
+| **Phase 6** | **Concurrency, Parallel Execution & Performance Hardening** | | | |
+| `TASK-PERF-601` | Concurrency & Parallel Execution Hardening (Worker Isolation, SQLite WAL Mode, Streaming Uploads, DB Release & Tenacity Retries) | `vector-kb-mcp/`, `backend/`, `docker-compose.yml` | **3.5 hrs** | 3.0 days |
+| **TOTAL** | | | **43.0 hrs (~5.4 working days)** | **33.0 days** |
 
 ---
 
@@ -1341,6 +1343,35 @@ sequenceDiagram
   - A new developer can clone the repository, spin up the entire platform via `docker compose up -d --build` or `docker compose -f docker-compose.dev.yml up -d --build`, run the test suite, and understand how to attach a new MCP tool within 15 minutes.
 * **Technical Acceptance Criteria (TAC):**
   - Documentation complies with `.agent/rules/docs-standard.md` (root-relative paths only, no hardcoded machine paths, zero credentials/API keys).
+
+---
+
+### Phase 6: Concurrency, Parallel Execution & Performance Hardening
+
+#### `TASK-PERF-601`: Concurrency & Parallel Execution Hardening
+* **Target Path:** `vector-kb-mcp/`, `backend/`, `docker-compose.yml`, `docker-compose.dev.yml`
+* **Vibe-Coding Estimate:** `3.5 hours`
+* **Detailed Description:**  
+  Hardens system performance during heavy parallel load (background document ingestion running concurrently with real-time user chat queries). Resolves 5 major concurrency bottlenecks (`ISSUE-01` through `ISSUE-05` documented in `docs/technical_debt/concurrency_and_performance_audit.md`):
+  1. Decouples fast-path chat query worker (`--mode=query`) from background document ingestion worker (`--mode=ingest`) across `docker-compose.yml` and `docker-compose.dev.yml`.
+  2. Configures ChromaDB SQLite Write-Ahead Logging (`WAL` mode) and reduces batch size to 50 chunks for non-blocking concurrent reads during vector writes.
+  3. Enforces strict 25MB file upload size cap (HTTP 413) and streaming file uploads to eliminate RAM spikes and container OOM crashes (`Exit Code 137`).
+  4. Releases SQLAlchemy DB sessions prior to long async network I/O (MinIO downloads and OpenAI embedding API requests) to prevent DB connection pool exhaustion.
+  5. Wraps OpenAI embedding API calls with `tenacity` exponential backoff retries for HTTP 429 rate limit resilience.
+* **Key Touchpoints:**
+  - `vector-kb-mcp/worker.py` `[MODIFY]` (Dual `--mode=query` vs `--mode=ingest` entrypoints)
+  - `vector-kb-mcp/retriever/chroma_retriever.py` `[MODIFY]` (SQLite WAL mode pragma, batch size 50, tenacity retries)
+  - `vector-kb-mcp/ingestion/processor.py` `[MODIFY]` (Early DB session release before MinIO/OpenAI network I/O)
+  - `backend/app/api/api_v1/jobs.py` `[MODIFY]` (25MB file size limit guard and streaming upload handling)
+  - `docker-compose.yml` & `docker-compose.dev.yml` `[MODIFY]` (Dedicated `vector-kb-mcp-ingestion` service definitions)
+  - `backend/tests/integration/test_parallel_load.py` `[NEW]` (Automated concurrency load test suite)
+* **User Acceptance Criteria (UAC):**
+  - Live chat vector retrieval latency remains under 150ms even while a 20MB document is being ingested in parallel.
+  - File uploads over 25MB return an immediate HTTP 413 error without crashing system memory.
+* **Technical Acceptance Criteria (TAC):**
+  - ChromaDB SQLite WAL mode enabled with zero `database is locked` exceptions under load.
+  - DB connection pools release clean sessions before long external async network calls.
+  - HTTP 429 RateLimit errors on OpenAI embedding calls recover automatically via exponential backoff retries.
 
 ---
 
