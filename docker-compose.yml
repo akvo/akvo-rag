@@ -89,6 +89,37 @@ services:
     volumes:
       - ./vector-kb-mcp:/app:delegated
     environment:
+      - WORKER_MODE=query
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-akvo_rag}
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - akvo_rag_net
+    restart: unless-stopped
+
+  vector-kb-mcp-ingestion:
+    build:
+      context: ./vector-kb-mcp
+      dockerfile: Dockerfile
+    container_name: akvo-rag-vector-kb-mcp-ingestion-1
+    volumes:
+      - ./vector-kb-mcp:/app:delegated
+    environment:
+      - WORKER_MODE=ingest
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-akvo_rag}
       - CHROMA_HOST=chromadb

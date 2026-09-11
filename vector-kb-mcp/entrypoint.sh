@@ -15,9 +15,9 @@ if [ "$ENVIRONMENT" = "development" ]; then
 fi
 
 if [ "$ENVIRONMENT" = "development" ]; then
-    echo "🚀 Starting vector-kb-mcp in development mode with auto-reload..."
-    exec watchfiles --filter python "python main.py" /app --ignore-paths "/app/.pip,/app/tests,/app/.pytest_cache"
+    echo "🚀 Starting vector-kb-mcp in development mode with auto-reload (mode: ${WORKER_MODE:-all})..."
+    exec watchfiles --filter python "python main.py $@" /app --ignore-paths "/app/.pip,/app/tests,/app/.pytest_cache"
 else
-    echo "🚀 Starting vector-kb-mcp in production mode..."
-    exec python main.py
+    echo "🚀 Starting vector-kb-mcp in production mode (mode: ${WORKER_MODE:-all})..."
+    exec python main.py "$@"
 fi

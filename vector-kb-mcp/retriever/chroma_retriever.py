@@ -1,12 +1,73 @@
 import asyncio
 import logging
+import os
+import sqlite3
 from typing import Any, List, Optional
+import openai
 from openai import AsyncOpenAI
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_random_exponential,
+    retry_if_exception_type,
+    before_sleep_log,
+)
 
 from core.guards import validate_embedding_dimension
 from .models import RetrievedChunk
 
 logger = logging.getLogger("vector-kb-mcp.retriever")
+
+
+def configure_sqlite_wal(chroma_path: Optional[str] = None) -> bool:
+    """
+    Configure Write-Ahead Logging (WAL) and busy timeout on ChromaDB SQLite
+    storage to prevent write-lock contention between ingestion and query reads.
+    """
+    db_file = None
+    if chroma_path and os.path.exists(chroma_path):
+        if os.path.isdir(chroma_path):
+            candidate = os.path.join(chroma_path, "chroma.sqlite3")
+            if os.path.exists(candidate):
+                db_file = candidate
+        elif chroma_path.endswith(".sqlite3") or chroma_path.endswith(".db"):
+            db_file = chroma_path
+
+    if not db_file:
+        for default_loc in [
+            "/chroma/chroma/chroma.sqlite3",
+            "./chroma_data/chroma.sqlite3",
+            "chroma_data/chroma.sqlite3",
+        ]:
+            if os.path.exists(default_loc):
+                db_file = default_loc
+                break
+
+    if not db_file:
+        logger.debug(
+            "No local chroma.sqlite3 found to apply WAL pragmas directly."
+        )
+        return False
+
+    try:
+        conn = sqlite3.connect(db_file)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA busy_timeout=5000;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.commit()
+        conn.close()
+        logger.info(
+            "ChromaDB SQLite WAL mode successfully configured on: %s",
+            db_file,
+        )
+        return True
+    except Exception as e:
+        logger.warning(
+            "Could not apply SQLite WAL pragmas to %s: %s",
+            db_file,
+            e,
+        )
+        return False
 
 
 class ChromaRetriever:
@@ -16,25 +77,48 @@ class ChromaRetriever:
         openai_client: AsyncOpenAI,
         embedding_model: str = "text-embedding-3-small",
         expected_dim: int = 1536,
+        chroma_db_path: Optional[str] = None,
     ):
         """
-        Direct ChromaDB retriever for parallel multi-KB search.
+        Direct ChromaDB retriever for parallel multi-KB search with SQLite WAL
+        and retry-hardened embedding client.
 
         Args:
             chroma_client: Initialized chromadb ClientAPI instance.
             openai_client: AsyncOpenAI client instance.
             embedding_model: OpenAI embedding model name.
             expected_dim: Expected embedding vector dimension (default: 1536).
+            chroma_db_path: Optional path to Chroma SQLite database file.
         """
         self.chroma = chroma_client
         self.openai = openai_client
         self.embedding_model = embedding_model
         self.expected_dim = expected_dim
+        self.chroma_db_path = chroma_db_path
 
+        # Attempt to apply WAL mode to SQLite backend
+        if chroma_db_path:
+            configure_sqlite_wal(chroma_db_path)
+
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(5),
+        wait=wait_random_exponential(min=1, max=10),
+        retry=retry_if_exception_type(
+            (
+                openai.RateLimitError,
+                openai.APIConnectionError,
+                openai.APITimeoutError,
+                openai.InternalServerError,
+            )
+        ),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+    )
     async def _embed_query(self, query: str) -> List[float]:
         """
         Generate normalized embedding vector for the search query and
         validate its dimensionality against the expected dimension guard.
+        Wrapped with tenacity exponential backoff retry.
         """
         response = await self.openai.embeddings.create(
             input=[query],
@@ -181,9 +265,24 @@ class ChromaRetriever:
         # 6. Return top_k highest scoring chunks
         return all_chunks[:top_k]
 
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(5),
+        wait=wait_random_exponential(min=1, max=10),
+        retry=retry_if_exception_type(
+            (
+                openai.RateLimitError,
+                openai.APIConnectionError,
+                openai.APITimeoutError,
+                openai.InternalServerError,
+            )
+        ),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+    )
     async def embed_texts(self, texts: List[str]) -> List[List[float]]:
         """
         Generate embedding vectors for a batch of text chunks.
+        Wrapped with tenacity exponential backoff retry.
         """
         if not texts:
             return []
@@ -215,13 +314,23 @@ class ChromaRetriever:
         if not ids:
             return
 
+        # Defensive deduplication: ensure unique IDs within the batch
+        unique_ids: List[str] = []
+        seen_ids = set()
+        for idx, cid in enumerate(ids):
+            final_id = cid
+            if final_id in seen_ids:
+                final_id = f"{cid}_{idx}"
+            seen_ids.add(final_id)
+            unique_ids.append(final_id)
+
         def _sync_upsert():
             coll = self.chroma.get_or_create_collection(
                 name=collection_name,
                 metadata={"hnsw:space": "cosine"},
             )
             coll.upsert(
-                ids=ids,
+                ids=unique_ids,
                 embeddings=embeddings,
                 documents=documents,
                 metadatas=metadatas,

@@ -299,7 +299,9 @@ def test_main_entrypoint():
         "main.IngestionWorker.initialize", new_callable=AsyncMock
     ) as mock_ing_init, patch(
         "main.IngestionWorker.run", new_callable=AsyncMock
-    ) as mock_ing_run:
+    ) as mock_ing_run, patch(
+        "sys.argv", ["main.py", "--mode=all"]
+    ):
         main()
         mock_rpc_init.assert_awaited_once()
         mock_rpc_run.assert_awaited_once()

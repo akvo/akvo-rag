@@ -8,7 +8,6 @@ import chromadb
 import redis.asyncio as redis
 
 from core.config import Settings, settings as default_settings
-from db.session import get_db_session
 from ingestion.processor import IngestionProcessor
 
 logger = logging.getLogger("vector-kb-mcp.ingestion.worker")
@@ -114,7 +113,17 @@ class IngestionWorker:
 
             except asyncio.CancelledError:
                 break
+            except (asyncio.TimeoutError, TimeoutError):
+                continue
             except Exception as e:
+                # Ignore redis TimeoutError variations
+                err_str = str(e)
+                err_name = type(e).__name__
+                if (
+                    "Timeout reading from" in err_str
+                    or "TimeoutError" in err_name
+                ):
+                    continue
                 if self.running:
                     logger.error(
                         "Error in IngestionWorker event loop: %s",
@@ -154,8 +163,7 @@ class IngestionWorker:
             return
 
         try:
-            async with get_db_session() as session:
-                await self.processor.process_document(payload, session)
+            await self.processor.process_document(payload)
         except Exception as e:
             logger.error(
                 "Unhandled error processing ingestion task for doc '%s': %s",
