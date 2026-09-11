@@ -113,7 +113,17 @@ class IngestionWorker:
 
             except asyncio.CancelledError:
                 break
+            except (asyncio.TimeoutError, TimeoutError):
+                continue
             except Exception as e:
+                # Ignore redis TimeoutError variations
+                err_str = str(e)
+                err_name = type(e).__name__
+                if (
+                    "Timeout reading from" in err_str
+                    or "TimeoutError" in err_name
+                ):
+                    continue
                 if self.running:
                     logger.error(
                         "Error in IngestionWorker event loop: %s",
