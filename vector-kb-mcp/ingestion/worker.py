@@ -8,7 +8,6 @@ import chromadb
 import redis.asyncio as redis
 
 from core.config import Settings, settings as default_settings
-from db.session import get_db_session
 from ingestion.processor import IngestionProcessor
 
 logger = logging.getLogger("vector-kb-mcp.ingestion.worker")
@@ -154,8 +153,7 @@ class IngestionWorker:
             return
 
         try:
-            async with get_db_session() as session:
-                await self.processor.process_document(payload, session)
+            await self.processor.process_document(payload)
         except Exception as e:
             logger.error(
                 "Unhandled error processing ingestion task for doc '%s': %s",

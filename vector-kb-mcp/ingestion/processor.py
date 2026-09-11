@@ -17,6 +17,7 @@ from storage.minio_storage import (
     MinioStorageService,
     storage_service as default_storage,
 )
+from db.session import get_db_session
 from retriever.chroma_retriever import ChromaRetriever
 
 logger = logging.getLogger("vector-kb-mcp.ingestion.processor")
@@ -27,7 +28,7 @@ class IngestionProcessor:
     Unified, DRY document ingestion pipeline processor.
     Handles streaming MinIO download, text parsing, deterministic chunking,
     batch embedding generation, ChromaDB vector upsertion, and atomic
-    PostgreSQL 17 state management.
+    PostgreSQL 17 state management with decoupled connection lifecycles.
     """
 
     def __init__(
@@ -39,7 +40,7 @@ class IngestionProcessor:
         storage_service: Optional[MinioStorageService] = None,
         embedding_model: str = "text-embedding-3-small",
         expected_dim: int = 1536,
-        batch_size: int = 100,
+        batch_size: int = 50,
         chunk_size: int = 1000,
         chunk_overlap: int = 200,
     ):
@@ -69,10 +70,13 @@ class IngestionProcessor:
             self.retriever = None
 
     async def process_document(
-        self, task_payload: Dict[str, Any], db: AsyncSession
+        self,
+        task_payload: Dict[str, Any],
+        db: Optional[AsyncSession] = None,
     ) -> Dict[str, Any]:
         """
-        Execute end-to-end ingestion on a task payload or RPC argument dict.
+        Execute end-to-end ingestion on a task payload with strict database
+        connection release during external network and embedding I/O.
         """
         doc_id_raw = (
             task_payload.get("document_id")
@@ -95,49 +99,69 @@ class IngestionProcessor:
         )
         file_size = task_payload.get("file_size", 0)
 
-        # 1. Resolve / Create Document Record in DB
-        doc = await self._resolve_document(
-            db=db,
-            doc_id_raw=doc_id_raw,
-            upload_id=upload_id,
-            kb_id_raw=kb_id_raw,
-            filename=filename,
-            key=key,
-            file_size=file_size,
-            content_type=content_type,
-        )
-        if not doc:
-            raise DocumentProcessingError(
-                "Document could not be found or created."
+        # -------------------------------------------------------------
+        # Phase 1: Resolve / Create Document Record & Set PROCESSING
+        # -------------------------------------------------------------
+        doc_id: int = 0
+        task_id: Any = None
+        kb_id: int = 0
+
+        async def _step_init_db(session: AsyncSession):
+            nonlocal doc_id, task_id, kb_id, filename, key
+            doc = await self._resolve_document(
+                db=session,
+                doc_id_raw=doc_id_raw,
+                upload_id=upload_id,
+                kb_id_raw=kb_id_raw,
+                filename=filename,
+                key=key,
+                file_size=file_size,
+                content_type=content_type,
             )
+            if not doc:
+                raise DocumentProcessingError(
+                    "Document could not be found or created."
+                )
 
-        kb_id = doc.knowledge_base_id
-        filename = doc.file_name
-        key = doc.file_path
+            kb_id = doc.knowledge_base_id
+            filename = doc.file_name
+            key = doc.file_path
+            doc_id = doc.id
 
-        # 2. Security Check: Cross-Tenant Key Prefix Isolation
-        expected_prefix = f"kb_{kb_id}/"
-        if not key.startswith(expected_prefix):
-            raise SecurityValidationError(
-                f"Invalid S3 key prefix '{key}' for KB #{kb_id}. "
-                f"Expected prefix '{expected_prefix}'"
+            # Security Check: Cross-Tenant Key Prefix Isolation
+            expected_prefix = f"kb_{kb_id}/"
+            if not key.startswith(expected_prefix):
+                raise SecurityValidationError(
+                    f"Invalid S3 key prefix '{key}' for KB #{kb_id}. "
+                    f"Expected prefix '{expected_prefix}'"
+                )
+
+            task = await self._resolve_task(
+                db=session,
+                doc=doc,
+                upload_id=upload_id,
+                task_id_raw=str(
+                    task_payload.get("task_id") or doc_id_raw or doc.id
+                ),
             )
+            task_id = task.id or task.task_id
 
-        task = await self._resolve_task(
-            db=db,
-            doc=doc,
-            upload_id=upload_id,
-            task_id_raw=str(
-                task_payload.get("task_id") or doc_id_raw or doc.id
-            ),
-        )
+            doc.status = "PROCESSING"
+            task.status = "PROCESSING"
+            await session.commit()
+            return doc, task
 
-        doc.status = "PROCESSING"
-        task.status = "PROCESSING"
-        await db.commit()
+        if db is not None:
+            await _step_init_db(db)
+        else:
+            async with get_db_session() as init_session:
+                await _step_init_db(init_session)
 
+        # -------------------------------------------------------------
+        # Phase 2: External Network & CPU I/O (ZERO DB connection held)
+        # -------------------------------------------------------------
         try:
-            # 3. Stream Download File from MinIO
+            # 1. Stream Download File from MinIO
             raw_bytes = await asyncio.to_thread(
                 self.storage.download_file_bytes, key, bucket
             )
@@ -146,16 +170,16 @@ class IngestionProcessor:
                     f"Downloaded zero bytes from MinIO for key '{key}'"
                 )
 
-            # Security Check: File Size Ceiling (50MB)
-            if len(raw_bytes) > 50 * 1024 * 1024:
+            # Security Check: File Size Ceiling (25MB)
+            if len(raw_bytes) > 25 * 1024 * 1024:
                 raise DocumentProcessingError(
-                    f"File '{filename}' exceeds maximum allowed size of 50MB"
+                    f"File '{filename}' exceeds maximum allowed size of 25MB"
                 )
 
-            doc.file_hash = hashlib.sha256(raw_bytes).hexdigest()
-            doc.file_size = len(raw_bytes)
+            file_hash = hashlib.sha256(raw_bytes).hexdigest()
+            actual_file_size = len(raw_bytes)
 
-            # 4. Extract Text via Appropriate Parser
+            # 2. Extract Text via Appropriate Parser
             parsed_doc = await self._parse_file_bytes(raw_bytes, filename)
 
             # Check if any extractable text was found
@@ -172,7 +196,7 @@ class IngestionProcessor:
                     f"Extracted text from '{filename}' exceeds 25MB safety ceiling"  # noqa
                 )
 
-            # 5. Split Text into Deterministic Chunks
+            # 3. Split Text into Deterministic Chunks
             chunks: List[DocumentChunkDTO] = self.chunker.chunk_document(
                 parsed_doc, kb_id=kb_id
             )
@@ -181,86 +205,145 @@ class IngestionProcessor:
                     f"No text chunks generated for '{filename}'"
                 )
 
-            # 6. Generate Batch Embeddings & Upsert to ChromaDB
+            # 4. Generate Batch Embeddings & Upsert to ChromaDB
             await self._embed_and_upsert_chunks(
                 kb_id=kb_id,
-                doc_id=doc.id,
+                doc_id=doc_id,
                 chunks=chunks,
                 filename=filename,
             )
 
-            # 7. Atomically Persist Chunks and Update Status in PostgreSQL 17
-            await db.execute(
-                delete(DocumentChunk).where(
-                    DocumentChunk.document_id == doc.id
+            # -------------------------------------------------------------
+            # Phase 3: Atomically Persist Chunks and Update Status in DB
+            # -------------------------------------------------------------
+            async def _step_persist_db(session: AsyncSession):
+                # Reload document record in clean transaction
+                doc_stmt = select(Document).where(Document.id == doc_id)
+                doc_res = await session.execute(doc_stmt)
+                doc_record = doc_res.scalar_one_or_none()
+
+                if doc_record:
+                    doc_record.file_hash = file_hash
+                    doc_record.file_size = actual_file_size
+                    doc_record.status = "INDEXED"
+                    current_meta = doc_record.metadata_ or {}
+                    current_meta["chunk_count"] = len(chunks)
+                    current_meta["total_pages"] = parsed_doc.total_pages
+                    doc_record.metadata_ = current_meta
+
+                # Update processing task
+                if isinstance(task_id, int):
+                    task_stmt = select(ProcessingTask).where(
+                        ProcessingTask.id == task_id
+                    )
+                else:
+                    task_stmt = select(ProcessingTask).where(
+                        ProcessingTask.task_id == str(task_id)
+                    )
+                task_res = await session.execute(task_stmt)
+                task_record = task_res.scalar_one_or_none()
+                if task_record:
+                    task_record.status = "COMPLETED"
+                    task_record.error_message = None
+
+                # Delete existing chunks and bulk insert new
+                await session.execute(
+                    delete(DocumentChunk).where(
+                        DocumentChunk.document_id == doc_id
+                    )
                 )
-            )
 
-            for c in chunks:
-                db_chunk = DocumentChunk(
-                    id=c.chunk_id,
-                    kb_id=kb_id,
-                    document_id=doc.id,
-                    chunk_index=c.chunk_index,
-                    file_name=filename,
-                    chunk_metadata={
-                        **c.metadata,
-                        "document_id": doc.id,
-                    },
-                    content_hash=c.content_hash,
-                )
-                db.add(db_chunk)
+                for c in chunks:
+                    db_chunk = DocumentChunk(
+                        id=c.chunk_id,
+                        kb_id=kb_id,
+                        document_id=doc_id,
+                        chunk_index=c.chunk_index,
+                        file_name=filename,
+                        chunk_metadata={
+                            **c.metadata,
+                            "document_id": doc_id,
+                        },
+                        content_hash=c.content_hash,
+                    )
+                    session.add(db_chunk)
 
-            doc.status = "INDEXED"
-            current_meta = doc.metadata_ or {}
-            current_meta["chunk_count"] = len(chunks)
-            current_meta["total_pages"] = parsed_doc.total_pages
-            doc.metadata_ = current_meta
+                await session.commit()
 
-            task.status = "COMPLETED"
-            task.error_message = None
-            await db.commit()
+            if db is not None:
+                await _step_persist_db(db)
+            else:
+                async with get_db_session() as write_session:
+                    await _step_persist_db(write_session)
 
             logger.info(
                 "Document %d ('%s') successfully indexed with %d chunks.",
-                doc.id,
+                doc_id,
                 filename,
                 len(chunks),
             )
             return {
                 "status": "completed",
-                "document_id": doc.id,
+                "document_id": doc_id,
                 "kb_id": kb_id,
                 "total_chunks": len(chunks),
                 "file_name": filename,
             }
 
         except Exception as exc:
+            err_msg = str(exc)
             logger.error(
                 "Ingestion failed for document '%s' (KB %d): %s",
                 filename,
                 kb_id,
-                exc,
+                err_msg,
                 exc_info=True,
             )
-            await db.rollback()
-            # Reload / set FAILED state
+
+            # -------------------------------------------------------------
+            # Phase 4: Atomically Set FAILED Status in DB
+            # -------------------------------------------------------------
+            async def _step_fail_db(session: AsyncSession, error_text: str):
+                if doc_id:
+                    doc_stmt = select(Document).where(Document.id == doc_id)
+                    doc_res = await session.execute(doc_stmt)
+                    doc_record = doc_res.scalar_one_or_none()
+                    if doc_record:
+                        doc_record.status = "FAILED"
+
+                if task_id:
+                    if isinstance(task_id, int):
+                        task_stmt = select(ProcessingTask).where(
+                            ProcessingTask.id == task_id
+                        )
+                    else:
+                        task_stmt = select(ProcessingTask).where(
+                            ProcessingTask.task_id == str(task_id)
+                        )
+                    task_res = await session.execute(task_stmt)
+                    task_record = task_res.scalar_one_or_none()
+                    if task_record:
+                        task_record.status = "FAILED"
+                        task_record.error_message = error_text[:1024]
+
+                await session.commit()
+
             try:
-                db.add(doc)
-                db.add(task)
-                doc.status = "FAILED"
-                task.status = "FAILED"
-                task.error_message = str(exc)[:1024]
-                await db.commit()
+                if db is not None:
+                    await _step_fail_db(db, err_msg)
+                else:
+                    async with get_db_session() as err_session:
+                        await _step_fail_db(err_session, err_msg)
             except Exception as commit_err:
                 logger.warning(
                     "Failed to save error status to DB: %s", commit_err
                 )
+
             return {
                 "status": "failed",
-                "document_id": doc.id,
+                "document_id": doc_id,
                 "kb_id": kb_id,
-                "error": str(exc),
+                "error": err_msg,
             }
 
     async def _resolve_document(

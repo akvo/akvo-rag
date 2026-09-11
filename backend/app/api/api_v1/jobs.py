@@ -171,7 +171,19 @@ async def create_job(
         )
 
         in_memory_files = []
+        MAX_UPLOAD_SIZE = 25 * 1024 * 1024  # 25MB
         for f in files or []:
+            fname = getattr(f, "filename", "unnamed_file")
+            declared_size = getattr(f, "size", None)
+            if declared_size is not None and declared_size > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"File '{fname}' exceeds maximum 25MB ceiling "
+                        f"(size: {declared_size} bytes)"
+                    ),
+                )
+
             if hasattr(f, "read"):
                 if asyncio.iscoroutinefunction(f.read):
                     content = await f.read()
@@ -182,12 +194,21 @@ async def create_job(
             else:
                 content = b""
 
+            if len(content) > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"File '{fname}' exceeds maximum 25MB ceiling "
+                        f"(size: {len(content)} bytes)"
+                    ),
+                )
+
             headers = getattr(f, "headers", None) or Headers()
             in_memory_files.append(
                 StarletteUploadFile(
                     file=io.BytesIO(content),
                     size=len(content),
-                    filename=getattr(f, "filename", "unnamed_file"),
+                    filename=fname,
                     headers=headers,
                 )
             )
