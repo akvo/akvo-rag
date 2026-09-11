@@ -1,8 +1,8 @@
 # Feature Specification: Concurrency & Parallel Execution Performance Hardening
 
-> **Feature ID:** `023_perf_601_concurrency_and_parallel_execution_hardening_spec`  
-> **Task Ref:** `TASK-PERF-601` (`[D13]`)  
-> **Target Branch:** `feature/154-d13-perf-601-concurrency-and-parallel-execution-hardening`  
+> **Feature ID:** `023_perf_506_concurrency_and_parallel_execution_hardening_spec`  
+> **Task Ref:** `TASK-PERF-506` (`[D12]`)  
+> **Target Branch:** `feature/154-d12-perf-506-concurrency-and-parallel-execution-hardening`  
 > **Status:** `PROPOSED (/0-planning complete & feedback updated)`  
 > **Estimated Effort:** `3.5 hrs (Vibe-Coding) / 3.0 days (Traditional)`  
 > **Author:** Antigravity Architect Council (Winston, Amelia, Murat, Rachel)  
@@ -22,7 +22,7 @@ An architectural audit ([`docs/technical_debt/concurrency_and_performance_audit.
 4. **`ISSUE-04` DB Connection Pool Exhaustion (`[ARCH]` / `[PERF]` Major):** Long-running async ingestion tasks hold SQLAlchemy DB sessions open during MinIO streaming and external API calls, exhausting the pool (`QueuePool limit reached`).
 5. **`ISSUE-05` OpenAI Embedding Rate Limiting (`[ERR]` Minor):** Sequential batching of 1,000+ chunks can trigger HTTP 429 `RateLimitError` on OpenAI embeddings without exponential backoff wrappers.
 
-`TASK-PERF-601` resolves these 5 technical debt findings through microservice entrypoint decoupling, ChromaDB WAL mode, memory streaming controls, early DB session releasing, and exponential backoff retry wrappers.
+`TASK-PERF-506` resolves these 5 technical debt findings through microservice entrypoint decoupling, ChromaDB WAL mode, memory streaming controls, early DB session releasing, and exponential backoff retry wrappers.
 
 ### 1.2 5W1H Discovery Lens
 
@@ -31,7 +31,7 @@ An architectural audit ([`docs/technical_debt/concurrency_and_performance_audit.
 | **Who** | System Operators, Host Applications (AgriConnect / WASHConnect), and End-Users (Farmers/Clients). |
 | **What** | Implement concurrency hardening: ChromaDB WAL mode, worker thread isolation, streaming file controls (25MB cap), DB connection release before async network I/O, and `tenacity` retry wrappers. |
 | **Where** | `/vector-kb-mcp/worker.py`, `/vector-kb-mcp/retriever/chroma_retriever.py`, `/vector-kb-mcp/ingestion/processor.py`, `/backend/app/api/api_v1/jobs.py`, `/backend/app/db/session.py`, `docker-compose.yml`, `docker-compose.dev.yml`. |
-| **When** | Phase 6 Performance Hardening — following Phase 5 Quality Gates & Prompt Caching. |
+| **When** | **Deliverable D12 / Phase 5, Step 6** — immediately following developer onboarding alignment (`TASK-DOC-505`). |
 | **Why** | Guarantees sub-150ms chat vector retrieval SLA, eliminates container OOM crashes (`Exit Code 137`), prevents ChromaDB database lock timeouts, and ensures 100% ingestion reliability. |
 | **How** | Python asyncio executors, SQLite WAL pragmas, FastAPI stream validation, SQLAlchemy connection lifecycle guards, and `tenacity` retry decorators. |
 
@@ -203,17 +203,17 @@ sequenceDiagram
 
 | Task ID | Component & Description | Vibe Coding (Dev) | Automated Testing | QA & Review | Total Est. Time | Priority |
 | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
-| **SUB-601.1** | Worker Process & Event Loop Isolation in `docker-compose.yml` & `docker-compose.dev.yml` (`ISSUE-01`) | 40m | 25m | 15m | **80m (1.3h)** | Must Have |
-| **SUB-601.2** | ChromaDB SQLite WAL Mode & Batch Optimization (`ISSUE-02`) | 30m | 20m | 15m | **65m (1.1h)** | Must Have |
-| **SUB-601.3** | Stream File Uploads & 25MB Memory Guard (`ISSUE-03`) | 30m | 20m | 15m | **65m (1.1h)** | Must Have |
-| **SUB-601.4** | Async DB Session Release Guard before Network I/O (`ISSUE-04`) | 30m | 20m | 15m | **65m (1.1h)** | Must Have |
-| **SUB-601.5** | OpenAI Embedding Tenacity Retry Wrapper (`ISSUE-05`) | 20m | 15m | 10m | **45m (0.75h)** | Must Have |
-| **SUB-601.6** | Integration Parallel Load Test Suite & Validation | 30m | 30m | 15m | **75m (1.25h)** | Must Have |
+| **SUB-506.1** | Worker Process & Event Loop Isolation in `docker-compose.yml` & `docker-compose.dev.yml` (`ISSUE-01`) | 40m | 25m | 15m | **80m (1.3h)** | Must Have |
+| **SUB-506.2** | ChromaDB SQLite WAL Mode & Batch Optimization (`ISSUE-02`) | 30m | 20m | 15m | **65m (1.1h)** | Must Have |
+| **SUB-506.3** | Stream File Uploads & 25MB Memory Guard (`ISSUE-03`) | 30m | 20m | 15m | **65m (1.1h)** | Must Have |
+| **SUB-506.4** | Async DB Session Release Guard before Network I/O (`ISSUE-04`) | 30m | 20m | 15m | **65m (1.1h)** | Must Have |
+| **SUB-506.5** | OpenAI Embedding Tenacity Retry Wrapper (`ISSUE-05`) | 20m | 15m | 10m | **45m (0.75h)** | Must Have |
+| **SUB-506.6** | Integration Parallel Load Test Suite & Validation | 30m | 30m | 15m | **75m (1.25h)** | Must Have |
 | **TOTAL** | | **3.0 hrs** | **2.2 hrs** | **1.4 hrs** | **6.6 hrs (~3.5 Vibe / 3.0 Trad. Days)** | |
 
 ---
 
 ## 🛑 HALT
 
-Feature Specification updated at `docs/features/023_perf_601_concurrency_and_parallel_execution_hardening_spec.md`.  
+Feature Specification updated at `docs/features/023_perf_506_concurrency_and_parallel_execution_hardening_spec.md`.  
 Please review the updated specification.

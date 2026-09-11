@@ -854,8 +854,7 @@ sequenceDiagram
 | `TASK-INT-503` | Test All Functionalities, Integration with AgriConnect & Backend Test Coverage Gate ($\ge 85\%$) | `backend/tests/` | **2.5 hrs** | 2.0 days |
 | `TASK-PERF-504` | Prompt Caching & Dual-Tier Model Optimization (`gpt-4o-mini` + `gpt-4o`) | `backend/app/services/` | **2.5 hrs** | 2.0 days |
 | `TASK-DOC-505` | Comprehensive Developer Onboarding & Architecture Documentation Alignment | `docs/` & `README.md` | **1.5 hrs** | 1.0 day |
-| **Phase 6** | **Concurrency, Parallel Execution & Performance Hardening** | | | |
-| `TASK-PERF-601` | Concurrency & Parallel Execution Hardening (Worker Isolation, SQLite WAL Mode, Streaming Uploads, DB Release & Tenacity Retries) | `vector-kb-mcp/`, `backend/`, `docker-compose.yml` | **3.5 hrs** | 3.0 days |
+| `TASK-PERF-506` | Concurrency & Parallel Execution Hardening (Worker Isolation, SQLite WAL Mode, Streaming Uploads, DB Release & Tenacity Retries) | `vector-kb-mcp/`, `backend/`, `docker-compose.yml` | **3.5 hrs** | 3.0 days |
 | **TOTAL** | | | **43.0 hrs (~5.4 working days)** | **33.0 days** |
 
 ---
@@ -1346,9 +1345,7 @@ sequenceDiagram
 
 ---
 
-### Phase 6: Concurrency, Parallel Execution & Performance Hardening
-
-#### `TASK-PERF-601`: Concurrency & Parallel Execution Hardening
+#### `TASK-PERF-506`: Concurrency & Parallel Execution Hardening
 * **Target Path:** `vector-kb-mcp/`, `backend/`, `docker-compose.yml`, `docker-compose.dev.yml`
 * **Vibe-Coding Estimate:** `3.5 hours`
 * **Detailed Description:**  
