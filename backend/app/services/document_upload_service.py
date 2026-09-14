@@ -15,7 +15,7 @@ from app.services.minio_service import MinIOService, get_minio_service
 
 logger = logging.getLogger(__name__)
 
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 
 
@@ -106,9 +106,9 @@ async def validate_and_prepare_file(
 
     if file_size > MAX_FILE_SIZE:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=(
-                f"File '{sanitized}' exceeds limit of 50MB "
+                f"File '{sanitized}' exceeds limit of 25MB "
                 f"(size: {file_size} bytes)"
             ),
         )

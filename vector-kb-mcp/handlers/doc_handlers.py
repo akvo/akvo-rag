@@ -138,11 +138,11 @@ async def handle_ingest_doc(
         chunk_overlap=chunk_overlap,
     )
 
-    async with get_db_session() as session:
-        result = await processor.process_document(args, session)
-        if result.get("status") == "completed" and "document" not in result:
-            doc_id = result.get("document_id")
-            if doc_id:
+    result = await processor.process_document(args)
+    if result.get("status") == "completed" and "document" not in result:
+        doc_id = result.get("document_id")
+        if doc_id:
+            async with get_db_session() as session:
                 doc_stmt = (
                     select(Document)
                     .options(selectinload(Document.processing_tasks))
@@ -152,7 +152,7 @@ async def handle_ingest_doc(
                 doc = doc_res.scalar_one_or_none()
                 if doc:
                     result["document"] = serialize_doc(doc)
-        return result
+    return result
 
 
 async def handle_delete_doc(

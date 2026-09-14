@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { FileText, Trash2, Eye } from "lucide-react";
+import { FileText, Trash2, Eye, AlertCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import Link from "next/link";
 
@@ -42,6 +42,80 @@ interface KnowledgeBase {
 
 interface DocumentListProps {
   knowledgeBaseId: number;
+}
+
+function getDocumentStatusBadge(doc: Document) {
+  const task =
+    doc.processing_tasks && doc.processing_tasks.length > 0
+      ? doc.processing_tasks[0]
+      : null;
+  const rawStatus = (task?.status || doc.status || "pending")
+    .toString()
+    .toLowerCase()
+    .trim();
+  const errorMessage = task?.error_message;
+
+  if (
+    rawStatus === "indexed" ||
+    rawStatus === "completed" ||
+    rawStatus === "success"
+  ) {
+    return (
+      <Badge
+        variant="outline"
+        className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 font-medium capitalize"
+      >
+        Indexed
+      </Badge>
+    );
+  }
+
+  if (rawStatus === "failed" || rawStatus === "error") {
+    const errorDetail = errorMessage
+      ? errorMessage.replace(/^Expected error:\s*/i, "").trim()
+      : "Document processing failed";
+
+    return (
+      <div className="space-y-1">
+        <Badge
+          variant="destructive"
+          className="bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900 font-medium capitalize cursor-help inline-flex items-center gap-1"
+          title={errorDetail}
+        >
+          <AlertCircle className="w-3 h-3" />
+          Failed
+        </Badge>
+        {errorMessage && (
+          <p
+            className="text-[11px] text-red-600 dark:text-red-400 max-w-[240px] truncate leading-tight cursor-help"
+            title={errorDetail}
+          >
+            {errorDetail}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (rawStatus === "processing" || rawStatus === "in_progress") {
+    return (
+      <Badge
+        variant="outline"
+        className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 animate-pulse font-medium capitalize"
+      >
+        Processing
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge
+      variant="secondary"
+      className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-medium capitalize"
+    >
+      {rawStatus || "Pending"}
+    </Badge>
+  );
 }
 
 export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
@@ -182,34 +256,7 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
                 addSuffix: true,
               })}
             </TableCell>
-            <TableCell>
-              {doc.processing_tasks && doc.processing_tasks.length > 0 ? (
-                <Badge
-                  variant={
-                    doc.processing_tasks[0].status === "completed"
-                      ? "secondary" // Green for completed
-                      : doc.processing_tasks[0].status === "failed"
-                      ? "destructive" // Red for failed
-                      : "default" // Default for pending/processing
-                  }
-                >
-                  {doc.processing_tasks[0].status || "pending"}
-                </Badge>
-              ) : (
-                <Badge
-                  variant={
-                    doc.status?.toLowerCase() === "indexed" ||
-                    doc.status?.toLowerCase() === "completed"
-                      ? "secondary"
-                      : doc.status?.toLowerCase() === "failed"
-                      ? "destructive"
-                      : "default"
-                  }
-                >
-                  {doc.status?.toLowerCase() || "pending"}
-                </Badge>
-              )}
-            </TableCell>
+            <TableCell>{getDocumentStatusBadge(doc)}</TableCell>
             <TableCell>
               <div className="space-x-2">
                 {/* TODO:: Enable link once view document validated

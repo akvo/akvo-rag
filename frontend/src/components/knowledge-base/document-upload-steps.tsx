@@ -23,6 +23,8 @@ import {
   SlidersHorizontal,
   Hash,
   Eye,
+  AlertCircle,
+  CheckCircle2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -41,6 +43,51 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+
+function formatProcessingError(rawError: string | null | undefined): {
+  title: string;
+  detail: string;
+  suggestion?: string;
+} {
+  if (!rawError) {
+    return {
+      title: "Processing Failed",
+      detail: "An error occurred while extracting or indexing this document.",
+    };
+  }
+
+  const cleaned = rawError.replace(/^Expected error:\s*/i, "").trim();
+
+  if (/no extractable text found/i.test(cleaned)) {
+    return {
+      title: "No Extractable Text",
+      detail: cleaned,
+      suggestion:
+        "This file appears to be a scanned image or empty document without an embedded text layer. Please use an OCR tool or upload a text-searchable file.",
+    };
+  }
+
+  if (/unsupported file/i.test(cleaned) || /extension/i.test(cleaned)) {
+    return {
+      title: "Unsupported Format",
+      detail: cleaned,
+      suggestion: "Please upload a supported format: PDF, DOCX, TXT, or MD.",
+    };
+  }
+
+  if (/file size|too large|exceeded/i.test(cleaned)) {
+    return {
+      title: "File Too Large",
+      detail: cleaned,
+      suggestion: "Please reduce file size or split the document into smaller parts.",
+    };
+  }
+
+  return {
+    title: "Processing Failed",
+    detail: cleaned,
+  };
+}
 
 interface DocumentUploadStepsProps {
   knowledgeBaseId: number;
@@ -118,6 +165,7 @@ export function DocumentUploadSteps({
   >(null);
   const [taskStatuses, setTaskStatuses] = useState<TaskStatusMap>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
   const [chunkSize, setChunkSize] = useState(1000);
   const [chunkOverlap, setChunkOverlap] = useState(200);
   const [chunkSearchQuery, setChunkSearchQuery] = useState("");
@@ -317,6 +365,7 @@ export function DocumentUploadSteps({
     if (resultsToProcess.length === 0) return;
 
     setIsLoading(true);
+    setIsFinished(false);
     try {
       const data = (await api.post(
         `/api/knowledge-base/${knowledgeBaseId}/documents/process`,
@@ -342,6 +391,7 @@ export function DocumentUploadSteps({
       }, 2000);
     } catch (error) {
       setIsLoading(false);
+      setIsFinished(true);
       toast({
         title: "Processing failed",
         description:
@@ -370,6 +420,7 @@ export function DocumentUploadSteps({
 
         if (allDone) {
           setIsLoading(false);
+          setIsFinished(true);
           const hasErrors = Object.values(response || {}).some(
             (task) => task.status === "failed"
           );
@@ -382,7 +433,7 @@ export function DocumentUploadSteps({
           } else {
             toast({
               title: "Processing completed with errors",
-              description: "Some documents failed to process.",
+              description: "Some documents failed to process. Please check details below.",
               variant: "destructive",
             });
           }
@@ -392,6 +443,7 @@ export function DocumentUploadSteps({
         }
       } catch (error) {
         setIsLoading(false);
+        setIsFinished(true);
         toast({
           title: "Status check failed",
           description:
@@ -960,95 +1012,247 @@ export function DocumentUploadSteps({
         <TabsContent value="3" className="mt-6">
           <Card className="p-6">
             <div className="space-y-4">
-              <div className="max-h-[300px] overflow-y-auto space-y-2 rounded-lg border p-4">
-                {files
-                  .filter(
-                    (f) =>
-                      f.status === "uploaded" ||
-                      f.status === "processing" ||
-                      f.status === "completed"
-                  )
-                  .map((file, idx) => {
-                    const fileUploadId =
-                      file.uploadId ?? file.documentId ?? idx + 1;
-                    const task = Object.values(taskStatuses).find(
-                      (t) =>
-                        t.document_id === file.documentId ||
-                        t.document_id === fileUploadId
-                    );
-                    return (
-                      <div
-                        key={fileUploadId}
-                        className="p-4 border rounded-lg space-y-2"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <div className="w-8 h-8">
-                              <FileIcon
-                                extension={file.file.name.split(".").pop()}
-                                {...defaultStyles[
-                                  file.file.name
-                                    .split(".")
-                                    .pop() as keyof typeof defaultStyles
-                                ]}
-                              />
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">
-                                {file.file.name}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {(file.file.size / 1024 / 1024).toFixed(2)} MB
-                              </p>
-                              {task && (
-                                <p className="text-xs text-muted-foreground">
-                                  Status: {task.status || "pending"}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          {task?.status === "failed" && (
-                            <p className="text-sm text-destructive">
-                              {task.error_message}
-                            </p>
-                          )}
-                        </div>
-                        {task &&
-                          (task.status === "pending" ||
-                            task.status === "processing") && (
-                            <Progress
-                              value={task.status === "processing" ? 50 : 25}
-                              className="w-full"
-                            />
-                          )}
-                      </div>
-                    );
-                  })}
-              </div>
+              {(() => {
+                const activeTasks = Object.values(taskStatuses) as any[];
+                const failedTasks = activeTasks.filter((t) => t.status === "failed");
+                const completedTasks = activeTasks.filter((t) => t.status === "completed");
+                const hasErrors = isFinished && failedTasks.length > 0;
+                const isAllSuccess = isFinished && failedTasks.length === 0 && completedTasks.length > 0;
 
-              <Button
-                onClick={handleProcessClick}
-                disabled={
-                  isLoading ||
-                  files.filter(
-                    (f) =>
-                      f.status === "uploaded" || f.status === "processing"
-                  ).length === 0
-                }
-                className="w-full"
-              >
-                {isLoading ? (
+                return (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
+                    {/* Error Summary Banner with Document Names */}
+                    {hasErrors && (
+                      <div className="rounded-lg border border-red-200 bg-red-50/95 p-4 text-red-900 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200 shadow-sm space-y-2.5">
+                        <div className="flex items-start gap-3">
+                          <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                          <div className="space-y-1.5 flex-1">
+                            <h5 className="font-semibold text-sm">
+                              {failedTasks.length === 1
+                                ? "1 Document Failed to Process"
+                                : `${failedTasks.length} Documents Failed to Process`}
+                            </h5>
+                            <p className="text-xs text-red-800 dark:text-red-300 leading-relaxed">
+                              The following document{failedTasks.length > 1 ? "s" : ""} could not be indexed due to extraction or formatting errors:
+                            </p>
+                            <ul className="list-disc list-inside space-y-1 text-xs text-red-900 dark:text-red-200 pt-0.5">
+                              {failedTasks.map((t: any, i: number) => {
+                                const matchedFile = files.find(
+                                  (f) =>
+                                    f.file.name === t.file_name ||
+                                    f.file.name === t.filename ||
+                                    (t.file_name && f.file.name.includes(t.file_name)) ||
+                                    (t.document_id != null && String(f.documentId) === String(t.document_id)) ||
+                                    (t.upload_id != null && String(f.uploadId) === String(t.upload_id))
+                                );
+                                const fname =
+                                  t.file_name ||
+                                  t.filename ||
+                                  matchedFile?.file.name ||
+                                  `Document #${i + 1}`;
+                                const err = formatProcessingError(t.error_message);
+                                return (
+                                  <li key={i} className="leading-snug">
+                                    <span className="font-semibold">{fname}:</span>{" "}
+                                    <span className="font-normal text-red-800/90 dark:text-red-300/90">
+                                      {err.detail}
+                                    </span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* All Success Banner */}
+                    {isAllSuccess && (
+                      <div className="rounded-lg border border-emerald-200 bg-emerald-50/90 p-4 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200 shadow-sm">
+                        <div className="flex items-start gap-3">
+                          <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
+                          <div className="space-y-1">
+                            <h5 className="font-semibold text-sm">
+                              All Documents Processed Successfully
+                            </h5>
+                            <p className="text-xs text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                              All {completedTasks.length} document{completedTasks.length > 1 ? "s" : ""} have been chunked and indexed into the vector knowledge base.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Document Task List */}
+                    <div className="max-h-[340px] overflow-y-auto space-y-3 rounded-lg border p-4 bg-muted/5">
+                      {files
+                        .filter(
+                          (f) =>
+                            f.status === "uploaded" ||
+                            f.status === "processing" ||
+                            f.status === "completed"
+                        )
+                        .map((file, idx) => {
+                          const fileUploadId =
+                            file.uploadId ?? file.documentId ?? idx + 1;
+                          const task =
+                            activeTasks.find(
+                              (t) =>
+                                (t.file_name && (t.file_name === file.file.name || file.file.name.includes(t.file_name))) ||
+                                (t.filename && (t.filename === file.file.name || file.file.name.includes(t.filename))) ||
+                                (t.document_id != null && file.documentId != null && String(t.document_id) === String(file.documentId)) ||
+                                (t.upload_id != null && file.uploadId != null && String(t.upload_id) === String(file.uploadId)) ||
+                                (t.document_id != null && fileUploadId != null && String(t.document_id) === String(fileUploadId))
+                            ) || activeTasks[idx];
+
+                          const isFailed = task?.status === "failed";
+                          const isCompleted = task?.status === "completed";
+                          const errorInfo = isFailed
+                            ? formatProcessingError(task?.error_message)
+                            : null;
+
+                          return (
+                            <div
+                              key={fileUploadId}
+                              className={cn(
+                                "p-4 border rounded-lg space-y-2.5 transition-all shadow-sm bg-card",
+                                isFailed &&
+                                  "border-red-300/80 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20",
+                                isCompleted &&
+                                  "border-emerald-200/80 bg-emerald-50/20 dark:border-emerald-800 dark:bg-emerald-950/10"
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start space-x-3 min-w-0">
+                                  <div className="w-8 h-8 flex-shrink-0 mt-0.5">
+                                    <FileIcon
+                                      extension={file.file.name.split(".").pop()}
+                                      {...defaultStyles[
+                                        file.file.name
+                                          .split(".")
+                                          .pop() as keyof typeof defaultStyles
+                                      ]}
+                                    />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p
+                                      className="text-sm font-medium truncate"
+                                      title={file.file.name}
+                                    >
+                                      {file.file.name}
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className="text-xs text-muted-foreground">
+                                        {(file.file.size / 1024 / 1024).toFixed(2)} MB
+                                      </span>
+                                      {task && (
+                                        <Badge
+                                          variant={
+                                            isFailed
+                                              ? "destructive"
+                                              : isCompleted
+                                              ? "outline"
+                                              : "secondary"
+                                          }
+                                          className={cn(
+                                            "text-[10px] px-2 py-0.5 capitalize font-medium",
+                                            isCompleted &&
+                                              "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
+                                            !isFailed &&
+                                              !isCompleted &&
+                                              "animate-pulse text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200"
+                                          )}
+                                        >
+                                          {task.status || "pending"}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex-shrink-0">
+                                  {isCompleted && (
+                                    <div className="flex items-center text-xs text-emerald-600 dark:text-emerald-400 font-medium gap-1">
+                                      <CheckCircle2 className="h-4 w-4" />
+                                      <span className="hidden sm:inline">Indexed</span>
+                                    </div>
+                                  )}
+                                  {isFailed && (
+                                    <div className="flex items-center text-xs text-red-600 dark:text-red-400 font-medium gap-1">
+                                      <AlertCircle className="h-4 w-4" />
+                                      <span className="hidden sm:inline">Failed</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Rich Error Diagnostic Box */}
+                              {isFailed && errorInfo && (
+                                <div className="rounded-md bg-red-100/70 dark:bg-red-950/50 p-3 text-xs text-red-900 dark:text-red-200 border border-red-200 dark:border-red-900/60 space-y-1.5 mt-2">
+                                  <div className="font-semibold flex items-center gap-1.5 text-red-700 dark:text-red-300">
+                                    <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                                    <span>Reason: {errorInfo.title}</span>
+                                  </div>
+                                  <p className="text-red-800/95 dark:text-red-300/90 font-mono text-[11px] leading-relaxed break-words pl-5">
+                                    {errorInfo.detail}
+                                  </p>
+                                  {errorInfo.suggestion && (
+                                    <p className="text-red-700 dark:text-red-400 font-sans text-[11px] pl-5 italic">
+                                      💡 <span className="font-medium">Suggestion:</span> {errorInfo.suggestion}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+
+                              {task &&
+                                (task.status === "pending" ||
+                                  task.status === "processing") && (
+                                  <Progress
+                                    value={task.status === "processing" ? 50 : 25}
+                                    className="w-full h-1.5 mt-2"
+                                  />
+                                )}
+                            </div>
+                          );
+                        })}
+                    </div>
+
+                    {/* Action Button */}
+                    {isFinished ? (
+                      <Button
+                        onClick={() => onComplete?.()}
+                        className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+                      >
+                        <Check className="mr-2 h-4 w-4" />
+                        {hasErrors ? "Close & View Documents" : "Done & View Documents"}
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={handleProcessClick}
+                        disabled={
+                          isLoading ||
+                          files.filter(
+                            (f) =>
+                              f.status === "uploaded" || f.status === "processing"
+                          ).length === 0
+                        }
+                        className="w-full"
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Processing Documents...
+                          </>
+                        ) : (
+                          <>
+                            <Settings className="mr-2 h-4 w-4" />
+                            Process Documents
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </>
-                ) : (
-                  <>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Process
-                  </>
-                )}
-              </Button>
+                );
+              })()}
             </div>
           </Card>
         </TabsContent>
