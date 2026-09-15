@@ -49,10 +49,10 @@ Akvo RAG runs as an **8-container monorepo** communicating over a private Docker
                 │ Redis RPUSH/BLPOP    │                      │ S3 API
                 ▼                      ▼                      ▼
 ┌─────────────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐
-│ vector-kb-mcp           │  │ redis  :6379     │  │ minio  :9000 / :9001     │
+│ mcp-vector-kb-query     │  │ redis  :6379     │  │ minio  :9000 / :9001     │
 │  (Query Worker RPC)     │  │ (RPC queues,     │  │ (S3 document storage,    │
 ├─────────────────────────┤  │  async ingestion │  │  bucket: documents/)     │
-│ vector-kb-mcp-ingestion │  │  queues)         │  └──────────────────────────┘
+│ mcp-vector-kb-ingestion │  │  queues)         │  └──────────────────────────┘
 │  (Ingest Worker RPC)    │  └──────────────────┘
 └───────────┬─────────────┘
             │ asyncpg           │ asyncpg
@@ -65,7 +65,7 @@ Akvo RAG runs as an **8-container monorepo** communicating over a private Docker
             │ HTTP :8000 (internal)
             ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│   chromadb  (ChromaDB vector store WAL mode) [Host: 8001 → Container: 8000] │
+│   mcp-chromadb  (ChromaDB vector store WAL mode) [Host: 8001 → Cont: 8000]  │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -73,11 +73,11 @@ Akvo RAG runs as an **8-container monorepo** communicating over a private Docker
 |---|---|---|---|
 | `frontend` | Next.js 14 build | `:3000` | Web UI |
 | `backend` | Python FastAPI | `:8000` | Core API + RAG graph dispatcher |
-| `vector-kb-mcp` | `vector-kb-mcp/` | internal | Vector KB Query Worker (`WORKER_MODE=query`) — fast sub-5ms chat vector RPC |
-| `vector-kb-mcp-ingestion` | `vector-kb-mcp/` | internal | Vector KB Ingestion Worker (`WORKER_MODE=ingest`) — background document embedding & chunking |
+| `mcp-vector-kb-query` | `vector-kb-mcp/` | internal | Vector KB Query Worker (`WORKER_MODE=query`) — fast sub-5ms chat vector RPC |
+| `mcp-vector-kb-ingestion` | `vector-kb-mcp/` | internal | Vector KB Ingestion Worker (`WORKER_MODE=ingest`) — background document embedding & chunking |
 | `postgres` | `postgres:17-alpine` | `:5432` | Unified relational store |
 | `redis` | `redis:7-alpine` | `:6379` | MCP RPC queues + async ingestion |
-| `chromadb` | `chromadb/chroma:1.5.9` | `:8001` → `:8000` | Vector embeddings (SQLite WAL mode) |
+| `mcp-chromadb` | `chromadb/chroma:1.5.9` | `:8001` → `:8000` | Vector embeddings (SQLite WAL mode) |
 | `minio` | MinIO RELEASE | `:9000` / `:9001` | S3 document storage |
 
 ---
@@ -241,7 +241,7 @@ docker exec akvo-rag-backend-1 flake8 app/ mcp_clients/
 cd vector-kb-mcp && ./test.sh
 
 # Or directly via docker exec
-docker exec akvo-rag-vector-kb-mcp-1 pytest tests/ -v
+docker exec akvo-rag-mcp-vector-kb-query-1 pytest tests/ -v
 ```
 
 ### Frontend Lint & Build

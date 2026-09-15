@@ -145,7 +145,7 @@ Migrations managed with Alembic — **two independent migration chains**:
 
 - **Auto-run**: Each service runs `alembic upgrade head` on container startup
 - **Manual (backend)**: `docker exec akvo-rag-backend-1 alembic upgrade head`
-- **Manual (vector-kb-mcp)**: `docker exec akvo-rag-vector-kb-mcp-1 alembic upgrade head`
+- **Manual (vector-kb-mcp)**: `docker exec akvo-rag-mcp-vector-kb-query-1 alembic upgrade head`
 
 ### API Structure
 
@@ -195,12 +195,12 @@ After starting services:
 
 ## Common Issues
 
-- **MCP/vector-kb-mcp Timeout**: Check Redis queue depth: `docker exec akvo-rag-redis-1 redis-cli llen mcp:vector:requests`. Restart: `docker compose restart vector-kb-mcp`
-- **Document stuck in PROCESSING**: Vector-kb-mcp logs (`docker compose logs vector-kb-mcp`) will show the ingestion error. Force-reset via psql: `UPDATE vkb_documents SET status='FAILED' WHERE status='PROCESSING';`
+- **MCP/vector-kb-mcp Timeout**: Check Redis queue depth: `docker exec akvo-rag-redis-1 redis-cli llen mcp:vector:requests`. Restart: `docker compose restart mcp-vector-kb-query`
+- **Document stuck in PROCESSING**: Vector-kb-mcp logs (`docker compose logs mcp-vector-kb-ingestion`) will show the ingestion error. Force-reset via psql: `UPDATE vkb_documents SET status='FAILED' WHERE status='PROCESSING';`
 - **Ollama in Docker**: Use `host.docker.internal` instead of `localhost` (macOS/Windows) for `OLLAMA_API_BASE`
 - **RAG Evaluation Cleanup**: Always use `./rag-evaluate-stop` or Ctrl-C to prevent 1-2GB Docker artifact accumulation per session
 - **Playwright Dependencies**: After container restarts, E2E tests may fail. Run `./run_e2e_tests_headless_container.sh` which auto-installs missing dependencies
-- **ChromaDB Permission Error**: `docker compose down chromadb && docker volume rm akvo-rag_chromadb_data && docker compose up -d chromadb` then re-ingest documents
+- **ChromaDB Permission Error**: `docker compose down mcp-chromadb && docker volume rm akvo-rag_chromadb_data && docker compose up -d mcp-chromadb` then re-ingest documents
 
 ## Contributing
 

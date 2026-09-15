@@ -102,7 +102,7 @@ class RagChatUtil:
             )
             return False
 
-        login_url = f"{self.base_url}/api/auth/token"
+        login_url = f"{self.base_url}/api/v1/auth/token"
         payload = {"username": self.username, "password": self.password}
 
         logger.info(f"Attempting login to: {login_url}")
@@ -119,7 +119,7 @@ class RagChatUtil:
                 token_data = response.json()
                 self.token = token_data.get("access_token")
                 logger.info(
-                    f"✅ Login successful - token received: {'***' if self.token_data else 'None'}"  # noqa
+                    f"✅ Login successful - token received: {'***' if self.token else 'None'}"  # noqa
                 )
                 self._log("login", {}, {"status": "success"})
                 return True
@@ -154,7 +154,7 @@ class RagChatUtil:
 
         headers = {"Authorization": f"Bearer {self.token}"}
 
-        kb_url = f"{self.base_url}/api/knowledge-base"
+        kb_url = f"{self.base_url}/api/v1/knowledge-bases"
 
         self._log("get_knowledge_bases", {}, "Getting knowledge bases")
 
@@ -345,7 +345,7 @@ class RagChatUtil:
             "Content-Type": "application/json",
         }
 
-        chat_url = f"{self.base_url}/api/chat"
+        chat_url = f"{self.base_url}/api/v1/chat"
 
         # TODO:: Fix knowledge base IDs payload, sent as list
         payload = {
@@ -404,7 +404,7 @@ class RagChatUtil:
             "Accept": "text/event-stream",
         }
 
-        message_url = f"{self.base_url}/api/chat/{chat_id}/messages"
+        message_url = f"{self.base_url}/api/v1/chat/{chat_id}/messages"
 
         payload = {"messages": [{"role": "user", "content": message}]}
 

@@ -38,9 +38,9 @@ services:
       - akvo_rag_net
     restart: unless-stopped
 
-  chromadb:
+  mcp-chromadb:
     image: chromadb/chroma:1.5.9
-    container_name: akvo-rag-chromadb-1
+    container_name: akvo-rag-mcp-chromadb-1
     ports:
       - "${CHROMA_HOST_PORT:-8001}:8000"
     environment:
@@ -81,18 +81,18 @@ services:
       - akvo_rag_net
     restart: unless-stopped
 
-  vector-kb-mcp:
+  mcp-vector-kb-query:
     build:
       context: ./vector-kb-mcp
       dockerfile: Dockerfile
-    container_name: akvo-rag-vector-kb-mcp-1
+    container_name: akvo-rag-mcp-vector-kb-query-1
     volumes:
       - ./vector-kb-mcp:/app:delegated
     environment:
       - WORKER_MODE=query
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-akvo_rag}
-      - CHROMA_HOST=chromadb
+      - CHROMA_HOST=mcp-chromadb
       - CHROMA_PORT=8000
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
@@ -103,7 +103,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      chromadb:
+      mcp-chromadb:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -111,18 +111,18 @@ services:
       - akvo_rag_net
     restart: unless-stopped
 
-  vector-kb-mcp-ingestion:
+  mcp-vector-kb-ingestion:
     build:
       context: ./vector-kb-mcp
       dockerfile: Dockerfile
-    container_name: akvo-rag-vector-kb-mcp-ingestion-1
+    container_name: akvo-rag-mcp-vector-kb-ingestion-1
     volumes:
       - ./vector-kb-mcp:/app:delegated
     environment:
       - WORKER_MODE=ingest
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-akvo_rag}
-      - CHROMA_HOST=chromadb
+      - CHROMA_HOST=mcp-chromadb
       - CHROMA_PORT=8000
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
@@ -133,7 +133,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      chromadb:
+      mcp-chromadb:
         condition: service_healthy
       minio:
         condition: service_healthy

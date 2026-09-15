@@ -14,7 +14,7 @@ async def test_config_defaults():
     assert settings.REQUEST_QUEUE == "mcp:vector:requests"
     assert settings.RESPONSE_PREFIX == "mcp:vector:responses"
     assert settings.RESPONSE_TTL_SECONDS == 60
-    assert settings.CHROMA_HOST == "chromadb"
+    assert settings.CHROMA_HOST == "mcp-chromadb"
     assert settings.DEFAULT_EMBEDDING_MODEL == "text-embedding-3-small"
 
 

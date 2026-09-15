@@ -47,7 +47,7 @@ If tables are missing, run migrations manually:
 docker exec akvo-rag-backend-1 alembic upgrade head
 
 # Vector KB schema
-docker exec akvo-rag-vector-kb-mcp-1 alembic upgrade head
+docker exec akvo-rag-mcp-vector-kb-query-1 alembic upgrade head
 ```
 
 ### 1.2 Connection Refused
@@ -69,7 +69,7 @@ docker compose restart postgres
 Wait 10 seconds, then restart dependent services:
 
 ```bash
-docker compose restart backend vector-kb-mcp
+docker compose restart backend mcp-vector-kb-query
 ```
 
 ### 1.3 Migration Conflict Between Services
@@ -81,7 +81,7 @@ The two migration chains (`alembic_version` for backend, `alembic_version_vkb` f
 ```bash
 # Verify each service manages its own table only
 docker exec akvo-rag-backend-1 alembic current
-docker exec akvo-rag-vector-kb-mcp-1 alembic current
+docker exec akvo-rag-mcp-vector-kb-query-1 alembic current
 ```
 
 ---
@@ -143,10 +143,10 @@ docker compose restart backend vector-kb-mcp
 docker compose logs chromadb --tail=30
 
 # Restart with fresh volume (WARNING: deletes all vectors — re-ingest required)
-docker compose stop chromadb
-docker compose rm -f chromadb
-docker volume rm akvo-rag_chromadb_data   # adjust volume name to match your compose project
-docker compose up -d chromadb
+docker compose stop mcp-chromadb
+docker compose rm -f mcp-chromadb
+docker volume rm akvo-rag_chroma_data   # adjust volume name to match your compose project
+docker compose up -d mcp-chromadb
 ```
 
 After volume reset, re-ingest all documents through the Admin UI or via the `ingest_document` API.
@@ -155,7 +155,7 @@ After volume reset, re-ingest all documents through the Admin UI or via the `ing
 
 ```bash
 # Test ChromaDB health from vector-kb-mcp container
-docker exec akvo-rag-vector-kb-mcp-1 curl -s http://chromadb:8000/api/v1/heartbeat
+docker exec akvo-rag-mcp-vector-kb-query-1 curl -s http://mcp-chromadb:8000/api/v1/heartbeat
 
 # Should return: {"nanosecond heartbeat": <timestamp>}
 ```
@@ -244,12 +244,12 @@ If documents show `FAILED` status — check vector-kb-mcp logs and retry ingesti
 
 ```bash
 # Check both query and ingestion workers are running
-docker compose ps vector-kb-mcp vector-kb-mcp-ingestion
-docker compose logs vector-kb-mcp --tail=30
-docker compose logs vector-kb-mcp-ingestion --tail=30
+docker compose ps mcp-vector-kb-query mcp-vector-kb-ingestion
+docker compose logs mcp-vector-kb-query --tail=30
+docker compose logs mcp-vector-kb-ingestion --tail=30
 
 # Test Redis connectivity from the worker container
-docker exec akvo-rag-vector-kb-mcp-1 redis-cli -h redis ping
+docker exec akvo-rag-mcp-vector-kb-query-1 redis-cli -h redis ping
 ```
 
 If logs show `ConnectionRefusedError` to Redis, restart services in order:
@@ -257,7 +257,7 @@ If logs show `ConnectionRefusedError` to Redis, restart services in order:
 ```bash
 docker compose restart redis
 sleep 5
-docker compose restart vector-kb-mcp vector-kb-mcp-ingestion
+docker compose restart mcp-vector-kb-query mcp-vector-kb-ingestion
 ```
 
 ### 6.2 Document Processing Stuck in PROCESSING

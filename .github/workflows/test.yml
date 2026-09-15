@@ -53,7 +53,7 @@ jobs:
         run: ./backend/test.sh
 
       - name: Run vector-kb-mcp tests
-        run: docker exec akvo-rag-vector-kb-mcp-1 pytest tests/ -v
+        run: docker exec akvo-rag-mcp-vector-kb-query-1 pytest tests/ -v
 
       - name: Show logs if failure
         if: failure()

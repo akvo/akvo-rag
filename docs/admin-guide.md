@@ -211,8 +211,8 @@ docker exec akvo-rag-backend-1 alembic current
 docker exec akvo-rag-backend-1 alembic history
 
 # Vector KB schema (alembic_version_vkb)
-docker exec akvo-rag-vector-kb-mcp-1 alembic current
-docker exec akvo-rag-vector-kb-mcp-1 alembic history
+docker exec akvo-rag-mcp-vector-kb-query-1 alembic current
+docker exec akvo-rag-mcp-vector-kb-query-1 alembic history
 ```
 
 ### 6.3 Direct Database Access
