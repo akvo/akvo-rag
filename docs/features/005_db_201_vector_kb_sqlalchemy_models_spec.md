@@ -1,12 +1,12 @@
 # Feature Specification: Vector-KB SQLAlchemy 2.0 Models
 
-> **Feature ID:** `005_db_201_vector_kb_sqlalchemy_models_spec`  
-> **Task Ref:** `TASK-DB-201`  
-> **Target Branch:** `epic/rag-monorepo-mcp`  
-> **Status:** `PROPOSED (Under Review)`  
-> **Estimated Effort:** `1.5 hrs (Vibe-Coding) / 1.0 day (Traditional)`  
-> **Author:** Antigravity Architect / Database & Backend Specialist  
-> **Source Repository:** `vector-knowledge-base-mcp-server` (`/Users/galihpratama/Sites/vector-knowledge-base-mcp-server`)  
+> **Feature ID:** `005_db_201_vector_kb_sqlalchemy_models_spec`
+> **Task Ref:** `TASK-DB-201`
+> **Target Branch:** `epic/rag-monorepo-mcp`
+> **Status:** `[STATUS: IMPLEMENTED]`
+> **Estimated Effort:** `1.5 hrs (Vibe-Coding) / 1.0 day (Traditional)`
+> **Author:** Antigravity Architect / Database & Backend Specialist
+> **Source Repository:** `vector-knowledge-base-mcp-server` (`/Users/galihpratama/Sites/vector-knowledge-base-mcp-server`)
 > **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 6, 8, 9)
 
 ---
@@ -14,7 +14,7 @@
 ## 1. Overview & 5W1H Requirements Discovery
 
 ### 1.1 Problem Statement
-In the legacy `vector-knowledge-base-mcp-server` repository, SQLAlchemy models were written in legacy SQLAlchemy 1.4 syntax (`Column(...)`), contained MySQL-specific legacy types, and included Celery-specific fields (`celery_task_id`). 
+In the legacy `vector-knowledge-base-mcp-server` repository, SQLAlchemy models were written in legacy SQLAlchemy 1.4 syntax (`Column(...)`), contained MySQL-specific legacy types, and included Celery-specific fields (`celery_task_id`).
 
 For Option C monorepo consolidation, we are porting and modernizing these models into `vector-kb-mcp/models/` using **SQLAlchemy 2.0 typed syntax (`Mapped`, `mapped_column`)**, native **PostgreSQL 17 datatypes (`JSONB`, `TIMESTAMP with time zone`)**, and clean async relationship cascades.
 
@@ -342,8 +342,8 @@ __all__ = [
 
 ## 6. Definition of Done (DoD)
 
-- [ ] All models in `vector-kb-mcp/models/` use strict SQLAlchemy 2.0 `Mapped[...]` and `mapped_column(...)` syntax.
-- [ ] Celery-specific column `celery_task_id` is replaced by generic `task_id` (UUID).
-- [ ] PostgreSQL 17 native `JSONB` is used for chunk metadata.
-- [ ] Foreign key relationships enforce `ondelete="CASCADE"` for clean cleanup.
-- [ ] `test_models.py` executes and passes with 100% test coverage.
+- [x] All models in `vector-kb-mcp/models/` use strict SQLAlchemy 2.0 `Mapped[...]` and `mapped_column(...)` syntax.
+- [x] Celery-specific column `celery_task_id` is replaced by generic `task_id` (UUID).
+- [x] PostgreSQL 17 native `JSONB` is used for chunk metadata.
+- [x] Foreign key relationships enforce `ondelete="CASCADE"` for clean cleanup.
+- [x] `test_models.py` executes and passes with 100% test coverage.

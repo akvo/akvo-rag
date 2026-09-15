@@ -3,6 +3,7 @@ import logging
 from typing import Any, List, Optional
 from openai import AsyncOpenAI
 
+from core.guards import validate_embedding_dimension
 from .models import RetrievedChunk
 
 logger = logging.getLogger("vector-kb-mcp.retriever")
@@ -14,6 +15,7 @@ class ChromaRetriever:
         chroma_client: Any,
         openai_client: AsyncOpenAI,
         embedding_model: str = "text-embedding-3-small",
+        expected_dim: int = 1536,
     ):
         """
         Direct ChromaDB retriever for parallel multi-KB search.
@@ -22,18 +24,29 @@ class ChromaRetriever:
             chroma_client: Initialized chromadb ClientAPI instance.
             openai_client: AsyncOpenAI client instance.
             embedding_model: OpenAI embedding model name.
+            expected_dim: Expected embedding vector dimension (default: 1536).
         """
         self.chroma = chroma_client
         self.openai = openai_client
         self.embedding_model = embedding_model
+        self.expected_dim = expected_dim
 
     async def _embed_query(self, query: str) -> List[float]:
-        """Generate normalized embedding vector for the search query."""
+        """
+        Generate normalized embedding vector for the search query and
+        validate its dimensionality against the expected dimension guard.
+        """
         response = await self.openai.embeddings.create(
             input=[query],
             model=self.embedding_model,
         )
-        return response.data[0].embedding
+        raw_vector = response.data[0].embedding
+        return validate_embedding_dimension(
+            embedding=raw_vector,
+            expected_dim=self.expected_dim,
+            kb_id=0,
+            model=self.embedding_model,
+        )
 
     async def _query_single_collection(
         self,
@@ -81,11 +94,7 @@ class ChromaRetriever:
                 if results.get("distances")
                 else [0.0] * len(docs)
             )
-            ids = (
-                results["ids"][0]
-                if results.get("ids")
-                else [""] * len(docs)
-            )
+            ids = results["ids"][0] if results.get("ids") else [""] * len(docs)
 
             chunks: List[RetrievedChunk] = []
             for doc_text, meta, dist, cid in zip(docs, metas, distances, ids):

@@ -4,6 +4,38 @@ from unittest.mock import AsyncMock, MagicMock
 import fakeredis.aioredis
 import pytest
 import pytest_asyncio
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import sessionmaker
+
+from models import Base
+
+
+@pytest.fixture
+def db_session():
+    """
+    Create an isolated in-memory SQLite database session for unit testing.
+    Shared across all test modules.
+    """
+    engine = create_engine("sqlite:///:memory:", echo=False)
+
+    # Enable SQLite foreign key constraint enforcement
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    Base.metadata.create_all(engine)
+    TestingSessionLocal = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False
+    )
+    session = TestingSessionLocal()
+
+    try:
+        yield session
+    finally:
+        session.close()
+        Base.metadata.drop_all(engine)
 
 
 @dataclass

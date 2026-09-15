@@ -3,7 +3,7 @@
 > **Feature ID:** `007_db_203_service_owned_alembic_migrations_spec`  
 > **Task Ref:** `TASK-DB-203`  
 > **Target Branch:** `epic/rag-monorepo-mcp`  
-> **Status:** `PROPOSED (Under Review)`  
+> **Status:** `IMPLEMENTED`  
 > **Estimated Effort:** `1.5 hrs (Vibe-Coding) / 1.0 day (Traditional)`  
 > **Author:** Antigravity Architect / Database & DevOps Engineer  
 > **Source Repository:** `vector-knowledge-base-mcp-server` (`/Users/galihpratama/Sites/vector-knowledge-base-mcp-server`)  
@@ -348,7 +348,7 @@ def downgrade() -> None:
 
 ## 6. Definition of Done (DoD)
 
-- [ ] `alembic -c alembic.ini upgrade head` executes cleanly against PostgreSQL 17 without errors.
-- [ ] Version state is tracked in `alembic_version_vkb` without touching `alembic_version`.
-- [ ] Downgrade to base and re-upgrade to head executes without syntax or constraint failures.
-- [ ] GIN index `idx_vkb_doc_metadata_gin` and foreign key cascade rules are active in PostgreSQL 17.
+- [x] `alembic -c alembic.ini upgrade head` executes cleanly against PostgreSQL 17 without errors.
+- [x] Version state is tracked in `alembic_version_vkb` without touching `alembic_version`.
+- [x] Downgrade to base and re-upgrade to head executes without syntax or constraint failures.
+- [x] GIN index `idx_vkb_doc_metadata_gin` and foreign key cascade rules are active in PostgreSQL 17.
