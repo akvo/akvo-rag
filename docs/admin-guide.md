@@ -130,8 +130,16 @@ Host applications (e.g. AgriConnect, CoM) integrate with Akvo RAG via a tenant A
 
 ### 4.1 Registering an Application
 
+App registration requires super-admin privileges (`Authorization: Bearer <super_admin_jwt>`):
+
 ```bash
+# 1. Obtain super-admin JWT token
+ADMIN_TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/token \
+  -d "username=admin&password=your_admin_password" | jq -r .access_token)
+
+# 2. Register application
 curl -X POST http://localhost:8000/api/v1/apps/register \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "app_name": "AgriConnect",

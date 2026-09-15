@@ -116,3 +116,21 @@ def test_get_api_key_user_and_errors():
     )
     user = security.get_api_key_user(db=mock_db, api_key="sk-active")
     assert user == fake_user
+
+
+def test_get_current_active_superuser():
+    import pytest
+    from fastapi import HTTPException
+    from app.models.user import User
+
+    # 1. Superuser returns successfully
+    super_user = User(id=1, username="admin_user", is_active=True, is_superuser=True)
+    result = security.get_current_active_superuser(current_user=super_user)
+    assert result == super_user
+
+    # 2. Non-superuser raises 403 Forbidden
+    regular_user = User(id=2, username="regular_user", is_active=True, is_superuser=False)
+    with pytest.raises(HTTPException) as exc:
+        security.get_current_active_superuser(current_user=regular_user)
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "Superuser access required"

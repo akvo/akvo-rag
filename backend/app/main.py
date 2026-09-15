@@ -20,6 +20,7 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    swagger_ui_parameters={"persistAuthorization": True},
 )
 
 if settings.BACKEND_CORS_ORIGINS:

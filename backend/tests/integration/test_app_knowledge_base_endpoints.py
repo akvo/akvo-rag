@@ -17,9 +17,12 @@ def sample_app_data():
 
 
 @pytest.fixture
-def registered_app(client, sample_app_data):
+def registered_app(client, sample_app_data, admin_token):
     """Register an app and return credentials."""
-    response = client.post("/api/v1/apps/register", json=sample_app_data)
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    response = client.post(
+        "/api/v1/apps/register", json=sample_app_data, headers=headers
+    )
     assert response.status_code == 201
     return response.json()
 

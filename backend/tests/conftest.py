@@ -12,6 +12,8 @@ from app.core.config import settings
 from app.main import app
 from app.db.session import get_db
 from app.models.base import Base
+from app.models.user import User
+from app.core.security import get_password_hash
 from app.core.mcp_config import MCPConfig
 from mcp_clients.queue_dispatcher import MCPQueueDispatcher
 
@@ -129,3 +131,57 @@ async def async_client(db):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture
+def admin_user(db):
+    """Fixture for an active superuser."""
+    user = User(
+        id=1,
+        username="admin",
+        email="admin@example.com",
+        is_active=True,
+        is_superuser=True,
+    )
+    user.hashed_password = get_password_hash("adminpass")
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture
+def admin_token(db, client, admin_user):
+    """Fixture returning a valid JWT access token for an active superuser."""
+    res = client.post(
+        f"{API_PREFIX}/auth/token",
+        data={"username": admin_user.username, "password": "adminpass"},
+    )
+    return res.json().get("access_token")
+
+
+@pytest.fixture
+def regular_user(db):
+    """Fixture for an active non-superuser."""
+    user = User(
+        id=2,
+        username="regular_user",
+        email="user@example.com",
+        is_active=True,
+        is_superuser=False,
+    )
+    user.hashed_password = get_password_hash("userpass")
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture
+def user_token(db, client, regular_user):
+    """Fixture returning a valid JWT access token for a regular non-superuser."""
+    res = client.post(
+        f"{API_PREFIX}/auth/token",
+        data={"username": regular_user.username, "password": "userpass"},
+    )
+    return res.json().get("access_token")
