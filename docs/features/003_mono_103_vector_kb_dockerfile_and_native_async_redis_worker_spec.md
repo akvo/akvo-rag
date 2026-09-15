@@ -1,12 +1,12 @@
 # Feature Specification: Vector-KB Dockerfile & Native Async Redis Worker
 
-> **Feature ID:** `003_mono_103_vector_kb_dockerfile_and_native_async_redis_worker_spec`  
-> **Task Ref:** `TASK-MONO-103`  
-> **Target Branch:** `epic/rag-monorepo-mcp`  
-> **Status:** `PROPOSED (Under Review)`  
-> **Estimated Effort:** `2.0 hrs (Vibe-Coding) / 1.5 days (Traditional)`  
-> **Author:** Antigravity Architect / Systems & Cloud Engineer  
-> **Source Repository:** `vector-knowledge-base-mcp-server` (`/Users/galihpratama/Sites/vector-knowledge-base-mcp-server`)  
+> **Feature ID:** `003_mono_103_vector_kb_dockerfile_and_native_async_redis_worker_spec`
+> **Task Ref:** `TASK-MONO-103`
+> **Target Branch:** `epic/rag-monorepo-mcp`
+> **Status:** `IMPLEMENTED`
+> **Estimated Effort:** `2.0 hrs (Vibe-Coding) / 1.5 days (Traditional)`
+> **Author:** Antigravity Architect / Systems & Cloud Engineer
+> **Source Repository:** `vector-knowledge-base-mcp-server` (`/Users/galihpratama/Sites/vector-knowledge-base-mcp-server`)
 > **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 4, 8, 9)
 
 ---
@@ -50,7 +50,7 @@ sequenceDiagram
     Note over Backend, Worker: 1. Request Enqueue
     Backend->>Backend: Generate correlation_id = uuid4()
     Backend->>Redis: RPUSH mcp:vector:requests <br/>{ correlation_id, tool_name: "query_knowledge_base", arguments: { query, kb_ids, top_k } }
-    
+
     Note over Worker, Redis: 2. Worker Dequeue & Processing
     Redis->>Worker: BLPOP mcp:vector:requests 0
     Worker->>Worker: Parse JSON & validate tool_name in TOOL_HANDLERS
@@ -58,11 +58,11 @@ sequenceDiagram
     Retriever->>Chroma: Query Vector Collections
     Chroma-->>Retriever: Document Chunks
     Retriever-->>Worker: List[RetrievedChunk]
-    
+
     Note over Worker, Backend: 3. Reply via Dedicated Correlation Key
     Worker->>Redis: RPUSH mcp:vector:responses:{correlation_id} <br/>{ status: "ok", data: [...] }
     Worker->>Redis: EXPIRE mcp:vector:responses:{correlation_id} 60
-    
+
     Redis-->>Backend: BLPOP mcp:vector:responses:{correlation_id} 5s
     Backend->>Backend: Deserialize & continue LangGraph execution
 ```
@@ -76,11 +76,11 @@ flowchart TD
     JSONCheck -- "Yes" --> ToolCheck{"Tool registered in TOOL_HANDLERS?"}
     ToolCheck -- "No" --> ErrTool["Reply status: error, message: 'Unknown tool: ...'"]
     ToolCheck -- "Yes" --> Exec["Execute Async Handler"]
-    
+
     Exec --> Success{"Execution Succeeded?"}
     Success -- "Yes" --> ReplyOK["RPUSH mcp:vector:responses:id with status: 'ok', data: result"]
     Success -- "No" --> ReplyErr["RPUSH mcp:vector:responses:id with status: 'error', error: str(exc)"]
-    
+
     ReplyOK --> SetTTL["EXPIRE mcp:vector:responses:id 60s"]
     ReplyErr --> SetTTL
 ```
@@ -203,7 +203,7 @@ class VectorMCPWorker:
 
     async def initialize(self):
         logger.info("Initializing vector-kb-mcp worker...")
-        
+
         # 1. Initialize Redis connection
         self.redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
         await self.redis_client.ping()
@@ -391,7 +391,7 @@ if __name__ == "__main__":
 
 ## 6. Definition of Done (DoD)
 
-- [ ] `vector-kb-mcp/Dockerfile` builds cleanly with zero errors.
-- [ ] `vector-kb-mcp/main.py` starts, connects to Redis and ChromaDB, and listens on `mcp:vector:requests`.
-- [ ] Enqueuing a request to `mcp:vector:requests` returns a formatted response on `mcp:vector:responses:{correlation_id}` in $< 5\text{ms}$ (excluding OpenAI embed compute).
-- [ ] Container handles `docker stop` (SIGTERM) gracefully within 5 seconds without dropping in-flight requests.
+- [x] `vector-kb-mcp/Dockerfile` builds cleanly with zero errors.
+- [x] `vector-kb-mcp/main.py` starts, connects to Redis and ChromaDB, and listens on `mcp:vector:requests`.
+- [x] Enqueuing a request to `mcp:vector:requests` returns a formatted response on `mcp:vector:responses:{correlation_id}` in $< 5\text{ms}$ (excluding OpenAI embed compute).
+- [x] Container handles `docker stop` (SIGTERM) gracefully within 5 seconds without dropping in-flight requests.

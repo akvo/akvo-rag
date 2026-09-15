@@ -1,169 +1,169 @@
 services:
-  backend:
-    build: ./backend
-    env_file:
-      - .env
-    volumes:
-      - ./backend:/app
-      - ./uploads:/app/uploads
-      - upload_data:/mnt/uploads
-    networks:
-      - app_network
-    depends_on:
-      - db
-      - rabbitmq
-    restart: on-failure
-    deploy:
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-
-  celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.celery
-    env_file:
-      - .env
-    environment:
-      - CELERY_MODE=worker
-    volumes:
-      - ./backend:/app
-      - upload_data:/mnt/uploads
-    depends_on:
-      - rabbitmq
-      - backend
-    networks:
-      - app_network
-    restart: on-failure
-    deploy:
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-
-  celery_beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.celery
-    env_file:
-      - .env
-    environment:
-      - CELERY_MODE=beat
-    volumes:
-      - ./backend:/app
-      - upload_data:/mnt/uploads
-    depends_on:
-      - rabbitmq
-      - backend
-      - celery_worker
-    networks:
-      - app_network
-    restart: on-failure
-    deploy:
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-
-  flower:
-    image: mher/flower
-    env_file:
-      - .env
-    command: >
-      celery
-        --broker=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@${RABBITMQ_HOST}:${RABBITMQ_PORT}//
-        --result-backend=rpc://
-        flower
-        --port=${FLOWER_PORT:-5555}
-        --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
+  postgres:
+    image: postgres:17-alpine
+    container_name: akvo-rag-postgres-1
     ports:
-      - "${FLOWER_PORT:-5555}:5555"
-    depends_on:
-      - celery_worker
-      - rabbitmq
-    networks:
-      - app_network
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  rabbitmq:
-    image: rabbitmq:3-management
+      - "${POSTGRES_PORT:-5432}:5432"
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-rabbitmq}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-rabbitmq}
-    ports:
-      - "5672:5672"
-      - "15672:15672"  # management console
-    networks:
-      - app_network
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  frontend:
-    build: ./frontend
+      POSTGRES_DB: ${POSTGRES_DB:-akvo_rag}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    networks:
-      - app_network
-
-  db:
-    image: mysql:8.0
-    command: --default-authentication-plugin=mysql_native_password
-    environment:
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_DATABASE=ragwebui
-      - MYSQL_USER=ragwebui
-      - MYSQL_PASSWORD=ragwebui
-      - TZ=Asia/Shanghai
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    networks:
-      - app_network
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test:
-        [
-          "CMD",
-          "mysqladmin",
-          "ping",
-          "-h",
-          "localhost",
-          "-u",
-          "$$MYSQL_USER",
-          "--password=$$MYSQL_PASSWORD",
-        ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-akvo_rag}"]
       interval: 5s
       timeout: 5s
       retries: 5
-      start_period: 10s
-
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - frontend
-      - backend
+      start_period: 5s
     networks:
-      - app_network
+      - akvo_rag_net
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: akvo-rag-redis-1
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy noeviction
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+    networks:
+      - akvo_rag_net
+    restart: unless-stopped
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: akvo-rag-chromadb-1
+    ports:
+      - "${CHROMA_HOST_PORT:-8001}:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=FALSE
+    volumes:
+      - chroma_data:/chroma/chroma
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c \"exec 3<>/dev/tcp/127.0.0.1/8000 && echo -e 'GET /api/v2/heartbeat HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q '200 OK'\""]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - akvo_rag_net
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: akvo-rag-minio-1
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - akvo_rag_net
+    restart: unless-stopped
+
+  vector-kb-mcp:
+    build:
+      context: ./vector-kb-mcp
+      dockerfile: Dockerfile
+    container_name: akvo-rag-vector-kb-mcp-1
+    volumes:
+      - ./vector-kb-mcp:/app:delegated
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-akvo_rag}
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - akvo_rag_net
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: akvo-rag-backend-1
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app:delegated
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-akvo_rag}
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - MCP_CONFIG_PATH=/app/mcp_config.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - akvo_rag_net
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: akvo-rag-frontend-1
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:${BACKEND_PORT:-8000}
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - akvo_rag_net
+    restart: unless-stopped
 
 volumes:
-  mysql_data:
-  upload_data:
+  postgres_data:
+  redis_data:
+  chroma_data:
+  minio_data:
 
 networks:
-  app_network:
+  akvo_rag_net:
     driver: bridge

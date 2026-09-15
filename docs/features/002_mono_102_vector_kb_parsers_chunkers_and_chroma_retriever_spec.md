@@ -1,12 +1,12 @@
 # Feature Specification: Vector-KB Parsers, Chunkers & Chroma Retriever
 
-> **Feature ID:** `002_mono_102_vector_kb_parsers_chunkers_and_chroma_retriever_spec`  
-> **Task Ref:** `TASK-MONO-102`  
-> **Target Branch:** `epic/rag-monorepo-mcp`  
-> **Status:** `PROPOSED (Under Review)`  
-> **Estimated Effort:** `2.5 hrs (Vibe-Coding) / 2.0 days (Traditional)`  
-> **Author:** Antigravity Architect / AI Infrastructure Engineer  
-> **Source Repository:** `vector-knowledge-base-mcp-server` (`/Users/galihpratama/Sites/vector-knowledge-base-mcp-server`)  
+> **Feature ID:** `002_mono_102_vector_kb_parsers_chunkers_and_chroma_retriever_spec`
+> **Task Ref:** `TASK-MONO-102`
+> **Target Branch:** `epic/rag-monorepo-mcp`
+> **Status:** `IMPLEMENTED`
+> **Estimated Effort:** `2.5 hrs (Vibe-Coding) / 2.0 days (Traditional)`
+> **Author:** Antigravity Architect / AI Infrastructure Engineer
+> **Source Repository:** `vector-knowledge-base-mcp-server` (`/Users/galihpratama/Sites/vector-knowledge-base-mcp-server`)
 > **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 5, 8, 9)
 
 ---
@@ -87,10 +87,10 @@ sequenceDiagram
 
     Note over Caller, Chroma: Multi-KB Parallel Semantic Search Flow
     Caller->>Retriever: search(query="Avocado disease", kb_ids=[1, 2], top_k=4)
-    
+
     Retriever->>OpenAI: embeddings.create(input=[query], model="text-embedding-3-small")
     OpenAI-->>Retriever: 1536-dimensional query vector
-    
+
     par Query Collection kb_1
         Retriever->>Chroma: collection("kb_1").query(query_embeddings, n_results=4)
         Chroma-->>Retriever: Matches with cosine distance scores
@@ -98,7 +98,7 @@ sequenceDiagram
         Retriever->>Chroma: collection("kb_2").query(query_embeddings, n_results=4)
         Chroma-->>Retriever: Matches with cosine distance scores
     end
-    
+
     Retriever->>Retriever: Flatten, re-rank by score (desc), apply score_threshold & top_k limit
     Retriever-->>Caller: List[RetrievedChunk] (Clean DTOs with metadata)
 ```
@@ -203,27 +203,27 @@ class TextChunker:
     def chunk_document(self, doc: ParsedDocument, kb_id: int) -> List[DocumentChunkDTO]:
         chunks: List[DocumentChunkDTO] = []
         chunk_idx = 0
-        
+
         for page in doc.pages:
             splits = self.splitter.split_text(page.text)
             for split_text in splits:
                 if not split_text.strip():
                     continue
-                
+
                 meta = {
                     **page.metadata,
                     "page_number": page.page_number,
                     "file_name": doc.file_name,
                     "kb_id": kb_id
                 }
-                
+
                 chunk_hash, chunk_id = generate_chunk_id(
                     kb_id=kb_id,
                     file_name=doc.file_name,
                     chunk_content=split_text,
                     chunk_metadata=meta
                 )
-                
+
                 chunks.append(DocumentChunkDTO(
                     chunk_id=chunk_id,
                     chunk_index=chunk_idx,
@@ -233,7 +233,7 @@ class TextChunker:
                     metadata=meta
                 ))
                 chunk_idx += 1
-                
+
         return chunks
 ```
 
@@ -294,11 +294,11 @@ class ChromaRetriever:
                 n_results=top_k,
                 include=["documents", "metadatas", "distances"]
             )
-            
+
             chunks: List[RetrievedChunk] = []
             if not results or not results["documents"] or not results["documents"][0]:
                 return []
-                
+
             docs = results["documents"][0]
             metas = results["metadatas"][0] if results["metadatas"] else [{}] * len(docs)
             distances = results["distances"][0] if results["distances"] else [0.0] * len(docs)
@@ -421,8 +421,8 @@ fakeredis>=2.23.0
 
 ## 6. Definition of Done (DoD)
 
-- [ ] `vector-kb-mcp/parser/` cleanly parses PDF, DOCX, and TXT files without FastMCP dependencies.
-- [ ] `vector-kb-mcp/chunker/` splits text deterministically with metadata preservation (page numbers, filename, KB ID).
-- [ ] `vector-kb-mcp/retriever/ChromaRetriever` performs parallel multi-KB similarity searches with zero Base64 wrappers.
-- [ ] `vector-kb-mcp/requirements.txt` contains clean, pinned dependencies with no conflicts.
-- [ ] Code complies with `mypy --strict` type annotations.
+- [x] `vector-kb-mcp/parser/` cleanly parses PDF, DOCX, and TXT files without FastMCP dependencies.
+- [x] `vector-kb-mcp/chunker/` splits text deterministically with metadata preservation (page numbers, filename, KB ID).
+- [x] `vector-kb-mcp/retriever/ChromaRetriever` performs parallel multi-KB similarity searches with zero Base64 wrappers.
+- [x] `vector-kb-mcp/requirements.txt` contains clean, pinned dependencies with no conflicts.
+- [x] Code complies with `mypy --strict` type annotations.

@@ -1,11 +1,11 @@
 # Feature Specification: Unified Docker Compose & Local Infrastructure
 
-> **Feature ID:** `001_mono_101_unified_docker_compose_and_local_infrastructure_spec`  
-> **Task Ref:** `TASK-MONO-101`  
-> **Target Branch:** `epic/rag-monorepo-mcp`  
-> **Status:** `PROPOSED (Under Review)`  
-> **Estimated Effort:** `2.0 hrs (Vibe-Coding) / 1.5 days (Traditional)`  
-> **Author:** Antigravity Architect / Senior Platform Engineer  
+> **Feature ID:** `001_mono_101_unified_docker_compose_and_local_infrastructure_spec`
+> **Task Ref:** `TASK-MONO-101`
+> **Target Branch:** `phase-1/107-rag-improvement-d8-phase-1-environment-orchestration-monorepo-setup-vector-microservice`
+> **Status:** `IMPLEMENTED`
+> **Estimated Effort:** `2 hrs (Vibe-Coding) / 2 days (Traditional)`
+> **Author:** Antigravity Architect / Senior Platform Engineer
 > **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 3, 8, 9)
 
 ---
@@ -46,7 +46,7 @@ graph TD
         Frontend["frontend (:3000)<br/>Next.js 14 App"]
         Backend["backend (:8000)<br/>FastAPI Core Gateway"]
         VectorMCP["vector-kb-mcp (internal)<br/>Redis Worker & Retriever"]
-        
+
         subgraph Datastores["Core Infrastructure Services"]
             PG[("postgres:17-alpine<br/>:5432 (akvo_rag)")]
             Redis[("redis:7-alpine<br/>:6379 (Queues & RPC)")]
@@ -63,7 +63,7 @@ graph TD
     Backend --> PG
     Backend --> Redis
     Backend --> MinIO
-    
+
     VectorMCP --> Redis
     VectorMCP --> PG
     VectorMCP --> Chroma
@@ -86,7 +86,7 @@ sequenceDiagram
     participant Frontend as "frontend (Next.js)"
 
     Dev->>Compose: docker compose up -d
-    
+
     par Launch Foundation Datastores
         Compose->>PG: Boot Container (Port 5432)
         Compose->>Redis: Boot Container (Port 6379)
@@ -106,7 +106,7 @@ sequenceDiagram
     end
 
     Note over Compose, Vector: Datastores Healthy -> Launch Dependent Services
-    
+
     par Launch Application Services
         Compose->>Vector: Boot vector-kb-mcp (depends_on: { postgres, redis, chroma, minio })
         Compose->>Backend: Boot backend (depends_on: { postgres, redis, minio })
@@ -164,7 +164,7 @@ sequenceDiagram
 * **Healthcheck:**
   ```yaml
   healthcheck:
-    test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"]
+    test: ["CMD-SHELL", "bash -c \"exec 3<>/dev/tcp/127.0.0.1/8000 && echo -e 'GET /api/v2/heartbeat HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q '200 OK'\""]
     interval: 5s
     timeout: 5s
     retries: 5
@@ -352,16 +352,16 @@ docker compose down -v
 
 | Subtask ID | Description | Touchpoints | Vibe Est. | Trad. Est. | Confidence |
 |---|---|---|:---:|:---:|:---:|
-| `SUB-101.1` | Author unified `docker-compose.yml` with 7 containers, healthchecks, volumes, and network aliases | `docker-compose.yml` `[OVERWRITE]` | 1.0 hr | 0.8 day | High (95%) |
-| `SUB-101.2` | Update and standardize `.env.example` with zero-credential placeholders | `.env.example` `[MODIFY]` | 0.3 hr | 0.2 day | High (99%) |
-| `SUB-101.3` | Test startup, healthcheck transitions, and datastore connectivity | CLI / Docker daemon | 0.7 hr | 0.5 day | High (95%) |
-| **TOTAL** | | | **2.0 hrs** | **1.5 days** | **High** |
+| `SUB-101.1` | Author unified `docker-compose.yml` with 7 containers, healthchecks, volumes, and network aliases | `docker-compose.yml` `[OVERWRITE]` | 1 hr | 1 day | High (95%) |
+| `SUB-101.2` | Update and standardize `.env.example` with zero-credential placeholders | `.env.example` `[MODIFY]` | 1 hr | 1 day | High (99%) |
+| `SUB-101.3` | Test startup, healthcheck transitions, and datastore connectivity | CLI / Docker daemon | 1 hr | 1 day | High (95%) |
+| **TOTAL** | | | **2 hrs** | **2 days** | **High** |
 
 ---
 
 ## 8. Definition of Done (DoD)
 
-- [ ] `docker-compose.yml` passes `docker compose config` with zero warnings.
-- [ ] Executing `docker compose up -d postgres redis chromadb minio` brings all 4 datastores to a `healthy` state in $< 30\text{s}$.
-- [ ] Named volumes persist data across container restarts.
-- [ ] `.env.example` is complete and contains zero sensitive credentials or machine-specific paths.
+- [x] `docker-compose.yml` passes `docker compose config` with zero warnings.
+- [x] Executing `docker compose up -d postgres redis chromadb minio` brings all 4 datastores to a `healthy` state in $< 30\text{s}$.
+- [x] Named volumes persist data across container restarts.
+- [x] `.env.example` is complete and contains zero sensitive credentials or machine-specific paths.
