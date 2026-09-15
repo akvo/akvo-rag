@@ -96,10 +96,24 @@ class ChromaRetriever:
             )
             ids = results["ids"][0] if results.get("ids") else [""] * len(docs)
 
+            coll_meta = getattr(collection, "metadata", None) or {}
+            if not isinstance(coll_meta, dict):
+                coll_meta = {}
+            space = coll_meta.get("hnsw:space", "l2")
+
             chunks: List[RetrievedChunk] = []
             for doc_text, meta, dist, cid in zip(docs, metas, distances, ids):
-                # Cosine distance to cosine similarity score: 1.0 - distance
-                similarity_score = round(1.0 - float(dist), 4)
+                d = float(dist)
+                if space == "cosine":
+                    similarity_score = round(max(0.0, min(1.0, 1.0 - d)), 4)
+                elif space == "ip":
+                    similarity_score = round(max(0.0, min(1.0, d)), 4)
+                else:
+                    # L2 metric: d = 2 - 2*cos(theta) => cos(theta) = 1 - d/2
+                    similarity_score = round(
+                        max(0.0, min(1.0, 1.0 - (d / 2.0))), 4
+                    )
+
                 meta_dict = meta if isinstance(meta, dict) else {}
 
                 chunks.append(
@@ -166,3 +180,72 @@ class ChromaRetriever:
 
         # 6. Return top_k highest scoring chunks
         return all_chunks[:top_k]
+
+    async def embed_texts(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generate embedding vectors for a batch of text chunks.
+        """
+        if not texts:
+            return []
+        response = await self.openai.embeddings.create(
+            input=texts,
+            model=self.embedding_model,
+        )
+        return [
+            validate_embedding_dimension(
+                embedding=item.embedding,
+                expected_dim=self.expected_dim,
+                kb_id=0,
+                model=self.embedding_model,
+            )
+            for item in response.data
+        ]
+
+    async def upsert_collection_chunks(
+        self,
+        collection_name: str,
+        ids: List[str],
+        embeddings: List[List[float]],
+        documents: List[str],
+        metadatas: List[dict],
+    ) -> None:
+        """
+        Upsert chunk embeddings and metadata into a ChromaDB collection.
+        """
+        if not ids:
+            return
+
+        def _sync_upsert():
+            coll = self.chroma.get_or_create_collection(
+                name=collection_name,
+                metadata={"hnsw:space": "cosine"},
+            )
+            coll.upsert(
+                ids=ids,
+                embeddings=embeddings,
+                documents=documents,
+                metadatas=metadatas,
+            )
+
+        await asyncio.to_thread(_sync_upsert)
+
+    async def delete_document_chunks(
+        self,
+        collection_name: str,
+        document_id: int,
+    ) -> None:
+        """
+        Delete all vector chunks belonging to
+        a document from a Chroma collection.
+        """
+
+        def _sync_delete():
+            try:
+                coll = self.chroma.get_collection(name=collection_name)
+                coll.delete(where={"document_id": document_id})
+            except Exception as e:
+                logger.debug(
+                    "Collection %s delete ignored: %s", collection_name, e
+                )
+
+        await asyncio.to_thread(_sync_delete)

@@ -10,7 +10,6 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import mysql
 
 # revision identifiers, used by Alembic.
 revision: str = "34f136b2b0b6"
@@ -27,14 +26,14 @@ def upgrade() -> None:
     op.alter_column(
         "messages",
         "content",
-        existing_type=mysql.LONGTEXT(),
+        existing_type=sa.Text(),
         type_=sa.Text(),
         existing_nullable=False,
     )
     op.alter_column(
         "prompt_versions",
         "content",
-        existing_type=mysql.LONGTEXT(),
+        existing_type=sa.Text(),
         type_=sa.Text(),
         existing_nullable=False,
     )
@@ -47,14 +46,14 @@ def downgrade() -> None:
         "prompt_versions",
         "content",
         existing_type=sa.Text(),
-        type_=mysql.LONGTEXT(),
+        type_=sa.Text(),
         existing_nullable=False,
     )
     op.alter_column(
         "messages",
         "content",
         existing_type=sa.Text(),
-        type_=mysql.LONGTEXT(),
+        type_=sa.Text(),
         existing_nullable=False,
     )
     op.drop_column("apps", "knowledge_base_id")

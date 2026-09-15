@@ -94,10 +94,13 @@ export default function UploadPage({ params }: { params: { id: string } }) {
     formData.append("file", file);
 
     try {
-      const result: UploadResult = await api.post(
+      const rawResult = await api.post(
         `/api/knowledge-base/${params.id}/documents/upload`,
         formData
       );
+      const result: UploadResult = Array.isArray(rawResult)
+        ? rawResult[0]
+        : rawResult;
 
       setFiles((prev) =>
         prev.map((f) =>

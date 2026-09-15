@@ -1,11 +1,11 @@
 # Feature Specification: Declarative `mcp_config.json` Schema & Static Parser
 
-> **Feature ID:** `009_mcp_301_mcp_config_schema_and_static_parser_spec`  
-> **Task Ref:** `TASK-MCP-301`  
-> **Target Branch:** `epic/rag-monorepo-mcp`  
-> **Status:** `PROPOSED (Under Review)`  
-> **Estimated Effort:** `1.0 hr (Vibe-Coding) / 0.5 day (Traditional)`  
-> **Author:** Antigravity Architect / Backend & Systems Specialist  
+> **Feature ID:** `009_mcp_301_mcp_config_schema_and_static_parser_spec`
+> **Task Ref:** `TASK-MCP-301`
+> **Target Branch:** `epic/rag-monorepo-mcp`
+> **Status:** `IMPLEMENTED`
+> **Estimated Effort:** `1.0 hr (Vibe-Coding) / 0.5 day (Traditional)`
+> **Author:** Antigravity Architect / Backend & Systems Specialist
 > **Upstream Reference:** [docs/lld/container_based_rag_platform_lld.md](file:///Users/galihpratama/Sites/akvo-rag/docs/lld/container_based_rag_platform_lld.md) (Sections 7, 8, 9)
 
 ---
@@ -255,7 +255,7 @@ class MCPConfig(BaseModel):
 
 ## 6. Definition of Done (DoD)
 
-- [ ] `backend/mcp_config.json` authored with all internal (`redis_queue`) and external (`rest`) tool definitions.
-- [ ] `app/core/mcp_config.py` provides type-safe Pydantic V2 parsing with zero network calls.
-- [ ] Environment variable substitution (`${VAR:-default}`) works cleanly.
-- [ ] `pytest tests/unit/test_mcp_config_parser.py` passes with 100% test coverage in $< 1\text{s}$.
+- [x] `backend/mcp_config.json` authored with all internal (`redis_queue`) and external (`rest`) tool definitions.
+- [x] `app/core/mcp_config.py` provides type-safe Pydantic V2 parsing with zero network calls.
+- [x] Environment variable substitution (`${VAR:-default}`) works cleanly.
+- [x] `pytest tests/unit/test_mcp_config_parser.py` passes with 100% test coverage in $< 1\text{s}$.

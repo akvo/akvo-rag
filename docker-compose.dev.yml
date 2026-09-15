@@ -84,11 +84,13 @@ services:
   vector-kb-mcp:
     build:
       context: ./vector-kb-mcp
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: akvo-rag-vector-kb-mcp-1
     volumes:
       - ./vector-kb-mcp:/app:delegated
+      - pip_cache_vkb:/app/.pip
     environment:
+      - ENVIRONMENT=development
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-akvo_rag}
       - CHROMA_HOST=chromadb
@@ -171,6 +173,7 @@ volumes:
   chroma_data:
   minio_data:
   pip_cache:
+  pip_cache_vkb:
 
 networks:
   akvo_rag_net:

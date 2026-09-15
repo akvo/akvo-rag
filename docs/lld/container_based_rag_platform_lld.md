@@ -836,7 +836,8 @@ sequenceDiagram
 | `TASK-DB-201` | Port Vector-KB SQLAlchemy Models into `vector-kb-mcp/models/` | `vector-kb-mcp/models/` | **1.5 hrs** | 1.0 day |
 | `TASK-DB-202` | Enrich `KnowledgeBase` & `Document` Models with Metadata & 1536-dim Embedding Guard | `vector-kb-mcp/models/` | **1.5 hrs** | 1.0 day |
 | `TASK-DB-203` | Setup Service-Owned Alembic Migrations (`alembic_version_vkb`) | `vector-kb-mcp/alembic/` | **1.5 hrs** | 1.0 day |
-| `TASK-DB-204` | PostgreSQL Adapter (`asyncpg`) & Automated Legacy Data Migration CLI | `backend/app/scripts/` | **2.0 hrs** | 1.5 days |
+| `TASK-DB-204` | PostgreSQL Adapter (`asyncpg`) & Automated Legacy Data Migration CLI | `vector-kb-mcp/cli/` | **2.0 hrs** | 1.5 days |
+| `TASK-DB-205` | Backend PostgreSQL Adapter (`psycopg2`/`asyncpg`), Config & Core Alembic Alignment | `backend/` | **1.5 hrs** | 1.0 day |
 | **Phase 3** | **Queue-Backed MCP Dispatcher, Scoping Removal & FastMCP Purge** | | | |
 | `TASK-MCP-301` | Implement `mcp_config.json` Declarative Schema & Static Parser | `backend/app/core/` | **1.0 hr** | 1.0 day |
 | `TASK-MCP-302` | Build `MCPQueueDispatcher` (Redis Request-Reply with Correlation ID) | `backend/app/services/` | **3.0 hrs** | 2.5 days |
@@ -851,7 +852,7 @@ sequenceDiagram
 | `TASK-OPS-501` | End-to-End Golden Set Accuracy & Legacy Test Gate (Faithfulness $\ge 0.85$) | `backend/RAG_evaluation/` | **2.5 hrs** | 2.0 days |
 | `TASK-CLEAN-502` | Purge Legacy Files, Dead Code, FastMCP/Celery Artifacts & Unused Dependencies | `backend/`, `vector-kb-mcp/` | **1.0 hr** | 0.5 day |
 | `TASK-DOC-503` | Comprehensive Developer Onboarding & Architecture Documentation Alignment | `docs/` & `README.md` | **1.5 hrs** | 1.0 day |
-| **TOTAL** | | | **33.0 hrs (~4.1 working days)** | **25.0 days** |
+| **TOTAL** | | | **34.5 hrs (~4.3 working days)** | **26.0 days** |
 
 ---
 
@@ -1055,28 +1056,44 @@ sequenceDiagram
 ---
 
 #### `TASK-DB-204`: PostgreSQL Adapter (`asyncpg`) & Automated Legacy Data Migration CLI
-* **Target Path:** `backend/app/scripts/` & `vector-kb-mcp/cli/`
+* **Target Path:** `vector-kb-mcp/cli/` & `vector-kb-mcp/db/`
 * **Vibe-Coding Estimate:** `2.0 hours`
 * **Detailed Description:**  
-  Update `backend/app/core/config.py` and `backend/app/db/session.py` to connect to PostgreSQL 17 using `asyncpg`. Build an automated, idempotent CLI ETL script (`migrate_legacy_to_consolidated_postgres.py`) to migrate legacy MySQL records (`users`, `apps`, `prompts`, `chats`) and standalone PostgreSQL 17 vector KB records (`knowledge_bases`, `documents`, `document_chunks` from legacy `kb_mcp`) into the unified PostgreSQL 17 database (`akvo_rag`).
+  Implement the high-performance async PostgreSQL session engine (`asyncpg`) for `vector-kb-mcp`. Build an automated, idempotent CLI ETL script (`vector-kb-mcp/cli/migrate_legacy_data.py`) to extract legacy records (from standalone MySQL or PostgreSQL) and load them into unified PostgreSQL 17 `vkb_` tables (`vkb_knowledge_bases`, `vkb_documents`, `vkb_document_chunks`).
 * **Key Touchpoints:**
-  - `backend/app/core/config.py` `[MODIFY]`
-  - `backend/app/db/session.py` `[MODIFY]`
-  - `backend/app/scripts/migrate_legacy_to_consolidated_postgres.py` `[NEW]`
+  - `vector-kb-mcp/db/session.py` `[NEW]`
+  - `vector-kb-mcp/db/base.py` `[NEW]`
   - `vector-kb-mcp/cli/migrate_legacy_data.py` `[NEW]`
 * **Code Specification:**
   ```python
   # CLI execution command
-  python -m app.scripts.migrate_legacy_to_consolidated_postgres \
-    --mysql-url "mysql+pymysql://user:pass@mysql:3306/akvo_rag" \
-    --legacy-pg-url "postgresql://akvo:password@legacy_vkb:5432/kb_mcp" \
+  python -m cli.migrate_legacy_data \
+    --source-mysql-url "mysql+pymysql://user:pass@mysql:3306/akvo_rag" \
     --target-pg-url "postgresql+asyncpg://postgres:postgres@postgres:5432/akvo_rag" \
     --batch-size 1000
   ```
 * **User Acceptance Criteria (UAC):**
-  - All existing prompt versions, admin users, apps, and standalone PostgreSQL knowledge bases migrate into the unified PostgreSQL 17 database with 0 data loss.
+  - Legacy knowledge base records migrate into unified PostgreSQL 17 `vkb_` tables with zero data corruption.
 * **Technical Acceptance Criteria (TAC):**
   - Idempotent execution (safe to re-run multiple times with `ON CONFLICT DO NOTHING` / UPSERT logic).
+
+---
+
+#### `TASK-DB-205`: Backend PostgreSQL Database Adapter, Config & Core Alembic Alignment
+* **Target Path:** `backend/`
+* **Vibe-Coding Estimate:** `1.5 hours`
+* **Detailed Description:**  
+  Modernize database engine configuration in `backend/` to natively connect to PostgreSQL 17 (`postgres:17-alpine`, database `akvo_rag`) for all core tables (`users`, `apps`, `api_keys`, `prompts`, `chats`, `system_settings`, `jobs`, `password_reset_tokens`). Update `backend/app/core/config.py` to parse `DATABASE_URL` / `POSTGRES_*` environment variables, add `psycopg2-binary` and `asyncpg` to `backend/requirements.txt`, refactor `backend/app/db/session.py` with standard PostgreSQL connection pooling, clean MySQL dialect imports in `backend/app/models/app.py`, and align backend Alembic environment (`backend/alembic/env.py`).
+* **Key Touchpoints:**
+  - `backend/app/core/config.py` `[MODIFY]`
+  - `backend/app/db/session.py` `[MODIFY]`
+  - `backend/requirements.txt` `[MODIFY]`
+  - `backend/app/models/app.py` `[MODIFY]`
+  - `backend/alembic/env.py` `[MODIFY]`
+* **User Acceptance Criteria (UAC):**
+  - Standalone `akvo-rag-backend` boots against PostgreSQL 17 with 0 MySQL dependencies. Seeders (`seed_admin_user`, `seed_prompts`) and core auth/apps/chat endpoints operate cleanly against PostgreSQL.
+* **Technical Acceptance Criteria (TAC):**
+  - All existing unit tests pass offline with in-memory SQLite isolation via `pytest tests/ -v`. Live PostgreSQL migrations run cleanly via `alembic upgrade head`.
 
 ---
 

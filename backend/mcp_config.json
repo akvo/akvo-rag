@@ -1,0 +1,374 @@
+{
+  "version": "1.0",
+  "servers": {
+    "knowledge_bases_mcp": {
+      "name": "Vector Knowledge Base Microservice",
+      "transport": "redis_queue",
+      "request_queue": "mcp:vector:requests",
+      "response_queue_prefix": "mcp:vector:responses",
+      "timeout_seconds": 30,
+      "tools": [
+        {
+          "name": "query_knowledge_base",
+          "description": "Query specific vector knowledge bases and retrieve semantic chunks with grounded citations.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural language user query to search against knowledge base embeddings."
+              },
+              "knowledge_base_ids": {
+                "type": "array",
+                "items": { "type": "integer" },
+                "description": "List of target knowledge base IDs."
+              },
+              "top_k": {
+                "type": "integer",
+                "default": 5,
+                "description": "Maximum number of relevant chunks to return."
+              },
+              "score_threshold": {
+                "type": "number",
+                "default": 0.0,
+                "description": "Minimum similarity score threshold (0.0 to 1.0)."
+              }
+            },
+            "required": ["query", "knowledge_base_ids"]
+          }
+        },
+        {
+          "name": "list_knowledge_bases",
+          "description": "List all available knowledge bases.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "page": {
+                "type": "integer",
+                "default": 1,
+                "description": "Page number for pagination."
+              },
+              "page_size": {
+                "type": "integer",
+                "default": 20,
+                "description": "Number of knowledge bases per page."
+              }
+            },
+            "required": []
+          }
+        },
+        {
+          "name": "get_knowledge_base",
+          "description": "Retrieve details of a specific knowledge base.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              }
+            },
+            "required": ["kb_id"]
+          }
+        },
+        {
+          "name": "create_knowledge_base",
+          "description": "Create a new vector knowledge base.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Knowledge base name."
+              },
+              "description": {
+                "type": "string",
+                "description": "Knowledge base description."
+              },
+              "embedding_model": {
+                "type": "string",
+                "default": "text-embedding-3-small",
+                "description": "Embedding model name."
+              },
+              "embedding_dim": {
+                "type": "integer",
+                "default": 1536,
+                "description": "Embedding dimension."
+              }
+            },
+            "required": ["name"]
+          }
+        },
+        {
+          "name": "update_knowledge_base",
+          "description": "Update metadata for an existing knowledge base.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "name": {
+                "type": "string",
+                "description": "Updated knowledge base name."
+              },
+              "description": {
+                "type": "string",
+                "description": "Updated knowledge base description."
+              }
+            },
+            "required": ["kb_id"]
+          }
+        },
+        {
+          "name": "delete_knowledge_base",
+          "description": "Delete a knowledge base and all associated documents and vector chunks.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              }
+            },
+            "required": ["kb_id"]
+          }
+        },
+        {
+          "name": "list_documents",
+          "description": "List documents in a specific knowledge base.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "status": {
+                "type": "string",
+                "description": "Filter by document status (e.g., INDEXED, PROCESSING, FAILED)."
+              },
+              "page": {
+                "type": "integer",
+                "default": 1,
+                "description": "Page number for pagination."
+              },
+              "page_size": {
+                "type": "integer",
+                "default": 20,
+                "description": "Number of documents per page."
+              }
+            },
+            "required": ["kb_id"]
+          }
+        },
+        {
+          "name": "get_document",
+          "description": "Retrieve details and status of a specific document.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "document_id": {
+                "type": "integer",
+                "description": "Document ID."
+              }
+            },
+            "required": ["document_id"]
+          }
+        },
+        {
+          "name": "register_document",
+          "description": "Register an uploaded document metadata in the knowledge base.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "file_name": {
+                "type": "string",
+                "description": "File name."
+              },
+              "file_path": {
+                "type": "string",
+                "description": "MinIO object path or storage file path."
+              },
+              "file_size": {
+                "type": "integer",
+                "description": "File size in bytes."
+              },
+              "content_type": {
+                "type": "string",
+                "description": "MIME type of document."
+              },
+              "file_hash": {
+                "type": "string",
+                "description": "SHA-256 hash of document content."
+              }
+            },
+            "required": ["kb_id", "file_name", "file_path"]
+          }
+        },
+        {
+          "name": "ingest_document",
+          "description": "Ingest and index a registered document into vector store and full-text search.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "document_id": {
+                "type": "integer",
+                "description": "Document ID."
+              },
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "upload_id": {
+                "type": "string",
+                "description": "Upload task correlation ID."
+              }
+            },
+            "required": ["document_id", "kb_id"]
+          }
+        },
+        {
+          "name": "process_document",
+          "description": "Process and index document chunks into vector store.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "document_id": {
+                "type": "integer",
+                "description": "Document ID."
+              },
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "upload_id": {
+                "type": "string",
+                "description": "Upload task correlation ID."
+              }
+            },
+            "required": ["document_id", "kb_id"]
+          }
+        },
+        {
+          "name": "delete_document",
+          "description": "Delete a document and all its indexed vector chunks from the knowledge base.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "document_id": {
+                "type": "integer",
+                "description": "Document ID to delete."
+              }
+            },
+            "required": ["kb_id", "document_id"]
+          }
+        },
+        {
+          "name": "preview_documents",
+          "description": "Preview chunked and parsed document segments.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "document_ids": {
+                "type": "array",
+                "items": { "type": "integer" },
+                "description": "List of document IDs to preview."
+              }
+            },
+            "required": ["kb_id"]
+          }
+        },
+        {
+          "name": "get_processing_tasks",
+          "description": "Get the processing status of asynchronous document indexing tasks.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "task_ids": {
+                "type": "array",
+                "items": { "type": "integer" },
+                "description": "List of task IDs."
+              },
+              "task_id": {
+                "type": "string",
+                "description": "Asynchronous ingestion task ID."
+              }
+            },
+            "required": []
+          }
+        }
+      ]
+    },
+    "weather_mcp": {
+      "name": "Open-Meteo Weather MCP Service",
+      "transport": "rest",
+      "endpoint_url": "${WEATHER_MCP_URL:-http://localhost:8080/weather}",
+      "timeout_seconds": 10,
+      "tools": [
+        {
+          "name": "get_weather_forecast",
+          "description": "Get multi-day weather forecasts for a given latitude and longitude.",
+          "endpoint": "/forecast",
+          "method": "POST",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "latitude": { "type": "number", "description": "Latitude coordinate" },
+              "longitude": { "type": "number", "description": "Longitude coordinate" },
+              "days": { "type": "integer", "default": 7, "description": "Forecast horizon in days" }
+            },
+            "required": ["latitude", "longitude"]
+          }
+        },
+        {
+          "name": "get_current_weather",
+          "description": "Fetch current weather conditions for a given latitude and longitude.",
+          "endpoint": "/current",
+          "method": "POST",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "latitude": { "type": "number", "description": "Latitude coordinate" },
+              "longitude": { "type": "number", "description": "Longitude coordinate" }
+            },
+            "required": ["latitude", "longitude"]
+          }
+        },
+        {
+          "name": "get_historical_weather",
+          "description": "Get historical weather data for a specific date range and location.",
+          "endpoint": "/historical",
+          "method": "POST",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "latitude": { "type": "number", "description": "Latitude coordinate" },
+              "longitude": { "type": "number", "description": "Longitude coordinate" },
+              "start_date": { "type": "string", "description": "Start date in YYYY-MM-DD format" },
+              "end_date": { "type": "string", "description": "End date in YYYY-MM-DD format" }
+            },
+            "required": ["latitude", "longitude", "start_date", "end_date"]
+          }
+        }
+      ]
+    }
+  }
+}

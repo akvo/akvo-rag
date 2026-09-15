@@ -1,8 +1,8 @@
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 from app.services.app_service import AppService, DEFAULT_SCOPES
 from app.schemas.app import AppRegisterRequest
-from app.models.app import App, AppStatus
+from app.models.app import AppStatus
 
 
 class TestAppService:
@@ -41,7 +41,9 @@ class TestAppService:
         assert token.startswith("tok_")
         assert len(token) > 4  # prefix + random part
 
-    def test_create_app_generates_all_credentials(self, mock_db, sample_register_data):
+    def test_create_app_generates_all_credentials(
+        self, mock_db, sample_register_data
+    ):
         """Test that create_app generates all required credentials."""
         app, access_token = AppService.create_app(
             db=mock_db, register_data=sample_register_data
@@ -52,8 +54,14 @@ class TestAppService:
         assert app.client_id.startswith("ac_")
         assert app.app_name == "agriconnect"
         assert app.domain == "agriconnect.akvo.org/api"
-        assert app.chat_callback_url == "https://agriconnect.akvo.org/api/ai/callback"
-        assert app.upload_callback_url == "https://agriconnect.akvo.org/api/kb/callback"
+        assert (
+            app.chat_callback_url
+            == "https://agriconnect.akvo.org/api/ai/callback"
+        )
+        assert (
+            app.upload_callback_url
+            == "https://agriconnect.akvo.org/api/kb/callback"
+        )
         assert app.callback_token == "test_callback_token_123"
         assert app.status == AppStatus.active
         assert app.scopes == DEFAULT_SCOPES
@@ -66,11 +74,15 @@ class TestAppService:
         mock_db.commit.assert_called_once()
         mock_db.refresh.assert_called_once_with(app)
 
-    def test_create_app_with_custom_scopes(self, mock_db, sample_register_data):
+    def test_create_app_with_custom_scopes(
+        self, mock_db, sample_register_data
+    ):
         """Test that create_app accepts custom scopes."""
         custom_scopes = ["custom.read", "custom.write"]
         app, _ = AppService.create_app(
-            db=mock_db, register_data=sample_register_data, scopes=custom_scopes
+            db=mock_db,
+            register_data=sample_register_data,
+            scopes=custom_scopes,
         )
 
         assert app.scopes == custom_scopes
@@ -78,16 +90,22 @@ class TestAppService:
     def test_get_app_by_access_token(self, mock_db):
         """Test retrieving app by access token."""
         mock_app = Mock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_app
+        mock_db.query.return_value.filter.return_value.first.return_value = (
+            mock_app
+        )
 
-        result = AppService.get_app_by_access_token(db=mock_db, access_token="tok_123")
+        result = AppService.get_app_by_access_token(
+            db=mock_db, access_token="tok_123"
+        )
 
         assert result == mock_app
 
     def test_get_app_by_app_id(self, mock_db):
         """Test retrieving app by app_id."""
         mock_app = Mock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_app
+        mock_db.query.return_value.filter.return_value.first.return_value = (
+            mock_app
+        )
 
         result = AppService.get_app_by_app_id(db=mock_db, app_id="app_123")
 
@@ -113,7 +131,9 @@ class TestAppService:
         mock_app.callback_token = old_token
         new_token = "new_callback_token_123"
 
-        AppService.rotate_callback_token(db=mock_db, app=mock_app, new_callback_token=new_token)
+        AppService.rotate_callback_token(
+            db=mock_db, app=mock_app, new_callback_token=new_token
+        )
 
         assert mock_app.callback_token == new_token
         assert mock_app.callback_token != old_token
@@ -168,8 +188,14 @@ class TestAppService:
         assert app.client_id.startswith("ac_")
         assert app.app_name == "agriconnect"
         assert app.domain == "agriconnect.akvo.org/api"
-        assert app.chat_callback_url == "https://agriconnect.akvo.org/api/ai/callback"
-        assert app.upload_callback_url == "https://agriconnect.akvo.org/api/kb/callback"
+        assert (
+            app.chat_callback_url
+            == "https://agriconnect.akvo.org/api/ai/callback"
+        )
+        assert (
+            app.upload_callback_url
+            == "https://agriconnect.akvo.org/api/kb/callback"
+        )
         assert app.callback_token is None
         assert app.status == AppStatus.active
         assert app.scopes == DEFAULT_SCOPES

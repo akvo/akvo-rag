@@ -145,32 +145,32 @@ export function DocumentUploadSteps({
         formData.append("files", fileStatus.file);
       });
 
-      const data = (await api.post(
+      const data = await api.post(
         `/api/knowledge-base/${knowledgeBaseId}/documents/upload`,
-        formData,
-        {
-          headers: {},
-        }
-      )) as UploadResult[];
+        formData
+      );
+      const dataArray = (Array.isArray(data) ? data : [data]) as UploadResult[];
 
       // Update file statuses
       setFiles((prev) =>
-        prev.map((f) => {
-          const uploadResult = data.find((d) => d.file_name === f.file.name);
+        prev.map((f, idx) => {
+          const uploadResult = dataArray.find((d) => d.file_name === f.file.name);
           if (uploadResult) {
             if (uploadResult.status === "exists") {
               return {
                 ...f,
                 status: "completed",
-                documentId: uploadResult.document_id,
+                documentId: uploadResult.document_id ?? idx + 1,
                 error: uploadResult.message,
               };
             } else {
+              const fallbackId = uploadResult.upload_id ?? uploadResult.document_id ?? idx + 1;
               return {
                 ...f,
                 status: "uploaded",
-                uploadId: uploadResult.upload_id,
-                tempPath: uploadResult.temp_path,
+                uploadId: fallbackId,
+                documentId: uploadResult.document_id ?? fallbackId,
+                tempPath: uploadResult.temp_path || "",
               };
             }
           }
@@ -178,11 +178,10 @@ export function DocumentUploadSteps({
         })
       );
 
-      // 移除自动处理的逻辑，只更新步骤
       setCurrentStep(2);
       toast({
         title: "Upload successful",
-        description: `${data.length} files uploaded successfully.`,
+        description: `${dataArray.length} files uploaded successfully.`,
       });
     } catch (error) {
       toast({
@@ -241,7 +240,10 @@ export function DocumentUploadSteps({
         .filter((f) => f.status === "uploaded")
         .map((f) => ({
           upload_id: f.uploadId!,
+          document_id: f.documentId ?? f.uploadId!,
           file_name: f.file.name,
+          chunk_size: chunkSize,
+          chunk_overlap: chunkOverlap,
           status: "pending" as const,
           skip_processing: false,
           temp_path: f.tempPath!,
@@ -497,14 +499,17 @@ export function DocumentUploadSteps({
                   <SelectContent>
                     {files
                       .filter((f) => f.status === "uploaded")
-                      .map((f) => (
-                        <SelectItem
-                          key={f.uploadId}
-                          value={f.uploadId!.toString()}
-                        >
-                          {f.file.name}
-                        </SelectItem>
-                      ))}
+                      .map((f, idx) => {
+                        const valId = (f.uploadId ?? f.documentId ?? idx + 1).toString();
+                        return (
+                          <SelectItem
+                            key={valId}
+                            value={valId}
+                          >
+                            {f.file.name}
+                          </SelectItem>
+                        );
+                      })}
                   </SelectContent>
                 </Select>
               </div>
@@ -569,31 +574,34 @@ export function DocumentUploadSteps({
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-medium">
                         {
-                          files.find((f) => f.uploadId === selectedDocumentId)
-                            ?.file.name
+                          files.find(
+                            (f) =>
+                              (f.uploadId ?? f.documentId) === selectedDocumentId
+                          )?.file.name
                         }
                       </h3>
                       <span className="text-sm text-muted-foreground">
-                        {uploadedDocuments[selectedDocumentId].chunks.length}{" "}
+                        {uploadedDocuments[selectedDocumentId]?.chunks?.length ||
+                          0}{" "}
                         chunks
                       </span>
                     </div>
                     <div className="h-[400px] overflow-y-auto space-y-2 rounded-lg border p-4">
-                      {uploadedDocuments[selectedDocumentId].chunks.map(
-                        (chunk: PreviewChunk, index: number) => (
-                          <div
-                            key={index}
-                            className="p-4 bg-muted rounded-lg space-y-2"
-                          >
-                            <div className="text-sm text-muted-foreground">
-                              Chunk {index + 1}
-                            </div>
-                            <pre className="whitespace-pre-wrap text-sm">
-                              {chunk.content}
-                            </pre>
+                      {(
+                        uploadedDocuments[selectedDocumentId]?.chunks || []
+                      ).map((chunk: PreviewChunk, index: number) => (
+                        <div
+                          key={index}
+                          className="p-4 bg-muted rounded-lg space-y-2"
+                        >
+                          <div className="text-sm text-muted-foreground">
+                            Chunk {index + 1}
                           </div>
-                        )
-                      )}
+                          <pre className="whitespace-pre-wrap text-sm">
+                            {chunk.content}
+                          </pre>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -607,13 +615,17 @@ export function DocumentUploadSteps({
               <div className="max-h-[300px] overflow-y-auto space-y-2 rounded-lg border p-4">
                 {files
                   .filter((f) => f.status === "uploaded")
-                  .map((file) => {
+                  .map((file, idx) => {
+                    const fileUploadId =
+                      file.uploadId ?? file.documentId ?? idx + 1;
                     const task = Object.values(taskStatuses).find(
-                      (t) => t.document_id === file.documentId
+                      (t) =>
+                        t.document_id === file.documentId ||
+                        t.document_id === fileUploadId
                     );
                     return (
                       <div
-                        key={file.uploadId}
+                        key={fileUploadId}
                         className="p-4 border rounded-lg space-y-2"
                       >
                         <div className="flex items-center justify-between">

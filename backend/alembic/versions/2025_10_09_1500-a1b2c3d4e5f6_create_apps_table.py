@@ -10,7 +10,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import mysql
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "a1b2c3d4e5f6"
@@ -21,6 +21,33 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Create apps table
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            "DO $$ BEGIN "
+            "CREATE TYPE appstatus AS ENUM "
+            "('active', 'revoked', 'suspended'); "
+            "EXCEPTION WHEN duplicate_object THEN null; "
+            "END $$;"
+        )
+        status_col = sa.Column(
+            "status",
+            postgresql.ENUM(
+                "active",
+                "revoked",
+                "suspended",
+                name="appstatus",
+                create_type=False,
+            ),
+            nullable=False,
+        )
+    else:
+        status_col = sa.Column(
+            "status",
+            sa.Enum("active", "revoked", "suspended", name="appstatus"),
+            nullable=False,
+        )
+
     op.create_table(
         "apps",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -35,12 +62,8 @@ def upgrade() -> None:
         ),
         sa.Column("access_token", sa.String(length=128), nullable=False),
         sa.Column("callback_token", sa.String(length=255), nullable=True),
-        sa.Column("scopes", mysql.JSON(), nullable=False),
-        sa.Column(
-            "status",
-            sa.Enum("active", "revoked", "suspended", name="appstatus"),
-            nullable=False,
-        ),
+        sa.Column("scopes", sa.JSON(), nullable=False),
+        status_col,
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
@@ -62,3 +85,6 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_apps_app_id"), table_name="apps")
     op.drop_index(op.f("ix_apps_id"), table_name="apps")
     op.drop_table("apps")
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute("DROP TYPE IF EXISTS appstatus CASCADE;")

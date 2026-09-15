@@ -22,10 +22,11 @@ interface Document {
   file_name: string;
   file_path: string;
   file_size: number;
-  file_url: string;
+  file_url?: string;
   content_type: string;
+  status?: string;
   created_at: string;
-  processing_tasks: Array<{
+  processing_tasks?: Array<{
     id: number;
     status: string;
     error_message: string | null;
@@ -55,7 +56,7 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
     const fetchDocuments = async () => {
       try {
         const data = await api.get(`/api/knowledge-base/${knowledgeBaseId}`);
-        setDocuments(data.documents);
+        setDocuments(data?.documents || []);
       } catch (error) {
         if (error instanceof ApiError) {
           setError(error.message);
@@ -182,7 +183,7 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
               })}
             </TableCell>
             <TableCell>
-              {doc.processing_tasks.length > 0 && (
+              {doc.processing_tasks && doc.processing_tasks.length > 0 ? (
                 <Badge
                   variant={
                     doc.processing_tasks[0].status === "completed"
@@ -193,6 +194,19 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
                   }
                 >
                   {doc.processing_tasks[0].status || "pending"}
+                </Badge>
+              ) : (
+                <Badge
+                  variant={
+                    doc.status?.toLowerCase() === "indexed" ||
+                    doc.status?.toLowerCase() === "completed"
+                      ? "secondary"
+                      : doc.status?.toLowerCase() === "failed"
+                      ? "destructive"
+                      : "default"
+                  }
+                >
+                  {doc.status?.toLowerCase() || "pending"}
                 </Badge>
               )}
             </TableCell>

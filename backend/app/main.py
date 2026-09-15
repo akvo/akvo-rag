@@ -6,6 +6,7 @@ from app.api.v1_api import v1_router
 from app.core.config import settings
 from app.startup.migarate import DatabaseMigrator
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.api_v1.websocket.ws import ws_router
 
@@ -20,6 +21,16 @@ app = FastAPI(
     version=settings.VERSION,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
 )
+
+if settings.BACKEND_CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.BACKEND_CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
 
 # Include routers
 app.include_router(api_router, prefix=settings.API_V1_STR)

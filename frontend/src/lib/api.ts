@@ -1,22 +1,33 @@
-interface FetchOptions extends Omit<RequestInit, 'body' | 'headers'> {
+interface FetchOptions extends Omit<RequestInit, "body" | "headers"> {
   data?: any;
   headers?: Record<string, string>;
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
     super(message);
-    this.name = 'ApiError';
+    this.name = "ApiError";
   }
 }
 
-export async function fetchApi(fullUrl: string, options: FetchOptions = {}) {
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
+export async function fetchApi(url: string, options: FetchOptions = {}) {
   const { data, headers: customHeaders = {}, ...restOptions } = options;
 
+  // Resolve relative URLs with NEXT_PUBLIC_API_URL
+  const fullUrl =
+    url.startsWith("http://") || url.startsWith("https://")
+      ? url
+      : `${BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+
   // Get token from localStorage
-  let token = '';
-  if (typeof window !== 'undefined') {
-    token = localStorage.getItem('token') || '';
+  let token = "";
+  if (typeof window !== "undefined") {
+    token = localStorage.getItem("token") || "";
   }
 
   const headers: Record<string, string> = {
@@ -25,8 +36,8 @@ export async function fetchApi(fullUrl: string, options: FetchOptions = {}) {
   };
 
   // If no content type is specified and we have data, default to JSON
-  if (!headers['Content-Type'] && data && !(data instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
+  if (!headers["Content-Type"] && data && !(data instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
   }
 
   const config: RequestInit = {
@@ -38,10 +49,13 @@ export async function fetchApi(fullUrl: string, options: FetchOptions = {}) {
   if (data) {
     if (data instanceof FormData) {
       config.body = data;
-    } else if (headers['Content-Type'] === 'application/json') {
+    } else if (headers["Content-Type"] === "application/json") {
       config.body = JSON.stringify(data);
-    } else if (headers['Content-Type'] === 'application/x-www-form-urlencoded') {
-      config.body = typeof data === 'string' ? data : new URLSearchParams(data).toString();
+    } else if (
+      headers["Content-Type"] === "application/x-www-form-urlencoded"
+    ) {
+      config.body =
+        typeof data === "string" ? data : new URLSearchParams(data).toString();
     } else {
       config.body = data;
     }
@@ -51,22 +65,27 @@ export async function fetchApi(fullUrl: string, options: FetchOptions = {}) {
     const response = await fetch(fullUrl, config);
 
     if (response.status === 401) {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('token');
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
         // Only redirect to login if we're not already on the login page
-        if (!window.location.pathname.includes('/login')) {
-          window.location.href = '/login';
+        if (!window.location.pathname.includes("/login")) {
+          window.location.href = "/login";
         }
       }
       const errorData = await response.json().catch(() => ({}));
-      throw new ApiError(401, errorData.message || errorData.detail || 'Unauthorized - Please log in again');
+      throw new ApiError(
+        401,
+        errorData.message ||
+          errorData.detail ||
+          "Unauthorized - Please log in again",
+      );
     }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new ApiError(
         response.status,
-        errorData.message || errorData.detail || 'An error occurred'
+        errorData.message || errorData.detail || "An error occurred",
       );
     }
 
@@ -75,24 +94,24 @@ export async function fetchApi(fullUrl: string, options: FetchOptions = {}) {
     if (error instanceof ApiError) {
       throw error;
     }
-    throw new ApiError(500, 'Network error or server is unreachable');
+    throw new ApiError(500, "Network error or server is unreachable");
   }
 }
 
 // Helper methods for common HTTP methods
 export const api = {
-  get: (url: string, options?: Omit<FetchOptions, 'method'>) =>
-    fetchApi(url, { ...options, method: 'GET' }),
+  get: (url: string, options?: Omit<FetchOptions, "method">) =>
+    fetchApi(url, { ...options, method: "GET" }),
 
-  post: (url: string, data?: any, options?: Omit<FetchOptions, 'method'>) =>
-    fetchApi(url, { ...options, method: 'POST', data }),
+  post: (url: string, data?: any, options?: Omit<FetchOptions, "method">) =>
+    fetchApi(url, { ...options, method: "POST", data }),
 
-  put: (url: string, data?: any, options?: Omit<FetchOptions, 'method'>) =>
-    fetchApi(url, { ...options, method: 'PUT', data }),
+  put: (url: string, data?: any, options?: Omit<FetchOptions, "method">) =>
+    fetchApi(url, { ...options, method: "PUT", data }),
 
-  delete: (url: string, options?: Omit<FetchOptions, 'method'>) =>
-    fetchApi(url, { ...options, method: 'DELETE' }),
+  delete: (url: string, options?: Omit<FetchOptions, "method">) =>
+    fetchApi(url, { ...options, method: "DELETE" }),
 
-  patch: (url: string, data?: any, options?: Omit<FetchOptions, 'method'>) =>
-    fetchApi(url, { ...options, method: 'PATCH', data }),
+  patch: (url: string, data?: any, options?: Omit<FetchOptions, "method">) =>
+    fetchApi(url, { ...options, method: "PATCH", data }),
 };
