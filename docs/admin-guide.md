@@ -60,9 +60,11 @@ If documents are stuck in `PROCESSING`:
 ```bash
 # Check Redis queue depth
 docker exec akvo-rag-redis-1 redis-cli llen mcp:vector:requests
+docker exec akvo-rag-redis-1 redis-cli llen mcp:vector:ingest
 
-# View vector-kb-mcp logs for processing errors
+# View vector-kb-mcp query & ingestion worker logs for processing errors
 docker compose logs vector-kb-mcp --tail=50
+docker compose logs vector-kb-mcp-ingestion --tail=50
 
 # Inspect MinIO for uploaded files
 docker exec akvo-rag-minio-1 mc ls local/documents/ --recursive

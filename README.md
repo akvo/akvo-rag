@@ -29,11 +29,11 @@
 
 ## 🏗️ Architecture Overview
 
-Akvo RAG runs as a **7-container monorepo** communicating over a private Docker bridge network:
+Akvo RAG runs as an **8-container monorepo** communicating over a private Docker bridge network:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                          Developer / End User                             │
+│                          Developer / End User                            │
 └──────────────────────────────────┬───────────────────────────────────────┘
                                    │ HTTP :3000
                                    ▼
@@ -50,10 +50,11 @@ Akvo RAG runs as a **7-container monorepo** communicating over a private Docker 
                 ▼                  ▼                    ▼
 ┌──────────────────────┐ ┌──────────────────┐  ┌────────────────────────┐
 │  vector-kb-mcp       │ │  redis  :6379     │  │  minio  :9000 / :9001  │
-│  (FastAPI, asyncpg,  │ │  (RPC queues,     │  │  (S3 document storage, │
-│   ChromaDB client,   │ │   async ingestion │  │   bucket: documents/)  │
-│   Redis RPC worker)  │ │   queues)         │  └────────────────────────┘
-└──────────┬───────────┘ └──────────────────┘
+│  (Query Worker RPC)  │ │  (RPC queues,     │  │  (S3 document storage, │
+├──────────────────────┤ │   async ingestion │  │   bucket: documents/)  │
+│vector-kb-mcp-ingesting│ │   queues)         │  └────────────────────────┘
+│ (Ingest Worker RPC)  │ └──────────────────┘
+└──────────┬───────────┘
            │ asyncpg        │ asyncpg
            ▼                ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -64,19 +65,20 @@ Akvo RAG runs as a **7-container monorepo** communicating over a private Docker 
            │ HTTP :8000 (internal)
            ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  chromadb  (ChromaDB vector store)  [Host: 8001 → Container: 8000]       │
+│  chromadb  (ChromaDB vector store WAL mode) [Host: 8001 → Container: 8000]│
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-| Container | Image | Host Port | Purpose |
+| Container | Image / Source | Host Port | Purpose |
 |---|---|---|---|
 | `frontend` | Next.js 14 build | `:3000` | Web UI |
-| `backend` | Python FastAPI | `:8000` | Core API + RAG graph |
-| `vector-kb-mcp` | Python FastAPI | internal | Vector KB microservice (Redis worker) |
+| `backend` | Python FastAPI | `:8000` | Core API + RAG graph dispatcher |
+| `vector-kb-mcp` | `vector-kb-mcp/` | internal | Vector KB Query Worker (`WORKER_MODE=query`) — fast sub-5ms chat vector RPC |
+| `vector-kb-mcp-ingestion` | `vector-kb-mcp/` | internal | Vector KB Ingestion Worker (`WORKER_MODE=ingest`) — background document embedding & chunking |
 | `postgres` | `postgres:17-alpine` | `:5432` | Unified relational store |
 | `redis` | `redis:7-alpine` | `:6379` | MCP RPC queues + async ingestion |
-| `chromadb` | `chromadb/chroma:latest` | `:8001` → `:8000` | Vector embeddings |
-| `minio` | `minio/minio:latest` | `:9000` / `:9001` | S3 document storage |
+| `chromadb` | `chromadb/chroma:1.5.9` | `:8001` → `:8000` | Vector embeddings (SQLite WAL mode) |
+| `minio` | MinIO RELEASE | `:9000` / `:9001` | S3 document storage |
 
 ---
 
@@ -308,6 +310,7 @@ For detailed playbooks, see [`docs/troubleshooting.md`](docs/troubleshooting.md)
 | Guide | Purpose |
 |---|---|
 | [`docs/dev-guide.md`](docs/dev-guide.md) | Local setup, hot-reloading, migrations, adding MCP tools, testing |
+| [`docs/legacy-data-migration-guide.md`](docs/legacy-data-migration-guide.md) | Fail-safe dump-first migration protocol for production legacy data |
 | [`docs/architecture_map.md`](docs/architecture_map.md) | Container topology, Redis RPC contracts, MinIO layout, ER diagram, API catalog |
 | [`docs/admin-guide.md`](docs/admin-guide.md) | Knowledge base management, prompt editing, API key provisioning |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md) | Debugging playbooks for all 7 containers |

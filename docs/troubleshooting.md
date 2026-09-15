@@ -1,6 +1,6 @@
 # Troubleshooting Guide: Akvo RAG
 
-Debugging playbooks for all 7 containers in the Akvo RAG stack.
+Debugging playbooks for all 8 containers in the Akvo RAG stack.
 
 > **Quick reference**: [Architecture Map](architecture_map.md) | [Developer Guide](dev-guide.md) | [Admin Guide](admin-guide.md)
 
@@ -11,15 +11,16 @@ Debugging playbooks for all 7 containers in the Akvo RAG stack.
 Before diving into a specific container's playbook, run these first:
 
 ```bash
-# Check all 7 containers are running
+# Check all 8 containers are running
 docker compose ps
 
 # Tail all container logs simultaneously
 docker compose logs -f --tail=20
 
-# View logs for a specific service
+# View logs for specific services
 docker compose logs backend --tail=50
 docker compose logs vector-kb-mcp --tail=50
+docker compose logs vector-kb-mcp-ingestion --tail=50
 ```
 
 ---

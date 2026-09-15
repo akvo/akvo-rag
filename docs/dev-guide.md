@@ -2,7 +2,7 @@
 
 This guide covers everything needed for day-to-day backend development: environment setup, hot-reload, migrations, adding new MCP tools, and running the test suite.
 
-> **Related docs**: [Architecture Map](architecture_map.md) | [Troubleshooting](troubleshooting.md) | [PROMPT_SERVICE.md](../PROMPT_SERVICE.md)
+> **Related docs**: [Architecture Map](architecture_map.md) | [Troubleshooting](troubleshooting.md) | [Legacy Data Migration Guide](legacy-data-migration-guide.md) | [PROMPT_SERVICE.md](../PROMPT_SERVICE.md)
 
 ---
 
@@ -95,6 +95,8 @@ docker exec akvo-rag-vector-kb-mcp-1 alembic revision --autogenerate -m "add_fie
 > **Important**: `backend` migrations **only** manage tables in `alembic_version`. `vector-kb-mcp` migrations **only** manage tables in `alembic_version_vkb`. Never mix them.
 >
 > Migrations run automatically on both service startups, so a `docker compose restart` is sufficient for new migration files.
+>
+> For production legacy data migrations (from older MySQL/PostgreSQL versions to Akvo RAG PostgreSQL 17), see the [Legacy Data Migration Guide](legacy-data-migration-guide.md).
 
 ---
 
