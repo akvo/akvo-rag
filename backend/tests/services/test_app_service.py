@@ -20,7 +20,6 @@ class TestAppService:
             default_chat_prompt="",
             chat_callback="https://agriconnect.akvo.org/api/ai/callback",
             upload_callback="https://agriconnect.akvo.org/api/kb/callback",
-            callback_token="test_callback_token_123",
         )
 
     def test_generate_app_id_has_correct_prefix(self):
@@ -62,7 +61,7 @@ class TestAppService:
             app.upload_callback_url
             == "https://agriconnect.akvo.org/api/kb/callback"
         )
-        assert app.callback_token == "test_callback_token_123"
+        assert app.callback_token is None
         assert app.status == AppStatus.active
         assert app.scopes == DEFAULT_SCOPES
 
@@ -171,39 +170,3 @@ class TestAppService:
         mock_app.status = AppStatus.suspended
 
         assert AppService.is_app_active(mock_app) is False
-
-    def test_create_app_generates_all_credentials_without_callback_token(
-        self, mock_db, sample_register_data
-    ):
-        """Test that create_app generates all required credentials."""
-
-        # reset callback token value
-        sample_register_data.callback_token = None
-        app, access_token = AppService.create_app(
-            db=mock_db, register_data=sample_register_data
-        )
-
-        # Verify app object has correct attributes
-        assert app.app_id.startswith("app_")
-        assert app.client_id.startswith("ac_")
-        assert app.app_name == "agriconnect"
-        assert app.domain == "agriconnect.akvo.org/api"
-        assert (
-            app.chat_callback_url
-            == "https://agriconnect.akvo.org/api/ai/callback"
-        )
-        assert (
-            app.upload_callback_url
-            == "https://agriconnect.akvo.org/api/kb/callback"
-        )
-        assert app.callback_token is None
-        assert app.status == AppStatus.active
-        assert app.scopes == DEFAULT_SCOPES
-
-        # Verify returned token
-        assert access_token.startswith("tok_")
-
-        # Verify DB operations
-        mock_db.add.assert_called_once_with(app)
-        mock_db.commit.assert_called_once()
-        mock_db.refresh.assert_called_once_with(app)
