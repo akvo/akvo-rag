@@ -127,7 +127,7 @@ Now execute the migration scripts against the **isolated temporary staging datab
 
 ```bash
 # 1. Preview Vector KB migration counts
-docker exec -it akvo-rag-vector-kb-mcp-1 python cli/migrate_legacy_data.py \
+docker exec -it akvo-rag-mcp-vector-kb-query-1 python cli/migrate_legacy_data.py \
   --source-url "postgresql://postgres:postgres@host.docker.internal:5432/legacy_vkb_staging" \
   --dry-run
 
@@ -145,7 +145,7 @@ Once the dry run displays expected counts, execute live migration:
 
 ```bash
 # 1. Migrate Vector KB Data (Idempotent ON CONFLICT DO NOTHING)
-docker exec -it akvo-rag-vector-kb-mcp-1 python cli/migrate_legacy_data.py \
+docker exec -it akvo-rag-mcp-vector-kb-query-1 python cli/migrate_legacy_data.py \
   --source-url "postgresql://postgres:postgres@host.docker.internal:5432/legacy_vkb_staging" \
   --batch-size 500
 

@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     )
 
     # ChromaDB Vector Store Configuration
-    CHROMA_HOST: str = Field(default="chromadb")
+    CHROMA_HOST: str = Field(default="mcp-chromadb")
     CHROMA_PORT: int = Field(default=8000)
 
     # MinIO Object Storage Configuration

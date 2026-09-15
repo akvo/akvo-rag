@@ -12,10 +12,10 @@ graph TB
     USER([Developer / End User])
     FE[frontend<br/>Next.js 14 :3000]
     BE[backend<br/>FastAPI :8000]
-    VKBMCP[vector-kb-mcp<br/>FastAPI internal]
+    VKBMCP[mcp-vector-kb-query<br/>FastAPI internal]
     PG[(postgres<br/>PostgreSQL 17 :5432)]
     REDIS[(redis<br/>Redis 7 :6379)]
-    CHROMA[(chromadb<br/>:8001→:8000)]
+    CHROMA[(mcp-chromadb<br/>:8001→:8000)]
     MINIO[(minio<br/>S3 :9000/:9001)]
 
     USER -->|HTTP :3000| FE
@@ -36,11 +36,11 @@ graph TB
 |-----------|-------|-----------|---------|---------|
 | `frontend` | Build from `frontend/` | `3000` | always | Web UI (Next.js 14, SSE streaming) |
 | `backend` | Build from `backend/` | `8000` | always | Core FastAPI: LangGraph, LLMFactory, PromptService, S3 upload |
-| `vector-kb-mcp` | Build from `vector-kb-mcp/` | internal | always | Vector KB Query Worker (`WORKER_MODE=query`): fast sub-5ms chat vector RPC |
-| `vector-kb-mcp-ingestion` | Build from `vector-kb-mcp/` | internal | always | Vector KB Ingestion Worker (`WORKER_MODE=ingest`): background document embedding & chunking |
+| `mcp-vector-kb-query` | Build from `vector-kb-mcp/` | internal | always | Vector KB Query Worker (`WORKER_MODE=query`): fast sub-5ms chat vector RPC |
+| `mcp-vector-kb-ingestion` | Build from `vector-kb-mcp/` | internal | always | Vector KB Ingestion Worker (`WORKER_MODE=ingest`): background document embedding & chunking |
 | `postgres` | `postgres:17-alpine` | `5432` | always | Unified relational store (two Alembic schema owners) |
 | `redis` | `redis:7-alpine` | `6379` | always | MCP RPC queues + async ingestion task queues |
-| `chromadb` | `chromadb/chroma:1.5.9` | `8001→8000` | always | Vector embeddings store (SQLite WAL mode) |
+| `mcp-chromadb` | `chromadb/chroma:1.5.9` | `8001→8000` | always | Vector embeddings store (SQLite WAL mode) |
 | `minio` | `quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z` | `9000`,`9001` | always | S3-compatible document storage (MinIO console on 9001) |
 
 ---

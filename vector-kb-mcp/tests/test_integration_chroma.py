@@ -13,7 +13,7 @@ async def test_chroma_real_container_integration():
     Test direct integration with the live ChromaDB container
     in the Docker network.
     """
-    chroma_host = os.getenv("CHROMA_HOST", "chromadb")
+    chroma_host = os.getenv("CHROMA_HOST", "mcp-chromadb")
     chroma_port = int(os.getenv("CHROMA_PORT", "8000"))
 
     try:

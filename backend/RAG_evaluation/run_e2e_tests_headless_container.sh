@@ -12,8 +12,8 @@ set -e  # Exit immediately on unhandled error
 
 # Container names
 CONTAINER_BACKEND="akvo-rag-backend-1"
-CONTAINER_VECTOR="akvo-rag-vector-kb-mcp-1"
-CONTAINER_CHROMA="akvo-rag-chromadb-1"
+CONTAINER_VECTOR="akvo-rag-mcp-vector-kb-query-1"
+CONTAINER_CHROMA="akvo-rag-mcp-chromadb-1"
 CONTAINER_POSTGRES="akvo-rag-postgres-1"
 CONTAINER_REDIS="akvo-rag-redis-1"
 

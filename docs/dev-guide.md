@@ -86,10 +86,10 @@ docker exec akvo-rag-backend-1 alembic revision --autogenerate -m "add_field_x_t
 
 ```bash
 # Apply all pending KB migrations
-docker exec akvo-rag-vector-kb-mcp-1 alembic upgrade head
+docker exec akvo-rag-mcp-vector-kb-query-1 alembic upgrade head
 
 # Create a new migration
-docker exec akvo-rag-vector-kb-mcp-1 alembic revision --autogenerate -m "add_field_x_to_vkb_documents"
+docker exec akvo-rag-mcp-vector-kb-query-1 alembic revision --autogenerate -m "add_field_x_to_vkb_documents"
 ```
 
 > **Important**: `backend` migrations **only** manage tables in `alembic_version`. `vector-kb-mcp` migrations **only** manage tables in `alembic_version_vkb`. Never mix them.
@@ -107,7 +107,7 @@ docker exec akvo-rag-vector-kb-mcp-1 alembic revision --autogenerate -m "add_fie
 docker exec -it akvo-rag-backend-1 bash
 
 # Vector KB MCP shell
-docker exec -it akvo-rag-vector-kb-mcp-1 bash
+docker exec -it akvo-rag-mcp-vector-kb-query-1 bash
 
 # PostgreSQL psql
 docker exec -it akvo-rag-postgres-1 psql -U postgres -d akvo_rag
@@ -160,7 +160,7 @@ Add this JSON object to the `tools` array under `knowledge_bases_mcp.tools`.
 ### Step 3: Restart the services
 
 ```bash
-./dc.sh restart backend vector-kb-mcp
+./dc.sh restart backend mcp-vector-kb-query
 ```
 
 The tool is now available to the LangGraph agent via the MCP client at `backend/mcp_clients/`.
@@ -203,7 +203,7 @@ docker exec akvo-rag-backend-1 python -m pytest tests/unit -v
 ### Vector KB MCP tests
 
 ```bash
-docker exec akvo-rag-vector-kb-mcp-1 pytest tests/ -v
+docker exec akvo-rag-mcp-vector-kb-query-1 pytest tests/ -v
 ```
 
 ### Frontend lint + build verification
