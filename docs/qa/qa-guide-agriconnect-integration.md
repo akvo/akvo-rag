@@ -68,11 +68,13 @@ In AgriConnect's codebase (`backend/services/external_ai_service.py`), AgriConne
 
 ## 3. Step-by-Step Local Integration Walkthrough (Swagger UI)
 
-### Step 3.1: Register AgriConnect in Akvo RAG
+### Step 3.1: Register AgriConnect in Akvo RAG (Super-Admin Required)
 
 1. Open **[http://localhost:8010/docs](http://localhost:8010/docs)**.
-2. Under the **`apps`** section, expand **`POST /api/v1/apps/register`** (or `POST /api/apps/register`).
-3. Click **"Try it out"**, provide the registration payload:
+2. Click the green **"Authorize"** button at the top of Swagger UI.
+3. Enter your super-admin credentials (`admin` / `adminpassword`) in the **OAuth2PasswordBearer** section and click **Authorize**.
+4. Under the **`apps`** section, expand **`POST /api/v1/apps/register`** (or `POST /api/apps/register`).
+5. Click **"Try it out"**, provide the registration payload:
 
    ```json
    {
@@ -84,8 +86,8 @@ In AgriConnect's codebase (`backend/services/external_ai_service.py`), AgriConne
    }
    ```
 
-4. Click **"Execute"**.
-5. In the **`201 Created`** response, copy the **`access_token`** (starts with `tok_...`):
+6. Click **"Execute"**.
+7. In the **`201 Created`** response, copy the **`access_token`** (starts with `tok_...`):
 
    ```json
    {

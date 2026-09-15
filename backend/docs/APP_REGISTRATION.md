@@ -9,7 +9,9 @@ This comprehensive guide details the architecture, server-to-server app registra
 Akvo RAG provides a multi-tenant API designed specifically for host applications:
 - **Host applications** manage their own end users, authorization, and business logic.
 - **Akvo RAG** serves as the backend AI/retrieval engine for document parsing, semantic vector indexing (ChromaDB + MinIO S3), and tiered LLM answer synthesis.
-- **Authentication**: Host applications authenticate to Akvo RAG using an application-scoped bearer token (`tok_...`). The token is hashed with **Argon2** inside Akvo RAG's database, ensuring zero plaintext token persistence.
+- **Authentication & Authorization**:
+  - **Onboarding (`POST /api/v1/apps/register`)**: Restricted to **Super-Administrators** authenticated via a user JWT token (`Authorization: Bearer <user_jwt>`).
+  - **Tenant Endpoints (`/me`, `/rotate`, `/revoke`, `/jobs`, `/knowledge-bases`, `/documents`, `/upload`)**: Secured with the application-scoped bearer token (`Authorization: Bearer tok_...`). The token is hashed with **Argon2** inside Akvo RAG's database, ensuring zero plaintext token persistence.
 - **Bidirectional Webhooks**: For long-running operations (such as document ingestion and streaming chat generation), Akvo RAG communicates back to the host application via configured webhooks (`chat_callback` and `upload_callback`).
 
 ```
@@ -53,12 +55,33 @@ In production, use the fully qualified domain name (FQDN):
 
 ## 3. Step-by-Step Integration Walkthrough
 
-### Step 3.1: Register Your Application
+### Step 3.1: Register Your Application (Super-Admin Required)
 
-Register your host application to obtain an API access token.
+App registration is restricted to **Super-Administrators**.
+
+#### 1. Obtain Super-Admin JWT Access Token
+First, log in as a super-admin user to obtain a JWT token:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=admin&password=your_admin_password"
+```
+
+Response (`200 OK`):
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer"
+}
+```
+
+#### 2. Register Your Host Application
+Call `POST /api/v1/apps/register` supplying the super-admin bearer token in the `Authorization` header:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/apps/register \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -H "Content-Type: application/json" \
   -d '{
     "app_name": "agriconnect",
