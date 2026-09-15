@@ -32,41 +32,41 @@
 Akvo RAG runs as an **8-container monorepo** communicating over a private Docker bridge network:
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                          Developer / End User                            │
-└──────────────────────────────────┬───────────────────────────────────────┘
-                                   │ HTTP :3000
-                                   ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│  frontend  (Next.js 14, TypeScript, Tailwind, Shadcn/UI)   [Port 3000]  │
-└──────────────────────────────────┬───────────────────────────────────────┘
-                                   │ HTTP /api/v1/* → :8000
-                                   ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│  backend   (Python FastAPI, LangGraph, LLMFactory, PromptService)        │
-│  [Port 8000]  JWT Auth · Redis RPC Dispatcher · MinIO S3 Client          │
-└───────────────┬──────────────────┬────────────────────┬──────────────────┘
-                │ Redis RPUSH/BLPOP │                    │ S3 API
-                ▼                  ▼                    ▼
-┌──────────────────────┐ ┌──────────────────┐  ┌────────────────────────┐
-│  vector-kb-mcp       │ │  redis  :6379     │  │  minio  :9000 / :9001  │
-│  (Query Worker RPC)  │ │  (RPC queues,     │  │  (S3 document storage, │
-├──────────────────────┤ │   async ingestion │  │   bucket: documents/)  │
-│vector-kb-mcp-ingesting│ │   queues)         │  └────────────────────────┘
-│ (Ingest Worker RPC)  │ └──────────────────┘
-└──────────┬───────────┘
-           │ asyncpg        │ asyncpg
-           ▼                ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│  postgres  (PostgreSQL 17)  [Port 5432]                                  │
-│  Tables: users, apps, chats, messages, prompt_definitions (alembic_version)│
-│  Tables: vkb_knowledge_bases, vkb_documents (alembic_version_vkb)        │
-└──────────────────────────────────────────────────────────────────────────┘
-           │ HTTP :8000 (internal)
-           ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│  chromadb  (ChromaDB vector store WAL mode) [Host: 8001 → Container: 8000]│
-└──────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             Developer / End User                            │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │ HTTP :3000
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│   frontend  (Next.js 14, TypeScript, Tailwind, Shadcn/UI)   [Port 3000]     │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │ HTTP /api/v1/* → :8000
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│   backend   (Python FastAPI, LangGraph, LLMFactory, PromptService)          │
+│   [Port 8000]  JWT Auth · Redis RPC Dispatcher · MinIO S3 Client            │
+└───────────────┬──────────────────────┬──────────────────────┬───────────────┘
+                │ Redis RPUSH/BLPOP    │                      │ S3 API
+                ▼                      ▼                      ▼
+┌─────────────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐
+│ vector-kb-mcp           │  │ redis  :6379     │  │ minio  :9000 / :9001     │
+│  (Query Worker RPC)     │  │ (RPC queues,     │  │ (S3 document storage,    │
+├─────────────────────────┤  │  async ingestion │  │  bucket: documents/)     │
+│ vector-kb-mcp-ingestion │  │  queues)         │  └──────────────────────────┘
+│  (Ingest Worker RPC)    │  └──────────────────┘
+└───────────┬─────────────┘
+            │ asyncpg           │ asyncpg
+            ▼                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│   postgres  (PostgreSQL 17)  [Port 5432]                                    │
+│   Tables: users, apps, chats, messages, prompt_definitions (alembic_version)│
+│   Tables: vkb_knowledge_bases, vkb_documents (alembic_version_vkb)          │
+└─────────────────────────────────────────────────────────────────────────────┘
+            │ HTTP :8000 (internal)
+            ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│   chromadb  (ChromaDB vector store WAL mode) [Host: 8001 → Container: 8000] │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 | Container | Image / Source | Host Port | Purpose |
@@ -140,11 +140,11 @@ docker compose exec backend python -m app.seeder.seed_prompts
 
 ### Step 4: Access the Platform
 
-| Service | URL |
-|---|---|
-| **Web UI** | http://localhost:3000 |
-| **API Docs (Swagger)** | http://localhost:8000/docs |
-| **MinIO Console** | http://localhost:9001 |
+| Service | URL | Notes |
+|---|---|---|
+| **Web UI** | http://localhost:3000 | Main RAG playground (or custom `FRONTEND_PORT` e.g. `http://localhost:3010`) |
+| **API Docs (Swagger)** | http://localhost:8000/docs | REST API documentation (or custom `BACKEND_PORT`) |
+| **MinIO Console** | http://localhost:9001 | Object storage console |
 
 > The first time, create your admin account:
 > ```bash
@@ -165,9 +165,9 @@ Copy `.env.example` to `.env` and configure the following sections.
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Token expiry in minutes (default: `10080` = 7 days) | ✅ |
 | `ENVIRONMENT` | `development` or `production` | ✅ |
 
-### AI Provider (choose one)
+### AI Provider Configuration
 
-**OpenAI** (default):
+**OpenAI** (Primary Provider):
 ```dotenv
 CHAT_PROVIDER=openai
 OPENAI_API_KEY=your-openai-api-key
@@ -175,25 +175,6 @@ OPENAI_MODEL=gpt-4o                 # Synthesis model
 OPENAI_MODEL_FAST=gpt-4o-mini       # Fast routing model
 OPENAI_MODEL_SYNTHESIS=gpt-4o
 OPENAI_API_BASE=https://api.openai.com/v1
-```
-
-**DeepSeek** (alternative):
-```dotenv
-CHAT_PROVIDER=deepseek
-DEEPSEEK_API_KEY=your-deepseek-api-key
-DEEPSEEK_API_BASE=https://api.deepseek.com/v1
-DEEPSEEK_MODEL=deepseek-chat
-DEEPSEEK_MODEL_FAST=deepseek-chat
-DEEPSEEK_MODEL_SYNTHESIS=deepseek-chat
-```
-
-**Ollama** (local LLM):
-```dotenv
-CHAT_PROVIDER=ollama
-OLLAMA_API_BASE=http://host.docker.internal:11434
-OLLAMA_MODEL=deepseek-r1:7b
-OLLAMA_MODEL_FAST=qwen2.5:3b
-OLLAMA_MODEL_SYNTHESIS=deepseek-r1:7b
 ```
 
 ### Database & Storage
@@ -239,11 +220,15 @@ All test commands run inside Docker containers.
 ### Backend Tests
 
 ```bash
-# All tests (integration + unit) with coverage report
+# Using helper script (runs inside Docker container)
+cd backend && ./test.sh
+
+# Or directly via docker exec
 docker exec akvo-rag-backend-1 python -m pytest tests/ -v --cov=app --cov=mcp_clients
 
 # Unit tests only (fast)
-docker exec akvo-rag-backend-1 python -m pytest tests/unit -v
+cd backend && ./test-unit.sh
+# (or: docker exec akvo-rag-backend-1 python -m pytest tests/unit -v)
 
 # Linter check
 docker exec akvo-rag-backend-1 flake8 app/ mcp_clients/
@@ -252,6 +237,10 @@ docker exec akvo-rag-backend-1 flake8 app/ mcp_clients/
 ### Vector KB Microservice Tests
 
 ```bash
+# Using helper script
+cd vector-kb-mcp && ./test.sh
+
+# Or directly via docker exec
 docker exec akvo-rag-vector-kb-mcp-1 pytest tests/ -v
 ```
 
@@ -283,8 +272,8 @@ Akvo RAG exposes a tenant API for host applications (e.g. AgriConnect) secured v
 See [`backend/docs/APP_REGISTRATION.md`](backend/docs/APP_REGISTRATION.md) for full integration reference:
 - App registration (`POST /api/v1/apps/register`)
 - Tenant knowledge base access (`GET /api/v1/apps/knowledge-bases`)
-- Document upload (`POST /api/v1/apps/knowledge-bases/{id}/documents/upload`)
-- Chat with streaming SSE (`POST /api/v1/apps/jobs`)
+- Document upload & ingestion (`POST /api/v1/apps/jobs`)
+- Chat jobs (`POST /api/v1/apps/jobs`)
 
 ---
 
@@ -320,16 +309,7 @@ For detailed playbooks, see [`docs/troubleshooting.md`](docs/troubleshooting.md)
 
 ---
 
-## 🔒 Security & Vulnerability Disclosure
-
-We take security seriously. If you discover a security vulnerability in Akvo RAG:
-
-1. **Do not open a public GitHub issue.**
-2. Email the Akvo security team at **security@akvo.org** with:
-   - Description of the vulnerability and steps to reproduce.
-   - Potential impact assessment.
-   - Any suggested mitigations.
-3. We will respond within **5 business days** and coordinate a responsible disclosure timeline.
+## 🔒 Security Best Practices
 
 **Security best practices for operators:**
 - Always set a strong, unique `SECRET_KEY` in production.
