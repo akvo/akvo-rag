@@ -14,7 +14,10 @@ from app.services.app_service import AppService
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.API_V1_STR}/auth/token",
+    description="**Note**: Leave `client_id` and `client_secret` blank. Only enter your **username** and **password**.",
+)
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 app_bearer_scheme = HTTPBearer(auto_error=False)
 
