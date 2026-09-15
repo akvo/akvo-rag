@@ -14,7 +14,6 @@ def sample_app_data():
         "default_chat_prompt": "",
         "chat_callback": "https://agriconnect.akvo.org/api/ai/callback",
         "upload_callback": "https://agriconnect.akvo.org/api/kb/callback",
-        "callback_token": "test_callback_token_123",
     }
 
 
@@ -147,13 +146,10 @@ class TestAppRegistration:
         assert response.status_code == 422  # Validation error
         assert "https" in response.text.lower()
 
-    def test_register_app_success_without_callback_token(
+    def test_register_app_success(
         self, client, sample_app_data
     ):
         """Test successful app registration returns credentials."""
-
-        # reset callback token
-        sample_app_data["callback_token"] = None
         response = client.post("/api/v1/apps/register", json=sample_app_data)
 
         assert response.status_code == 201

@@ -10,7 +10,7 @@ Akvo RAG provides a multi-tenant API designed specifically for host applications
 - **Host applications** manage their own end users, authorization, and business logic.
 - **Akvo RAG** serves as the backend AI/retrieval engine for document parsing, semantic vector indexing (ChromaDB + MinIO S3), and tiered LLM answer synthesis.
 - **Authentication**: Host applications authenticate to Akvo RAG using an application-scoped bearer token (`tok_...`). The token is hashed with **Argon2** inside Akvo RAG's database, ensuring zero plaintext token persistence.
-- **Bidirectional Webhooks**: For long-running operations (such as document ingestion and streaming chat generation), Akvo RAG communicates back to the host application via secure webhooks authenticated with a shared `callback_token`.
+- **Bidirectional Webhooks**: For long-running operations (such as document ingestion and streaming chat generation), Akvo RAG communicates back to the host application via configured webhooks (`chat_callback` and `upload_callback`).
 
 ```
  ┌────────────────────────────────┐                 ┌────────────────────────────────┐
@@ -24,7 +24,7 @@ Akvo RAG provides a multi-tenant API designed specifically for host applications
  │     (Bearer tok_...)           │                 │  ┌──────────────────────────┐  │
  │                                │                 │  │ Vector KB Worker         │  │
  │  3. Webhook Ingestion Callback │◀── POST /kb ────│  │ (ChromaDB + MinIO S3)    │  │
- │     (Bearer callback_token)    │                 │  └─────────────┬────────────┘  │
+ │                                │                 │  └─────────────┬────────────┘  │
  │                                │                 │                ▼               │
  │  4. Submit Chat Query          │── POST /jobs ──▶│  ┌──────────────────────────┐  │
  │     (Bearer tok_...)           │                 │  │ Dual-Tier LangGraph      │  │
@@ -65,8 +65,7 @@ curl -X POST http://localhost:8000/api/v1/apps/register \
     "domain": "agriconnect.akvo.org",
     "default_chat_prompt": "You are AgriConnect AI, an expert agronomy advisor supporting smallholder farmers.",
     "chat_callback": "https://agriconnect.akvo.org/api/callback/ai",
-    "upload_callback": "https://agriconnect.akvo.org/api/callback/kb",
-    "callback_token": "your_secure_random_callback_secret_token"
+    "upload_callback": "https://agriconnect.akvo.org/api/callback/kb"
   }'
 ```
 
@@ -76,9 +75,8 @@ curl -X POST http://localhost:8000/api/v1/apps/register \
 | `app_name` | `string` | ✅ | Unique name identifier for your host application. |
 | `domain` | `string` | ✅ | Primary domain or hostname of your application. |
 | `default_chat_prompt` | `string` | ❌ | Default system persona/prompt override for chat queries. |
-| `chat_callback` | `string` | ❌ | HTTPS webhook URL where chat responses will be delivered. |
-| `upload_callback` | `string` | ❌ | HTTPS webhook URL where document ingestion status updates will be delivered. |
-| `callback_token` | `string` | ✅ | Shared secret token Akvo RAG sends in the `Authorization` header when calling your webhooks. |
+| `chat_callback` | `string` | ✅ | HTTPS webhook URL where chat responses will be delivered. |
+| `upload_callback` | `string` | ✅ | HTTPS webhook URL where document ingestion status updates will be delivered. |
 
 #### Response (`201 Created`):
 ```json

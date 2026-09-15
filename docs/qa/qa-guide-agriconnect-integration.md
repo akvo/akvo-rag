@@ -80,8 +80,7 @@ In AgriConnect's codebase (`backend/services/external_ai_service.py`), AgriConne
      "domain": "agriconnect.local",
      "default_chat_prompt": "You are AgriConnect AI, an expert agronomy advisor supporting smallholder farmers.",
      "chat_callback": "https://akvo.ngrok.dev:8000/api/callback/ai",  // or "http://host.docker.internal:8000/api/callback/ai"
-     "upload_callback": "https://akvo.ngrok.dev:8000/api/callback/kb", // or "http://host.docker.internal:8000/api/callback/kb"
-     "callback_token": "local_agriconnect_secret_token"
+     "upload_callback": "https://akvo.ngrok.dev:8000/api/callback/kb" // or "http://host.docker.internal:8000/api/callback/kb"
    }
    ```
 

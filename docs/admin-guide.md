@@ -132,15 +132,17 @@ Host applications (e.g. AgriConnect, CoM) integrate with Akvo RAG via a tenant A
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/apps/register \
-  -H "Authorization: Bearer <admin-jwt-token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "AgriConnect",
-    "description": "Akvo AgriConnect host application"
+    "app_name": "AgriConnect",
+    "domain": "agriconnect.local",
+    "default_chat_prompt": "You are AgriConnect AI, an expert agronomy advisor.",
+    "chat_callback": "https://agriconnect.local/api/callback/ai",
+    "upload_callback": "https://agriconnect.local/api/callback/kb"
   }'
 ```
 
-**Response**: Returns `token` (the plaintext `tok_...` value shown once) and `app_id`. Store the token securely — it cannot be retrieved again.
+**Response**: Returns `access_token` (the plaintext `tok_...` value shown once), `app_id`, `client_id`, `scopes`, and default `knowledge_bases`. Store the access token securely — it cannot be retrieved again in plaintext.
 
 ### 4.2 Tenant API Endpoints
 

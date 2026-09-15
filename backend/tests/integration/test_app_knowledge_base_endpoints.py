@@ -13,7 +13,6 @@ def sample_app_data():
         "default_chat_prompt": "",
         "chat_callback": "https://agriconnect.akvo.org/api/ai/callback",
         "upload_callback": "https://agriconnect.akvo.org/api/kb/callback",
-        "callback_token": "test_callback_token_123",
     }
 
 

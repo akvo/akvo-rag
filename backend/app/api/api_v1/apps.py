@@ -60,7 +60,7 @@ async def register_app(
     - **chat_callback**: HTTPS callback URL for chat operations
     - **upload_callback**: HTTPS callback URL for upload operations
 
-    Returns app credentials including access_token and callback_token.
+    Returns app credentials including access_token and default knowledge base.
     """
     try:
         # register KB for the app
