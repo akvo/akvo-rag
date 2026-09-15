@@ -243,9 +243,10 @@ If documents show `FAILED` status — check vector-kb-mcp logs and retry ingesti
 ### 6.1 Worker Not Processing Requests
 
 ```bash
-# Check worker is running
-docker compose ps vector-kb-mcp
+# Check both query and ingestion workers are running
+docker compose ps vector-kb-mcp vector-kb-mcp-ingestion
 docker compose logs vector-kb-mcp --tail=30
+docker compose logs vector-kb-mcp-ingestion --tail=30
 
 # Test Redis connectivity from the worker container
 docker exec akvo-rag-vector-kb-mcp-1 redis-cli -h redis ping
@@ -256,17 +257,18 @@ If logs show `ConnectionRefusedError` to Redis, restart services in order:
 ```bash
 docker compose restart redis
 sleep 5
-docker compose restart vector-kb-mcp
+docker compose restart vector-kb-mcp vector-kb-mcp-ingestion
 ```
 
 ### 6.2 Document Processing Stuck in PROCESSING
 
 ```bash
-# Check queue depth
+# Check queue depths (query RPC vs async ingestion)
 docker exec akvo-rag-redis-1 redis-cli llen mcp:vector:requests
+docker exec akvo-rag-redis-1 redis-cli llen mcp:vector:ingest
 
-# Tail worker logs for the processing error
-docker compose logs vector-kb-mcp -f --tail=100
+# Tail ingestion worker logs for the processing error
+docker compose logs vector-kb-mcp-ingestion -f --tail=100
 
 # Force reset a stuck document via psql
 docker exec -it akvo-rag-postgres-1 psql -U postgres -d akvo_rag \

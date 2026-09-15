@@ -45,7 +45,7 @@ Seed the prompt templates (required on first run):
 docker compose exec backend python -m app.seeder.seed_prompts
 ```
 
-Verify all 7 containers are running:
+Verify all 8 containers are running:
 
 ```bash
 docker compose -f docker-compose.dev.yml ps
