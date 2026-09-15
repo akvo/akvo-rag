@@ -1,4 +1,3 @@
-from typing import Optional
 from sqlalchemy.orm import Session
 from app.models.system_setting import SystemSetting
 
@@ -7,13 +6,17 @@ DEFAULT_TOP_K = 4
 
 class SystemSettingsService:
     """Service for managing global system settings."""
-    
+
     def __init__(self, db: Session) -> None:
         self.db = db
 
     def get_setting(self, key: str) -> SystemSetting:
         """Retrieve a setting by its key."""
-        setting = self.db.query(SystemSetting).filter(SystemSetting.key == key).first()
+        setting = (
+            self.db.query(SystemSetting)
+            .filter(SystemSetting.key == key)
+            .first()
+        )
         if not setting:
             raise ValueError(f"Setting with key '{key}' not found.")
         return setting

@@ -58,18 +58,6 @@ python -m app.seeder.seed_prompts || \
 echo "⚠️ Prompt seeder failed, continuing startup"
 
 # ===========================================
-# MCP Discovery (BLOCKING, authoritative)
-# ===========================================
-ALLOW_FALLBACK=${MCP_DISCOVERY_ALLOW_FALLBACK:-true}
-
-echo "Running MCP discovery (allow_fallback=$ALLOW_FALLBACK)..."
-
-python -m mcp_clients.mcp_discovery_manager \
-$( [ "$ALLOW_FALLBACK" = "true" ] && echo "--allow-fallback" )
-
-echo "✅ MCP discovery ready"
-
-# ===========================================
 # Start FastAPI
 # ===========================================
 echo "Starting application..."

@@ -1,8 +1,31 @@
 from typing import List, Optional, Generic, TypeVar
+from urllib.parse import urlparse
 from pydantic import BaseModel, field_validator, Field
 from datetime import datetime
 
 from app.models.app import AppStatus
+
+# Hosts allowed over HTTP when ALLOW_HTTP_CALLBACKS=True
+_LOCAL_DEV_HOSTS = {
+    "localhost",
+    "127.0.0.1",
+    "host.docker.internal",
+    "0.0.0.0",
+}
+
+
+def _is_callback_url_allowed(url: str) -> bool:
+    """Return True if the URL is acceptable as a callback."""
+    if url.startswith("https://"):
+        return True
+    # Allow HTTP only for local dev hosts when explicitly enabled
+    from app.core.config import settings
+
+    if settings.ALLOW_HTTP_CALLBACKS and url.startswith("http://"):
+        host = urlparse(url).hostname or ""
+        if host in _LOCAL_DEV_HOSTS:
+            return True
+    return False
 
 
 T = TypeVar("T")
@@ -34,8 +57,12 @@ class AppRegisterRequest(BaseModel):
     @field_validator("chat_callback", "upload_callback")
     @classmethod
     def validate_https_url(cls, v: str) -> str:
-        if not v.startswith("https://"):
-            raise ValueError("Callback URLs must use HTTPS")
+        if not _is_callback_url_allowed(v):
+            raise ValueError(
+                "Callback URLs must use HTTPS "
+                "(HTTP allowed only for local dev hosts "
+                "when ALLOW_HTTP_CALLBACKS=True)"
+            )
         return v
 
 
@@ -61,8 +88,12 @@ class AppUpdateRequest(BaseModel):
     @field_validator("chat_callback", "upload_callback")
     @classmethod
     def validate_https_url(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and not v.startswith("https://"):
-            raise ValueError("Callback URLs must use HTTPS")
+        if v is not None and not _is_callback_url_allowed(v):
+            raise ValueError(
+                "Callback URLs must use HTTPS "
+                "(HTTP allowed only for local dev hosts "
+                "when ALLOW_HTTP_CALLBACKS=True)"
+            )
         return v
 
 

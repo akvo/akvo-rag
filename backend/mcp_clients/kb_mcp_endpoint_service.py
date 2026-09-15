@@ -4,6 +4,7 @@ import logging
 import mimetypes
 from typing import Any, Dict, List, Optional
 from fastapi import UploadFile
+from starlette.datastructures import UploadFile as StarletteUploadFile
 import aiofiles
 
 from mcp_clients.queue_dispatcher import MCPQueueDispatcher
@@ -235,7 +236,7 @@ class KnowledgeBaseMCPEndpointService:
 
     async def preview_documents(
         self, kb_id: int, preview_request: dict
-    ) -> Dict[int, Any]:
+    ) -> Dict[Any, Any]:
         """Preview document chunks mapped by document ID via Redis RPC."""
         result = await self.dispatcher.call_tool(
             "knowledge_bases_mcp",
@@ -243,8 +244,13 @@ class KnowledgeBaseMCPEndpointService:
             {"kb_id": kb_id, **preview_request},
         )
         if isinstance(result, dict) and "error" not in result:
-            # Convert string keys back to int if needed
-            return {int(k): v for k, v in result.items() if str(k).isdigit()}
+            formatted = {}
+            for k, v in result.items():
+                if str(k).isdigit():
+                    formatted[int(k)] = v
+                else:
+                    formatted[k] = v
+            return formatted
         return result
 
     async def process_documents(
@@ -256,16 +262,9 @@ class KnowledgeBaseMCPEndpointService:
         tasks = []
         for idx, res in enumerate(upload_results, start=1):
             doc_id = (
-                res.get("document_id")
-                or res.get("doc_id")
-                or res.get("id")
+                res.get("document_id") or res.get("doc_id") or res.get("id")
             )
-            uid = (
-                res.get("upload_id")
-                or res.get("task_id")
-                or doc_id
-                or idx
-            )
+            uid = res.get("upload_id") or res.get("task_id") or doc_id or idx
             tasks.append({"upload_id": uid, "task_id": uid})
 
             chunk_size = res.get("chunk_size", 1000)
@@ -273,6 +272,16 @@ class KnowledgeBaseMCPEndpointService:
             target_id = doc_id or uid
 
             # Trigger async ingestion via Redis RPC
+            fname = (
+                res.get("file_name")
+                or res.get("filename")
+                or res.get("original_filename")
+            )
+            fpath = (
+                res.get("temp_path")
+                or res.get("file_path")
+                or res.get("minio_key")
+            )
             asyncio.create_task(
                 self.dispatcher.call_tool(
                     "knowledge_bases_mcp",
@@ -282,6 +291,11 @@ class KnowledgeBaseMCPEndpointService:
                         "kb_id": kb_id,
                         "upload_id": uid,
                         "task_id": uid,
+                        "file_name": fname,
+                        "filename": fname,
+                        "file_path": fpath,
+                        "temp_path": fpath,
+                        "minio_key": fpath,
                         "chunk_size": chunk_size,
                         "chunk_overlap": chunk_overlap,
                     },
@@ -294,28 +308,25 @@ class KnowledgeBaseMCPEndpointService:
         self, kb_id: int, files: list
     ) -> list[dict]:
         """Supports UploadFile or local file paths from Celery."""
-        file_payload = []
+        from app.services.document_upload_service import (
+            process_and_enqueue_upload,
+        )
+
+        upload_files = []
+        local_files = []
+
         for f in files:
-            if isinstance(f, UploadFile):
-                content = await f.read()
-                file_payload.append(
-                    {
-                        "filename": f.filename,
-                        "size": len(content),
-                        "status": "processed",
-                    }
-                )
-                await f.seek(0)
+            if isinstance(f, (UploadFile, StarletteUploadFile)) or (
+                hasattr(f, "filename") and hasattr(f, "read")
+            ):
+                upload_files.append(f)
             elif isinstance(f, str) and os.path.exists(f):
                 if not os.path.isfile(f):
                     raise ValueError(f"Not a valid file: {f}")
                 file_size = os.path.getsize(f)
                 if file_size == 0:
                     raise ValueError(f"Empty file: {f}")
-                async with aiofiles.open(f, "rb") as af:
-                    content = await af.read()
                 filename = os.path.basename(f)
-                content_type, _ = mimetypes.guess_type(filename)
                 supported_extensions = {".pdf", ".docx", ".md", ".txt"}
                 _, ext = os.path.splitext(filename)
                 if ext.lower() not in supported_extensions:
@@ -323,17 +334,35 @@ class KnowledgeBaseMCPEndpointService:
                         f"Unsupported file type: {ext}. "
                         f"Supported types: {supported_extensions}"
                     )
-                file_payload.append(
-                    {
-                        "filename": filename,
-                        "size": len(content),
-                        "type": content_type,
-                        "status": "processed",
-                    }
-                )
+                local_files.append(f)
             else:
                 raise ValueError(f"Invalid file input: {f!r}")
-        return file_payload
+
+        results = []
+        if upload_files:
+            upload_results = await process_and_enqueue_upload(
+                kb_id=kb_id, files=upload_files
+            )
+            if isinstance(upload_results, list):
+                results.extend(upload_results)
+            else:
+                results.append(upload_results)
+
+        for lf in local_files:
+            async with aiofiles.open(lf, "rb") as af:
+                content = await af.read()
+            filename = os.path.basename(lf)
+            content_type, _ = mimetypes.guess_type(filename)
+            results.append(
+                {
+                    "filename": filename,
+                    "size": len(content),
+                    "type": content_type,
+                    "status": "processed",
+                }
+            )
+
+        return results
 
     async def get_documents_upload(self, kb_id: int) -> List[dict]:
         """Get upload tasks status."""
@@ -341,8 +370,8 @@ class KnowledgeBaseMCPEndpointService:
 
     # ---- Processing tasks ----
     async def get_processing_tasks(
-        self, kb_id: int, task_ids: List[int]
-    ) -> Dict[int, dict]:
+        self, kb_id: int, task_ids: List[Any]
+    ) -> Dict[Any, dict]:
         """Get document processing task status via Redis RPC."""
         result = await self.dispatcher.call_tool(
             "knowledge_bases_mcp",
@@ -350,7 +379,10 @@ class KnowledgeBaseMCPEndpointService:
             {"kb_id": kb_id, "task_ids": task_ids},
         )
         if isinstance(result, dict) and "error" not in result:
-            return {int(k): v for k, v in result.items() if str(k).isdigit()}
+            return {
+                int(k) if str(k).isdigit() else str(k): v
+                for k, v in result.items()
+            }
         return {
             tid: {
                 "document_id": tid,

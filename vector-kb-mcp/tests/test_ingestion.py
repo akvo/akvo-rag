@@ -27,7 +27,9 @@ async def in_memory_db():
         bind=engine, class_=AsyncSession, expire_on_commit=False
     )
 
-    with patch("handlers.doc_handlers.get_db_session") as mock_db:
+    with patch("handlers.doc_handlers.get_db_session") as mock_db, patch(
+        "ingestion.processor.get_db_session"
+    ) as mock_proc_db, patch("db.session.get_db_session") as mock_core_db:
         from contextlib import asynccontextmanager
 
         @asynccontextmanager
@@ -43,6 +45,8 @@ async def in_memory_db():
                 await session.close()
 
         mock_db.side_effect = _mock_session
+        mock_proc_db.side_effect = _mock_session
+        mock_core_db.side_effect = _mock_session
 
         # Seed KB
         async with _mock_session() as s:

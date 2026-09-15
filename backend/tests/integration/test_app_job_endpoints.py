@@ -85,7 +85,7 @@ class TestAppJobsEndpoints:
 
         headers = {"Authorization": f"Bearer {sample_app.access_token}"}
         response = client.post(
-            "/api/apps/jobs", data=sample_chat_job_payload, headers=headers
+            "/api/v1/apps/jobs", data=sample_chat_job_payload, headers=headers
         )
 
         assert response.status_code == 200
@@ -107,7 +107,10 @@ class TestAppJobsEndpoints:
         self, client, sample_chat_job_payload
     ):
         """Should reject unauthenticated requests."""
-        response = client.post("/api/apps/jobs", data=sample_chat_job_payload)
+        response = client.post(
+            "/api/v1/apps/jobs",
+            data=sample_chat_job_payload,
+        )
         assert response.status_code == 401
 
     def test_create_chat_job_invalid_token(
@@ -116,7 +119,7 @@ class TestAppJobsEndpoints:
         """Should reject invalid tokens."""
         headers = {"Authorization": "Bearer tok_invalid"}
         response = client.post(
-            "/api/apps/jobs", data=sample_chat_job_payload, headers=headers
+            "/api/v1/apps/jobs", data=sample_chat_job_payload, headers=headers
         )
         assert response.status_code == 401
 
@@ -132,7 +135,7 @@ class TestAppJobsEndpoints:
 
         headers = {"Authorization": f"Bearer {sample_app.access_token}"}
         response = client.post(
-            "/api/apps/jobs", data=sample_chat_job_payload, headers=headers
+            "/api/v1/apps/jobs", data=sample_chat_job_payload, headers=headers
         )
         assert response.status_code == 403
 
@@ -152,7 +155,7 @@ class TestAppJobsEndpoints:
 
         headers = {"Authorization": f"Bearer {sample_app.access_token}"}
         response = client.post(
-            "/api/apps/jobs",
+            "/api/v1/apps/jobs",
             data=sample_upload_job_payload,
             files=files,
             headers=headers,
@@ -178,7 +181,7 @@ class TestAppJobsEndpoints:
     ):
         """❌ Should reject unauthenticated upload job creation."""
         response = client.post(
-            "/api/apps/jobs", data=sample_upload_job_payload
+            "/api/v1/apps/jobs", data=sample_upload_job_payload
         )
         assert response.status_code == 401
 
@@ -205,7 +208,7 @@ class TestGetJobStatus:
         db.close()
 
         headers = {"Authorization": f"Bearer {sample_app.access_token}"}
-        response = client.get(f"/api/apps/jobs/{job.id}", headers=headers)
+        response = client.get(f"/api/v1/apps/jobs/{job.id}", headers=headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -216,11 +219,14 @@ class TestGetJobStatus:
 
     def test_get_job_status_requires_auth(self, client):
         """Should return 401 if no token is provided."""
-        response = client.get("/api/apps/jobs/job_abc")
+        response = client.get("/api/v1/apps/jobs/job_abc")
         assert response.status_code == 401
 
     def test_get_job_status_not_found(self, client, sample_app):
         """Should return 404 for unknown job_id."""
         headers = {"Authorization": f"Bearer {sample_app.access_token}"}
-        response = client.get("/api/apps/jobs/job_not_exist", headers=headers)
+        response = client.get(
+            "/api/v1/apps/jobs/job_not_exist",
+            headers=headers,
+        )
         assert response.status_code == 404

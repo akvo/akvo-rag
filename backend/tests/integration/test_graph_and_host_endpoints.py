@@ -59,17 +59,27 @@ class TestRAGGraphIntegration:
         knowledge_base_ids=[1]. Assert run_mcp_tool_node returns
         List[Document] without calling ScopingAgent.
         """
-        # Mock Intent Classifier LLM
-        fake_classifier_llm = MagicMock()
-        fake_classifier_llm.ainvoke = AsyncMock(
-            return_value=AIMessage(content='{"intent": "knowledge_query"}')
-        )
 
-        # Mock QA / Contextualizer LLM
-        async def fake_qa_invoke(prompt_value, **kwargs):
+        # Mock LLM for intent classification, contextualization, and synthesis
+        async def fake_llm_invoke(*args, **kwargs):
+            prompt_value = args[0] if args else None
+            content = ""
+            if hasattr(prompt_value, "to_messages"):
+                msgs = prompt_value.to_messages()
+                content = str(msgs[0].content) if msgs else ""
+            elif isinstance(prompt_value, list) and len(prompt_value) > 0:
+                first_item = prompt_value[0]
+                content = (
+                    first_item[1]
+                    if isinstance(first_item, tuple)
+                    else getattr(first_item, "content", "")
+                )
+            if "classification" in content.lower():
+                return AIMessage(content='{"intent": "knowledge_query"}')
             return AIMessage(content="How to harvest avocado?")
 
-        fake_qa_llm = RunnableLambda(fake_qa_invoke)
+        fake_llm = RunnableLambda(fake_llm_invoke)
+        fake_llm.ainvoke = AsyncMock(side_effect=fake_llm_invoke)
 
         async def fake_astream(inputs):
             yield "Avocados should be harvested gently [[citation:1]]."
@@ -96,11 +106,11 @@ class TestRAGGraphIntegration:
 
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_classifier_llm,
+            lambda *args, **kwargs: fake_llm,
         )
         monkeypatch.setattr(
             "app.services.query_answering_workflow.llm_instance",
-            fake_qa_llm,
+            fake_llm,
         )
         monkeypatch.setattr(
             "app.services.query_answering_workflow.create_stuff_documents_chain",  # noqa
@@ -210,7 +220,7 @@ class TestRAGGraphIntegration:
 
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_fallback_llm,
+            lambda *args, **kwargs: fake_fallback_llm,
         )
         monkeypatch.setattr(
             "app.services.query_answering_workflow._mcp_dispatcher",
@@ -264,7 +274,7 @@ class TestHostRESTEndpointsParity:
             lambda: fake_service,
         )
 
-        response = client.get("/api/knowledge-base")
+        response = client.get("/api/v1/knowledge-bases")
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
@@ -274,7 +284,7 @@ class TestHostRESTEndpointsParity:
         assert data[0]["is_superuser"] is True
 
     def test_get_knowledge_base_by_id(self, client: TestClient, monkeypatch):
-        """Test GET /api/knowledge-base/{id} returns single KB object."""
+        """Test GET /api/v1/knowledge-bases/{id} returns single KB object."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={
@@ -294,7 +304,7 @@ class TestHostRESTEndpointsParity:
             lambda: fake_service,
         )
 
-        response = client.get("/api/knowledge-base/42")
+        response = client.get("/api/v1/knowledge-bases/42")
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == 42
@@ -304,7 +314,7 @@ class TestHostRESTEndpointsParity:
     def test_create_knowledge_base_schema(
         self, client: TestClient, monkeypatch
     ):
-        """Test POST /api/knowledge-base creates new KB."""
+        """Test POST /api/v1/knowledge-bases creates new KB."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={
@@ -328,14 +338,14 @@ class TestHostRESTEndpointsParity:
             "description": "Paddy management",
             "embedding_model": "text-embedding-3-small",
         }
-        response = client.post("/api/knowledge-base", json=payload)
+        response = client.post("/api/v1/knowledge-bases", json=payload)
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == 101
         assert data["name"] == "New Rice KB"
 
     def test_delete_knowledge_base(self, client: TestClient, monkeypatch):
-        """Test DELETE /api/knowledge-base/{id} deletes KB."""
+        """Test DELETE /api/v1/knowledge-bases/{id} deletes KB."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={"status": "deleted", "id": 42}
@@ -348,13 +358,14 @@ class TestHostRESTEndpointsParity:
             lambda: fake_service,
         )
 
-        response = client.delete("/api/knowledge-base/42")
+        response = client.delete("/api/v1/knowledge-bases/42")
         assert response.status_code == 200
         data = response.json()
         assert data.get("status") == "deleted"
 
     def test_test_retrieval_endpoint(self, client: TestClient, monkeypatch):
-        """Test POST /api/knowledge-base/test-retrieval performs retrieval."""
+        """Test POST /api/v1/knowledge-bases/test-retrieval
+        performs retrieval."""
         fake_dispatcher = MagicMock()
         fake_dispatcher.call_tool = AsyncMock(
             return_value={
@@ -381,7 +392,7 @@ class TestHostRESTEndpointsParity:
             "top_k": 3,
         }
         response = client.post(
-            "/api/knowledge-base/test-retrieval", json=payload
+            "/api/v1/knowledge-bases/test-retrieval", json=payload
         )
         assert response.status_code == 200
         data = response.json()

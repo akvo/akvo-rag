@@ -13,7 +13,7 @@ from langchain_core.prompts import (
 )
 from langchain.chains.combine_documents import create_stuff_documents_chain
 
-from app.services.llm.llm_factory import LLMFactory
+from app.services.llm.llm_factory import LLMFactory, ModelTier
 from mcp_clients.queue_dispatcher import MCPQueueDispatcher
 
 # ---------------------------------------------------------------------
@@ -154,7 +154,7 @@ async def classify_intent_node(state: GraphState) -> GraphState:
         return state
 
     try:
-        llm = LLMFactory.create()
+        llm = LLMFactory.create(model_tier=ModelTier.FAST, streaming=False)
 
         system_prompt = """
         You are a classification model for a conversational AI assistant.
@@ -207,9 +207,9 @@ async def classify_intent_node(state: GraphState) -> GraphState:
 
 
 # ---------------------------------------------------------------------
-# Reuse LLM instance
+# Reuse LLM instance (Default Synthesis Tier)
 # ---------------------------------------------------------------------
-llm_instance = LLMFactory.create()
+llm_instance = LLMFactory.create(model_tier=ModelTier.SYNTHESIS)
 
 
 # ---------------------------------------------------------------------
@@ -221,7 +221,7 @@ async def small_talk_node(state: GraphState) -> GraphState:
         return state
 
     try:
-        llm = LLMFactory.create()
+        llm = LLMFactory.create(model_tier=ModelTier.FAST, streaming=False)
         system_prompt = """
         You are a friendly assistant.
         Reply briefly (max 1 sentence) to the user's greeting or small talk.
@@ -247,6 +247,7 @@ async def contextualize_node(state: GraphState) -> GraphState:
         return state
 
     try:
+        llm = LLMFactory.create(model_tier=ModelTier.FAST, streaming=False)
         contextualize_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", state["contextualize_prompt_str"]),
@@ -254,7 +255,7 @@ async def contextualize_node(state: GraphState) -> GraphState:
                 ("human", "{input}"),
             ]
         )
-        chain = contextualize_prompt | llm_instance
+        chain = contextualize_prompt | llm
 
         result = await chain.ainvoke(
             {"chat_history": state["chat_history"], "input": state["query"]}
@@ -386,7 +387,7 @@ async def error_handler_node(state: GraphState) -> GraphState:
         query = state.get("query", "")
         contextual_query = state.get("contextual_query", query)
 
-        llm = LLMFactory.create()
+        llm = LLMFactory.create(model_tier=ModelTier.FAST, streaming=False)
 
         if intent == "weather_query":
             # Let LLM answer weather questions with general knowledge
@@ -538,11 +539,22 @@ async def post_processing_node(state: GraphState) -> GraphState:
 
 
 async def response_generation_node(state: GraphState):
-    """Stream the final LLM-generated response."""
+    """Stream the final LLM-generated response with cached prompt prefix."""
     try:
+        raw_qa_prompt = state.get("qa_prompt_str", "")
+        # Sanitize {context} placeholder out of the invariant static system
+        # instructions if present to keep the prefix cacheable by OpenAI.
+        static_system_prompt = (
+            raw_qa_prompt.replace("\n\n### Provided Context:\n{context}", "")
+            .replace("### Provided Context:\n{context}", "")
+            .replace("Context: {context}", "")
+            .strip()
+        )
+
         qa_prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", state["qa_prompt_str"]),
+                ("system", static_system_prompt),
+                ("system", "### Reference Documents / Context:\n{context}"),
                 MessagesPlaceholder("chat_history"),
                 ("human", "{input}"),
             ]
@@ -552,8 +564,12 @@ async def response_generation_node(state: GraphState):
             "\n\n- {page_content}\n\n"
         )
 
+        synthesis_llm = LLMFactory.create(
+            model_tier=ModelTier.SYNTHESIS, streaming=True
+        )
+
         qa_chain = create_stuff_documents_chain(
-            llm=llm_instance,
+            llm=synthesis_llm,
             prompt=qa_prompt,
             document_prompt=document_prompt,
             document_variable_name="context",

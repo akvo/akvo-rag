@@ -59,7 +59,7 @@ export default function APIKeysPage() {
   const { toast } = useToast();
   const router = useRouter();
 
-  // 获取 API Keys 列表
+  // Fetch API keys list
   const fetchAPIKeys = async () => {
     try {
       const data = await api.get("/api/api-keys");
@@ -79,7 +79,7 @@ export default function APIKeysPage() {
     fetchAPIKeys();
   }, []);
 
-  // 创建新的 API Key
+  // Create new API key
   const createAPIKey = async () => {
     if (!newKeyName.trim()) {
       toast({
@@ -115,7 +115,7 @@ export default function APIKeysPage() {
     }
   };
 
-  // 删除 API Key
+  // Delete API key
   const deleteAPIKey = async (id: number) => {
     try {
       const response = await api.delete(`/api/api-keys/${id}`);
@@ -136,7 +136,7 @@ export default function APIKeysPage() {
     }
   };
 
-  // 更新 API Key 状态
+  // Update API key status
   const toggleAPIKeyStatus = async (id: number, currentStatus: boolean) => {
     try {
       const response = await api.put(`/api/api-keys/${id}`, {
@@ -162,7 +162,7 @@ export default function APIKeysPage() {
     }
   };
 
-  // 复制 API Key
+  // Copy API key to clipboard
   const copyAPIKey = async (id: number, key: string) => {
     try {
       await navigator.clipboard.writeText(key);
@@ -216,7 +216,7 @@ export default function APIKeysPage() {
                         <h4 className="text-sm font-medium text-slate-700 mb-2">
                           Method
                         </h4>
-                        <code className="block p-3 bg-white border rounded-md text-sm font-mono text-blue-600">
+                        <code className="block p-3 bg-white border rounded-md text-sm font-mono text-[#03AD8C] font-semibold">
                           GET
                         </code>
                       </div>
@@ -236,13 +236,13 @@ export default function APIKeysPage() {
                         </h4>
                         <div className="bg-white border rounded-md p-3 space-y-2">
                           <div className="grid grid-cols-3 text-sm">
-                            <div className="font-mono text-blue-600">query</div>
+                            <div className="font-mono text-[#03AD8C]">query</div>
                             <div className="col-span-2">
                               Your search query string
                             </div>
                           </div>
                           <div className="grid grid-cols-3 text-sm">
-                            <div className="font-mono text-blue-600">top_k</div>
+                            <div className="font-mono text-[#03AD8C]">top_k</div>
                             <div className="col-span-2">
                               Number of results to return (optional, default: 3)
                             </div>
@@ -255,7 +255,7 @@ export default function APIKeysPage() {
                           Headers
                         </h4>
                         <div className="bg-white border rounded-md p-3 grid grid-cols-3 text-sm">
-                          <div className="font-mono text-blue-600">
+                          <div className="font-mono text-[#03AD8C]">
                             X-API-Key
                           </div>
                           <div className="col-span-2">your_api_key</div>

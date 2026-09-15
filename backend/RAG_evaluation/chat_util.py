@@ -18,7 +18,10 @@ logger = logging.getLogger("rag_evaluation")
 
 
 class RagChatUtil:
-    """Utility for interacting with Akvo RAG API to generate responses for evaluation."""
+    """
+    Utility for interacting with Akvo RAG API to
+    generate responses for evaluation.
+    """
 
     def __init__(
         self,
@@ -42,7 +45,7 @@ class RagChatUtil:
         self.logs = []
 
         # Log initialization details
-        logger.info(f"=== RAG CHAT UTIL INITIALIZED ===")
+        logger.info("=== RAG CHAT UTIL INITIALIZED ===")
         logger.info(f"Base URL: '{base_url}'")
         logger.info(f"Username: '{username}'")
         logger.info(f"Password: {'***' if password else 'None'}")
@@ -104,7 +107,7 @@ class RagChatUtil:
 
         logger.info(f"Attempting login to: {login_url}")
         logger.info(
-            f"Login payload: username='{self.username}', password={'***' if self.password else 'None'}"
+            f"Login payload: username='{self.username}', password={'***' if self.password else 'None'}"  # noqa
         )
         self._log("login", {"username": self.username}, "Logging in")
 
@@ -116,7 +119,7 @@ class RagChatUtil:
                 token_data = response.json()
                 self.token = token_data.get("access_token")
                 logger.info(
-                    f"✅ Login successful - token received: {'***' if self.token else 'None'}"
+                    f"✅ Login successful - token received: {'***' if self.token_data else 'None'}"  # noqa
                 )
                 self._log("login", {}, {"status": "success"})
                 return True
@@ -125,7 +128,7 @@ class RagChatUtil:
                 try:
                     error_text = response.text
                     logger.error(f"Login error response: {error_text}")
-                except:
+                except BaseException:
                     pass
                 self._log(
                     "login",
@@ -179,7 +182,7 @@ class RagChatUtil:
                     {"status": "failed", "status_code": response.status_code},
                 )
                 logger.error(
-                    f"Failed to get knowledge bases: HTTP {response.status_code}"
+                    f"Failed to get knowledge bases: HTTP {response.status_code}"  # noqa
                 )
                 return []
         except Exception as e:
@@ -192,10 +195,10 @@ class RagChatUtil:
     async def get_knowledge_base_by_name(
         self, name: str
     ) -> Optional[Dict[str, Any]]:
-        """Get a knowledge base by its name.
+        """Get a knowledge base by its name, alias, or ID.
 
         Args:
-            name: Name of the knowledge base
+            name: Name or alias of the knowledge base
 
         Returns:
             Knowledge base if found, None otherwise
@@ -208,31 +211,113 @@ class RagChatUtil:
             {"total_kbs": len(kbs)},
         )
 
-        # Enhanced logging for knowledge base search
-        logger.info(f"Searching for knowledge base: '{name}'")
         logger.info(
-            f"Comparing against {len(kbs)} available knowledge bases..."
+            f"Searching for knowledge base: '{name}' among {len(kbs)} available KBs"  # noqa
         )
 
-        for i, kb in enumerate(kbs):
-            kb_name = kb.get("name", "NO_NAME")
-            is_match = kb_name == name
-            logger.info(f"  KB {i+1}: '{kb_name}' -> Match: {is_match}")
+        # 1. Check direct ID match if name is numeric
+        if isinstance(name, int) or (isinstance(name, str) and name.isdigit()):
+            target_id = int(name)
+            for kb in kbs:
+                if kb.get("id") == target_id:
+                    logger.info(
+                        f"✅ FOUND KB by ID {target_id}: '{kb.get('name')}'"
+                    )
+                    return kb
 
-            if is_match:
-                kb_id = kb.get("id")
+        # 2. Check exact match (case-insensitive)
+        clean_name = str(name).strip().lower()
+        for kb in kbs:
+            kb_name = kb.get("name", "").strip().lower()
+            if kb_name == clean_name:
                 logger.info(
-                    f"✅ FOUND: Knowledge base '{name}' with ID: {kb_id}"
+                    f"✅ FOUND KB by exact name: '{kb.get('name')}' (ID: {kb.get('id')})"  # noqa
                 )
-                self._log(
-                    "get_knowledge_base_by_name",
-                    {"name": name},
-                    {"status": "found", "kb_id": kb_id},
+                return kb
+
+        # 3. Check well-known aliases in strict priority order
+        alias_map = {
+            "kenya drylands": [
+                "tdt library #2",
+                115,
+                "tdt library",
+                "kenya drylands",
+                "kenya",
+            ],
+            "kenya_drylands": [
+                "tdt library #2",
+                115,
+                "tdt library",
+                "kenya drylands",
+                "kenya",
+            ],
+            "kenya": [
+                "tdt library #2",
+                115,
+                "tdt library",
+                "kenya drylands",
+            ],
+            "living income": [
+                "living income",
+                116,
+                "living income benchmark knowledge base",
+                "rag li",
+            ],
+            "living income benchmark": [
+                "living income",
+                116,
+                "living income benchmark knowledge base",
+            ],
+            "living income benchmark knowledge base": [
+                "living income",
+                116,
+            ],
+            "rag li": [
+                "living income",
+                116,
+            ],
+        }
+
+        target_aliases = []
+        for alias_key, alias_targets in alias_map.items():
+            if (
+                alias_key == clean_name
+                or alias_key in clean_name
+                or clean_name in alias_key
+            ):
+                for target in alias_targets:
+                    if target not in target_aliases:
+                        target_aliases.append(target)
+
+        for target in target_aliases:
+            if isinstance(target, int):
+                for kb in kbs:
+                    if kb.get("id") == target:
+                        logger.info(
+                            f"✅ FOUND KB by alias target ID {target}: '{kb.get('name')}'"  # noqa
+                        )
+                        return kb
+            else:
+                target_clean = str(target).strip().lower()
+                for kb in kbs:
+                    kb_name = kb.get("name", "").strip().lower()
+                    if kb_name == target_clean:
+                        logger.info(
+                            f"✅ FOUND KB by exact alias '{target}': '{kb.get('name')}' (ID: {kb.get('id')})"  # noqa
+                        )
+                        return kb
+
+        # 4. Check partial substring match (fallback)
+        for kb in kbs:
+            kb_name = kb.get("name", "").strip().lower()
+            if clean_name in kb_name or kb_name in clean_name:
+                logger.info(
+                    f"✅ FOUND KB by substring: '{kb.get('name')}' (ID: {kb.get('id')})"  # noqa
                 )
                 return kb
 
         logger.error(
-            f"❌ NOT FOUND: Knowledge base '{name}' not found in {len(kbs)} available knowledge bases"
+            f"❌ NOT FOUND: Knowledge base '{name}' not found in {len(kbs)} available knowledge bases"  # noqa
         )
         self._log(
             "get_knowledge_base_by_name",
@@ -354,167 +439,94 @@ class RagChatUtil:
                 )
 
                 async for chunk in response.aiter_text():
-                    if chunk.strip():
-                        # Add to buffer for complete SSE message reconstruction
-                        sse_buffer += chunk
+                    if not chunk:
+                        continue
+                    sse_buffer += chunk
 
-                        # Process complete SSE lines
-                        lines = sse_buffer.split("\n")
-                        # Keep last incomplete line in buffer for next chunk
-                        sse_buffer = (
-                            lines[-1] if not sse_buffer.endswith("\n") else ""
-                        )
+                    while "\n" in sse_buffer:
+                        line, sse_buffer = sse_buffer.split("\n", 1)
+                        line = line.strip()
+                        if not line or not line.startswith("0:"):
+                            continue
 
-                        for line in (
-                            lines[:-1]
-                            if not sse_buffer.endswith("\n")
-                            else lines
+                        raw_content = line[2:].strip()
+                        if not raw_content:
+                            continue
+
+                        # Check for base64 context prefix
+                        if (
+                            not context_processed
+                            and "__LLM_RESPONSE__" in raw_content
                         ):
-                            if line.startswith("0:"):
-                                # Extract raw JSON content from SSE format
-                                raw_content = line[2:].strip()
-                                if not raw_content:
-                                    continue
+                            try:
+                                # Strip outer JSON quotes if present
+                                clean_content = raw_content
+                                if clean_content.startswith(
+                                    '"'
+                                ) and clean_content.endswith('"'):
+                                    try:
+                                        clean_content = json.loads(
+                                            clean_content
+                                        )
+                                    except Exception:
+                                        clean_content = clean_content[1:-1]
 
-                                logger.info(
-                                    f"RAW SSE LINE: '{raw_content[:100]}...'"
+                                parts = clean_content.split(
+                                    "__LLM_RESPONSE__", 1
+                                )
+                                base64_part = parts[0]
+                                response_part = (
+                                    parts[1] if len(parts) > 1 else ""
                                 )
 
-                                # Check if this might be base64 context data first
-                                if (
-                                    not context_processed
-                                    and raw_content.startswith('"')
-                                    and len(raw_content) > 100
-                                ):
-                                    # This looks like a long quoted string - likely base64 context
-                                    try:
-                                        parsed_content = json.loads(
-                                            raw_content
-                                        )
-                                        # This is a valid JSON string, check if it contains base64 + separator
-                                        if (
-                                            "__LLM_RESPONSE__"
-                                            in parsed_content
-                                        ):
-                                            logger.info(
-                                                f"PROCESSING BASE64 CONTEXT WITH SEPARATOR: '{parsed_content[:50]}...'"
-                                            )
-                                            parts = parsed_content.split(
-                                                "__LLM_RESPONSE__", 1
-                                            )
-                                            base64_part = parts[0]
-                                            response_part = (
-                                                parts[1]
-                                                if len(parts) > 1
-                                                else ""
-                                            )
+                                # Base64 padding
+                                pad = len(base64_part) % 4
+                                if pad > 0:
+                                    base64_part += "=" * (4 - pad)
 
-                                            try:
-                                                # Add base64 padding if needed
-                                                padding_needed = (
-                                                    4 - len(base64_part) % 4
-                                                )
-                                                if padding_needed != 4:
-                                                    base64_part += (
-                                                        "=" * padding_needed
-                                                    )
+                                decoded_bytes = base64.b64decode(base64_part)
+                                context_data = json.loads(
+                                    decoded_bytes.decode("utf-8")
+                                )
+                                num_chunks = len(
+                                    context_data.get("context", [])
+                                )
+                                logger.info(
+                                    f"✅ Successfully decoded retrieval context: {num_chunks} chunks"  # noqa
+                                )
+                                context_processed = True
 
-                                                # Decode base64 context
-                                                context_json = (
-                                                    base64.b64decode(
-                                                        base64_part
-                                                    ).decode()
-                                                )
-                                                context_data = json.loads(
-                                                    context_json
-                                                )
-
-                                                logger.info(
-                                                    f"SUCCESSFULLY PARSED CONTEXT: {len(context_data.get('context', []))} chunks"
-                                                )
-                                                self._log(
-                                                    "received_context",
-                                                    {"chat_id": chat_id},
-                                                    {
-                                                        "num_chunks": len(
-                                                            context_data.get(
-                                                                "context", []
-                                                            )
-                                                        )
-                                                    },
-                                                )
-
-                                                context_processed = True
-
-                                                # If there's response text after separator, yield it
-                                                if response_part:
-                                                    full_response += (
-                                                        response_part
-                                                    )
-                                                    yield response_part, context_data
-
-                                            except Exception as e:
-                                                logger.error(
-                                                    f"ERROR PARSING CONTEXT: {e}"
-                                                )
-                                                self._log(
-                                                    "parse_context_error",
-                                                    {
-                                                        "data": base64_part[
-                                                            :100
-                                                        ]
-                                                    },
-                                                    {"error": str(e)},
-                                                )
-                                                # Treat as regular content if parsing fails
-                                                full_response += parsed_content
-                                                yield parsed_content, context_data
-                                                context_processed = True
-                                        else:
-                                            # This might be base64 context without separator yet - check if it looks like base64
-                                            if len(
-                                                parsed_content
-                                            ) > 50 and all(
-                                                c
-                                                in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
-                                                for c in parsed_content[:50]
-                                            ):
-                                                logger.info(
-                                                    "BASE64 CONTENT WITHOUT SEPARATOR - might be truncated, treating as response"
-                                                )
-                                                full_response += parsed_content
-                                                yield parsed_content, context_data
-                                            else:
-                                                # Regular response text
-                                                full_response += parsed_content
-                                                yield parsed_content, context_data
-                                    except json.JSONDecodeError:
-                                        # Not valid JSON, skip
-                                        logger.info(
-                                            f"UNPARSEABLE QUOTED STRING: '{raw_content[:50]}...'"
-                                        )
-                                        continue
+                                if response_part:
+                                    full_response += response_part
+                                    yield response_part, context_data
                                 else:
-                                    # Try to parse as complete JSON (normal response text)
-                                    try:
-                                        parsed_content = json.loads(
-                                            raw_content
-                                        )
-                                        # Regular response text
-                                        full_response += parsed_content
-                                        yield parsed_content, context_data
-                                        continue
+                                    # Yield context with empty text so receiver
+                                    # stores it
+                                    yield "", context_data
+                                continue
+                            except Exception as e:
+                                logger.error(
+                                    f"Error decoding base64 context: {e}"
+                                )
+                                context_processed = True
 
-                                    except json.JSONDecodeError:
-                                        # Not valid JSON, skip
-                                        logger.info(
-                                            f"UNPARSEABLE CONTENT: '{raw_content[:50]}...'"
-                                        )
-                                        continue
+                        # Regular text chunk token
+                        try:
+                            if raw_content.startswith(
+                                '"'
+                            ) and raw_content.endswith('"'):
+                                parsed_token = json.loads(raw_content)
+                            else:
+                                parsed_token = raw_content
+                            full_response += parsed_token
+                            yield parsed_token, context_data
+                        except Exception:
+                            full_response += raw_content
+                            yield raw_content, context_data
 
                 # Log completion
                 logger.info(
-                    f"SSE STREAM COMPLETE: response_length={len(full_response)}, context_processed={context_processed}"
+                    f"SSE STREAM COMPLETE: response_length={len(full_response)}, context_processed={context_processed}"  # noqa
                 )
 
                 self._log(
@@ -542,7 +554,8 @@ class RagChatUtil:
             kb_name: The name of the knowledge base to use
 
         Returns:
-            Dictionary with query, response, retrieval context, and response time
+            Dictionary with query, response, retrieval context,
+            and response time
         """
         start_time = time.time()
 
@@ -603,7 +616,9 @@ class RagChatUtil:
         batch_size: int = 5,
         max_concurrent: int = 3,
     ) -> List[Dict[str, Any]]:
-        """Generate RAG responses for multiple queries with batching and concurrency control.
+        """
+        Generate RAG responses for multiple queries with
+        batching and concurrency control.
 
         Args:
             queries: List of query strings
@@ -629,9 +644,11 @@ class RagChatUtil:
         # Process queries in batches
         all_results = []
         for i in range(0, len(queries), batch_size):
-            batch = queries[i : i + batch_size]
+            batch = queries[i : i + batch_size]  # noqa
+            total_b = (len(queries) + batch_size - 1) // batch_size
             logger.info(
-                f"Processing batch {i//batch_size + 1}/{(len(queries) + batch_size - 1)//batch_size}: {len(batch)} queries"
+                f"Processing batch {i//batch_size + 1}/{total_b}: "
+                f"{len(batch)} queries"
             )
 
             # Limit concurrency within batch
@@ -674,7 +691,9 @@ class RagChatUtil:
     async def _generate_single_rag_response_cached_kb(
         self, query: str, kb: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Generate RAG response for a single query with cached knowledge base info.
+        """
+        Generate RAG response for a single query with
+        cached knowledge base info.
 
         Args:
             query: Query string

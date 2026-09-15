@@ -58,12 +58,16 @@ yarn-error.log*
 # Project specific
 backend/static/
 backend/media/
+docs/PULL_REQUEST.md
 frontend/.env
 backend/.env
 backend/RAG_evaluation/.env.test
 
 streamlit-override.yml
 backend/RAG_evaluation/output
+backend/RAG_evaluation/performance_reports/
+backend/RAG_evaluation/latest_evaluation_report.md
+backend/RAG_evaluation/latest_evaluation_report.json
 backend/mcp_discovery.json
 backend/mcp_discovery.lock
 backend/mcp_discovery.json*

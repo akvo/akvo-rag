@@ -104,12 +104,20 @@ export default function UploadPage({ params }: { params: { id: string } }) {
 
       setFiles((prev) =>
         prev.map((f) =>
-          f.file.name === result.file_name
+          f.file.name === result.file_name ||
+          (result as any).filename === f.file.name ||
+          (result as any).original_filename === f.file.name
             ? {
                 ...f,
                 status: result.skip_processing ? "completed" : "uploaded",
-                uploadId: result.upload_id,
-                documentId: result.document_id,
+                uploadId:
+                  result.upload_id ??
+                  result.document_id ??
+                  (result as any).id,
+                documentId:
+                  result.document_id ??
+                  result.upload_id ??
+                  (result as any).id,
               }
             : f
         )

@@ -111,3 +111,21 @@ def test_text_chunker_whitespace_splits():
     assert len(chunks) == 2
     assert chunks[0].content == "Content"
     assert chunks[1].content == "More"
+
+
+def test_text_chunker_duplicate_text_generates_unique_chunk_ids():
+    """Verify that repeated identical text produces unique chunk IDs."""
+    chunker = TextChunker(chunk_size=100, chunk_overlap=0)
+    doc = ParsedDocument(
+        file_name="infographic.pdf",
+        total_pages=3,
+        pages=[
+            ParsedPage(page_number=1, text="Repeated header text"),
+            ParsedPage(page_number=2, text="Repeated header text"),
+            ParsedPage(page_number=3, text="Repeated header text"),
+        ],
+    )
+    chunks = chunker.chunk_document(doc, kb_id=217)
+    assert len(chunks) == 3
+    chunk_ids = [c.chunk_id for c in chunks]
+    assert len(set(chunk_ids)) == 3, f"Duplicate chunk IDs found: {chunk_ids}"

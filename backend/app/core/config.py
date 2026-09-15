@@ -14,16 +14,17 @@ except ImportError:
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "RAG Web UI"  # Project name
+    PROJECT_NAME: str = "Akvo RAG"  # Project name
     VERSION: str = "0.1.0"  # Project version
-    API_V1_STR: str = "/api"  # API version string
+    API_V1_STR: str = "/api/v1"  # API version string
 
     # CORS settings (comma-separated origins from env)
     BACKEND_CORS_ORIGINS: list[str] = [
         origin.strip()
         for origin in os.getenv(
             "BACKEND_CORS_ORIGINS",
-            "http://localhost:3000,http://127.0.0.1:3000",
+            "http://localhost:3000,http://127.0.0.1:3000,"
+            "http://localhost:3010,http://127.0.0.1:3010",
         ).split(",")
         if origin.strip()
     ]
@@ -104,7 +105,11 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = os.getenv(
         "OPENAI_API_KEY", "your-openai-api-key-here"
     )
-    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4")
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o")
+    OPENAI_MODEL_FAST: str = os.getenv("OPENAI_MODEL_FAST", "gpt-4o-mini")
+    OPENAI_MODEL_SYNTHESIS: str = os.getenv(
+        "OPENAI_MODEL_SYNTHESIS", os.getenv("OPENAI_MODEL", "gpt-4o")
+    )
 
     # DashScope settings
     DASH_SCOPE_API_KEY: str = os.getenv("DASH_SCOPE_API_KEY", "")
@@ -113,10 +118,22 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_API_BASE: str = "https://api.deepseek.com/v1"  # 默认 API 地址
     DEEPSEEK_MODEL: str = "deepseek-chat"  # 默认模型名称
+    DEEPSEEK_MODEL_FAST: str = os.getenv(
+        "DEEPSEEK_MODEL_FAST", "deepseek-chat"
+    )
+    DEEPSEEK_MODEL_SYNTHESIS: str = os.getenv(
+        "DEEPSEEK_MODEL_SYNTHESIS",
+        os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+    )
 
     # Ollama settings
     OLLAMA_API_BASE: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "deepseek-r1:7b"
+    OLLAMA_MODEL_FAST: str = os.getenv("OLLAMA_MODEL_FAST", "qwen2.5:3b")
+    OLLAMA_MODEL_SYNTHESIS: str = os.getenv(
+        "OLLAMA_MODEL_SYNTHESIS",
+        os.getenv("OLLAMA_MODEL", "deepseek-r1:7b"),
+    )
 
     # REDIS settings
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -159,6 +176,11 @@ class Settings(BaseSettings):
         "MINIO_BUCKET_DOCUMENTS", "documents"
     )
     MINIO_SECURE: bool = os.getenv("MINIO_SECURE", "False").lower() == "true"
+
+    # Local development: allow HTTP callback URLs (default: False)
+    ALLOW_HTTP_CALLBACKS: bool = (
+        os.getenv("ALLOW_HTTP_CALLBACKS", "False").lower() == "true"
+    )
 
     class Config:
         env_file = ".env"

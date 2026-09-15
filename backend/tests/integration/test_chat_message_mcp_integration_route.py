@@ -122,7 +122,7 @@ class TestMCPIntegrationEndpoint:
             fake_stream,
         ):
             response = await client.post(
-                "/api/chat/1/messages",
+                "/api/v1/chat/1/messages",
                 json=payload.model_dump(),
             )
 
@@ -139,7 +139,7 @@ class TestMCPIntegrationEndpoint:
             messages=[{"role": "assistant", "content": "Hello"}]
         )
         response = await client.post(
-            "/api/chat/1/messages", json=payload.model_dump()
+            "/api/v1/chat/1/messages", json=payload.model_dump()
         )
         assert response.status_code == 400
         assert "Last message must be from user" in response.text
@@ -168,7 +168,7 @@ class TestMCPIntegrationEndpoint:
             messages=[{"role": "user", "content": "Hello"}]
         )
         response = await client.post(
-            "/api/chat/1/messages", json=payload.model_dump()
+            "/api/v1/chat/1/messages", json=payload.model_dump()
         )
         assert response.status_code == 404
         assert "Chat not found" in response.text
@@ -189,7 +189,7 @@ class TestMCPIntegrationEndpoint:
             fail_stream,
         ):
             response = await client.post(
-                "/api/chat/1/messages",
+                "/api/v1/chat/1/messages",
                 json=payload.model_dump(),
             )
 

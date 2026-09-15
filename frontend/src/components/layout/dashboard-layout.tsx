@@ -74,17 +74,17 @@ export default function DashboardLayout({
       >
         <div className="flex h-full flex-col">
           {/* Sidebar header */}
-          <div className="flex h-16 items-center border-b pl-8">
+          <div className="flex h-16 items-center border-b px-6">
             <Link
               href="/dashboard"
-              className="flex items-center text-lg font-semibold hover:text-primary transition-colors"
+              className="flex items-center gap-3 text-lg font-bold tracking-tight hover:text-primary transition-colors"
             >
               <img
                 src="/logo.svg"
-                alt="Logo"
-                className="w-16 h-16 rounded-lg"
+                alt="Akvo Logo"
+                className="w-8 h-8 rounded-md shadow-sm"
               />
-              RAG Web UI
+              <span>Akvo RAG</span>
             </Link>
           </div>
 

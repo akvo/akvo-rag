@@ -143,7 +143,7 @@ export default function FineTuningPage() {
       toast({ title: 'Error', description: 'Please enter a valid number greater than 0', variant: 'destructive' });
       return;
     }
-    
+
     try {
       await api.put('/api/system-settings/top_k', { top_k: numValue });
       setGlobalTopK(numValue);
@@ -224,7 +224,7 @@ export default function FineTuningPage() {
                     <div className="p-4 bg-gray-50 border-b">
                       <div className="flex justify-between items-center mb-2">
                         <span className="font-semibold text-gray-800">
-                          🟦 v{versions[0].version_number} <span className="text-blue-600">(Active)</span>
+                          🟢 v{versions[0].version_number} <span className="text-[#03AD8C]">(Active)</span>
                         </span>
                         <span className="text-xs text-gray-500">
                           {formatDateTime(versions[0].updated_at || versions[0].created_at)}

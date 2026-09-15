@@ -48,7 +48,7 @@ async def startup_event():
 
 @app.get("/")
 def root():
-    return {"message": "Welcome to RAG Web UI API"}
+    return {"message": "Welcome to Akvo RAG API"}
 
 
 @app.get("/api/health")

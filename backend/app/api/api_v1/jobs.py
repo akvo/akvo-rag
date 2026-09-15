@@ -1,9 +1,11 @@
 import asyncio
+import io
 import json
 import logging
 from typing import Annotated, List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
+from starlette.datastructures import Headers, UploadFile as StarletteUploadFile
 
 from app.core.security import get_current_app
 from app.db.session import SessionLocal, get_db
@@ -11,7 +13,7 @@ from app.models.app import App
 from app.schemas import JobResponse
 from app.services.chat_job_service import execute_chat_job
 from app.services.job_service import JobService
-from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
+from app.services.upload_job_service import execute_upload_job
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -167,11 +169,59 @@ async def create_job(
         logger.info(
             "🚀 Dispatching UPLOAD job using KB %s", app_kb.knowledge_base_id
         )
-        kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+
+        in_memory_files = []
+        MAX_UPLOAD_SIZE = 25 * 1024 * 1024  # 25MB
+        for f in files or []:
+            fname = getattr(f, "filename", "unnamed_file")
+            declared_size = getattr(f, "size", None)
+            if declared_size is not None and declared_size > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"File '{fname}' exceeds maximum 25MB ceiling "
+                        f"(size: {declared_size} bytes)"
+                    ),
+                )
+
+            if hasattr(f, "read"):
+                if asyncio.iscoroutinefunction(f.read):
+                    content = await f.read()
+                else:
+                    content = f.read()
+            elif hasattr(f, "file") and hasattr(f.file, "read"):
+                content = f.file.read()
+            else:
+                content = b""
+
+            if len(content) > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"File '{fname}' exceeds maximum 25MB ceiling "
+                        f"(size: {len(content)} bytes)"
+                    ),
+                )
+
+            headers = getattr(f, "headers", None) or Headers()
+            in_memory_files.append(
+                StarletteUploadFile(
+                    file=io.BytesIO(content),
+                    size=len(content),
+                    filename=fname,
+                    headers=headers,
+                )
+            )
+
         asyncio.create_task(
-            kb_mcp_endpoint_service.upload_and_process_documents(
+            execute_upload_job(
+                db=SessionLocal(),
+                job_id=job_record.id,
                 kb_id=app_kb.knowledge_base_id,
-                files=files or [],
+                files=in_memory_files,
+                callback_url=(
+                    data.get("callback_url") or current_app.upload_callback_url
+                ),
             )
         )
 
