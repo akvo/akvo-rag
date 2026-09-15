@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.app import App
-from app.core.security import get_current_app
+from app.models.user import User
+from app.core.security import get_current_app, get_current_active_superuser
 from app.services.app_service import AppService
 from app.schemas.app import (
     AppRegisterRequest,
@@ -43,6 +44,8 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
     responses={
         400: {"model": ErrorResponse, "description": "Validation error"},
+        401: {"model": ErrorResponse, "description": "Unauthorized"},
+        403: {"model": ErrorResponse, "description": "Forbidden - Superuser access required"},
         409: {"model": ErrorResponse, "description": "Conflict"},
     },
 )
@@ -50,9 +53,10 @@ async def register_app(
     *,
     db: Session = Depends(get_db),
     register_data: AppRegisterRequest,
+    current_user: User = Depends(get_current_active_superuser),
 ) -> Any:
     """
-    Register a new app and issue credentials.
+    Register a new app and issue credentials (Super-admin only).
 
     - **app_name**: Name of the application
     - **domain**: Domain of the application
