@@ -94,9 +94,33 @@ def mock_get_documents_upload():
 class TestAppRegistration:
     """Test suite for POST /api/apps/register endpoint."""
 
-    def test_register_app_success(self, client, sample_app_data):
-        """Test successful app registration returns credentials."""
+    def test_register_app_unauthorized_without_token(
+        self, client, sample_app_data
+    ):
+        """Test registering app without authentication returns 401."""
         response = client.post("/api/v1/apps/register", json=sample_app_data)
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Not authenticated"
+
+    def test_register_app_forbidden_for_regular_user(
+        self, client, sample_app_data, user_token
+    ):
+        """Test registering app with non-superuser token returns 403."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+        response = client.post(
+            "/api/v1/apps/register", json=sample_app_data, headers=headers
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Superuser access required"
+
+    def test_register_app_success_with_superuser(
+        self, client, sample_app_data, admin_token
+    ):
+        """Test successful app registration by superuser returns credentials."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        response = client.post(
+            "/api/v1/apps/register", json=sample_app_data, headers=headers
+        )
 
         assert response.status_code == 201
         data = response.json()
@@ -123,61 +147,37 @@ class TestAppRegistration:
         assert "apps.read" in data["scopes"]
 
     def test_register_app_validates_https_chat_callback(
-        self, client, sample_app_data
+        self, client, sample_app_data, admin_token
     ):
         """Test that non-HTTPS chat_callback URL is rejected."""
         sample_app_data["chat_callback"] = (
             "http://agriconnect.akvo.org/api/ai/callback"
         )
-        response = client.post("/api/v1/apps/register", json=sample_app_data)
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        response = client.post(
+            "/api/v1/apps/register", json=sample_app_data, headers=headers
+        )
 
         assert response.status_code == 422  # Validation error
         assert "https" in response.text.lower()
 
     def test_register_app_validates_https_upload_callback(
-        self, client, sample_app_data
+        self, client, sample_app_data, admin_token
     ):
         """Test that non-HTTPS upload_callback URL is rejected."""
         sample_app_data["upload_callback"] = (
             "http://agriconnect.akvo.org/api/kb/callback"
         )
-        response = client.post("/api/v1/apps/register", json=sample_app_data)
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        response = client.post(
+            "/api/v1/apps/register", json=sample_app_data, headers=headers
+        )
 
         assert response.status_code == 422  # Validation error
         assert "https" in response.text.lower()
 
-    def test_register_app_success(
-        self, client, sample_app_data
-    ):
-        """Test successful app registration returns credentials."""
-        response = client.post("/api/v1/apps/register", json=sample_app_data)
-
-        assert response.status_code == 201
-        data = response.json()
-
-        # Verify response structure
-        assert "app_id" in data
-        assert "client_id" in data
-        assert "access_token" in data
-        assert "scopes" in data
-        assert "knowledge_bases" in data
-        assert data["knowledge_bases"] == [
-            {"knowledge_base_id": 42, "is_default": True}
-        ]
-
-        # Verify ID prefixes
-        assert data["app_id"].startswith("app_")
-        assert data["client_id"].startswith("ac_")
-        assert data["access_token"].startswith("tok_")
-
-        # Verify default scopes
-        assert "jobs.write" in data["scopes"]
-        assert "kb.read" in data["scopes"]
-        assert "kb.write" in data["scopes"]
-        assert "apps.read" in data["scopes"]
-
     def test_register_app_value_error_raises_400(
-        self, client, sample_app_data, monkeypatch
+        self, client, sample_app_data, admin_token, monkeypatch
     ):
         from app.services.app_service import AppService
 
@@ -185,12 +185,15 @@ class TestAppRegistration:
             raise ValueError("Domain already registered")
 
         monkeypatch.setattr(AppService, "create_app", fake_create_err)
-        response = client.post("/api/v1/apps/register", json=sample_app_data)
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        response = client.post(
+            "/api/v1/apps/register", json=sample_app_data, headers=headers
+        )
         assert response.status_code == 400
         assert "Domain already registered" in response.json()["detail"]
 
     def test_register_app_generic_error_raises_500(
-        self, client, sample_app_data, monkeypatch
+        self, client, sample_app_data, admin_token, monkeypatch
     ):
         from app.services.app_service import AppService
 
@@ -198,7 +201,10 @@ class TestAppRegistration:
             raise RuntimeError("Database connection lost")
 
         monkeypatch.setattr(AppService, "create_app", fake_create_boom)
-        response = client.post("/api/v1/apps/register", json=sample_app_data)
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        response = client.post(
+            "/api/v1/apps/register", json=sample_app_data, headers=headers
+        )
         assert response.status_code == 500
         assert "Failed to register app" in response.json()["detail"]
 
@@ -207,9 +213,12 @@ class TestAppMe:
     """Test suite for GET /api/apps/me endpoint."""
 
     @pytest.fixture
-    def registered_app(self, client, sample_app_data):
+    def registered_app(self, client, sample_app_data, admin_token):
         """Register an app and return credentials."""
-        response = client.post("/api/v1/apps/register", json=sample_app_data)
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        response = client.post(
+            "/api/v1/apps/register", json=sample_app_data, headers=headers
+        )
         return response.json()
 
     def test_app_me_success_with_valid_token(self, client, registered_app):
@@ -275,9 +284,12 @@ class TestAppRotate:
     """Test suite for POST /api/apps/rotate endpoint."""
 
     @pytest.fixture
-    def registered_app(self, client, sample_app_data):
+    def registered_app(self, client, sample_app_data, admin_token):
         """Register an app and return credentials."""
-        response = client.post("/api/v1/apps/register", json=sample_app_data)
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        response = client.post(
+            "/api/v1/apps/register", json=sample_app_data, headers=headers
+        )
         return response.json()
 
     def test_rotate_access_token_only(self, client, registered_app):
@@ -400,9 +412,12 @@ class TestAppRevoke:
     """Test suite for POST /api/apps/revoke endpoint."""
 
     @pytest.fixture
-    def registered_app(self, client, sample_app_data):
+    def registered_app(self, client, sample_app_data, admin_token):
         """Register an app and return credentials."""
-        response = client.post("/api/v1/apps/register", json=sample_app_data)
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        response = client.post(
+            "/api/v1/apps/register", json=sample_app_data, headers=headers
+        )
         return response.json()
 
     def test_revoke_app_success(self, client, registered_app):
@@ -443,9 +458,12 @@ class TestAppUpload:
     """
 
     @pytest.fixture
-    def registered_app(self, client, sample_app_data):
+    def registered_app(self, client, sample_app_data, admin_token):
         """Register an app and return credentials."""
-        response = client.post("/api/v1/apps/register", json=sample_app_data)
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        response = client.post(
+            "/api/v1/apps/register", json=sample_app_data, headers=headers
+        )
         return response.json()
 
     def test_upload_success(self, client, registered_app):

@@ -3,7 +3,11 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.api.api_v1.auth import get_current_user as get_current_user_auth
-from app.core.security import get_current_user, get_current_app
+from app.core.security import (
+    get_current_user,
+    get_current_app,
+    get_current_active_superuser,
+)
 from app.models.user import User
 from app.models.app import App
 from mcp_clients.kb_mcp_endpoint_service import KnowledgeBaseMCPEndpointService
@@ -22,11 +26,14 @@ def override_user_auth(client: TestClient):
     )
     app.dependency_overrides[get_current_user] = lambda: fake_user
     app.dependency_overrides[get_current_user_auth] = lambda: fake_user
+    app.dependency_overrides[get_current_active_superuser] = lambda: fake_user
     yield fake_user
     if get_current_user in app.dependency_overrides:
         del app.dependency_overrides[get_current_user]
     if get_current_user_auth in app.dependency_overrides:
         del app.dependency_overrides[get_current_user_auth]
+    if get_current_active_superuser in app.dependency_overrides:
+        del app.dependency_overrides[get_current_active_superuser]
 
 
 @pytest.fixture
