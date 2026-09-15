@@ -39,7 +39,7 @@ services:
     restart: unless-stopped
 
   chromadb:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:1.5.9
     container_name: akvo-rag-chromadb-1
     ports:
       - "${CHROMA_HOST_PORT:-8001}:8000"
@@ -60,7 +60,7 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z
     container_name: akvo-rag-minio-1
     command: server /data --console-address ":9001"
     ports:

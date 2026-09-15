@@ -20,7 +20,7 @@ docx2txt>=0.8
 langchain-text-splitters>=0.2.0
 
 # Vector Database & Embeddings
-chromadb>=0.5.0
+chromadb==1.5.9
 openai>=1.30.0
 tenacity>=8.2.0
 

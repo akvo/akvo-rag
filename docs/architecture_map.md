@@ -39,8 +39,8 @@ graph TB
 | `vector-kb-mcp` | Build from `vector-kb-mcp/` | internal | always | Vector KB microservice: Redis RPC worker, ChromaDB ingestion |
 | `postgres` | `postgres:17-alpine` | `5432` | always | Unified relational store (two Alembic schema owners) |
 | `redis` | `redis:7-alpine` | `6379` | always | MCP RPC queues + async ingestion task queues |
-| `chromadb` | `chromadb/chroma:latest` | `8001→8000` | always | Vector embeddings store |
-| `minio` | `minio/minio:latest` | `9000`,`9001` | always | S3-compatible document storage (MinIO console on 9001) |
+| `chromadb` | `chromadb/chroma:1.5.9` | `8001→8000` | always | Vector embeddings store |
+| `minio` | `quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z` | `9000`,`9001` | always | S3-compatible document storage (MinIO console on 9001) |
 
 ---
 
