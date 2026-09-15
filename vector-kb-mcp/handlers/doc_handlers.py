@@ -1,20 +1,18 @@
 import logging
-import os
-import tempfile
 import uuid
 from typing import Any, Dict, List, Optional
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from db.session import get_db_session
 from models.document import Document
-from models.document_chunk import DocumentChunk
 from models.processing_task import ProcessingTask
 from handlers.serializers import serialize_doc, serialize_task
-from parser import get_parser_for_file
+from parser import parse_file_bytes
 from chunker import TextChunker
 from storage.minio_storage import storage_service
 from retriever.chroma_retriever import ChromaRetriever
+
 
 logger = logging.getLogger("vector-kb-mcp.handlers.doc")
 
@@ -125,204 +123,35 @@ async def handle_ingest_doc(
 ) -> Dict[str, Any]:
     """
     Ingest a document: download from MinIO, parse, chunk, embed,
-    and save to ChromaDB & PostgreSQL.
+    and save to ChromaDB & PostgreSQL via unified IngestionProcessor.
     """
-    doc_id = args.get("document_id") or args.get("doc_id") or args.get("id")
-    upload_id = args.get("upload_id") or args.get("task_id")
-    kb_id = args.get("kb_id")
+    from ingestion.processor import IngestionProcessor
+
     chunk_size = args.get("chunk_size", 1000)
     chunk_overlap = args.get("chunk_overlap", 200)
 
-    if not doc_id and not upload_id:
-        return {"error": "Missing document_id", "status": "failed"}
+    processor = IngestionProcessor(
+        retriever=retriever,
+        storage_service=storage_service,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+    )
 
     async with get_db_session() as session:
-        doc = None
-        task = None
-
-        if doc_id:
-            try:
-                stmt = select(Document).where(Document.id == int(doc_id))
-                res = await session.execute(stmt)
-                doc = res.scalar_one_or_none()
-            except (ValueError, TypeError):
-                doc = None
-
-        if upload_id and not doc:
-            try:
-                task_stmt = select(ProcessingTask).where(
-                    ProcessingTask.id == int(upload_id)
+        result = await processor.process_document(args, session)
+        if result.get("status") == "completed" and "document" not in result:
+            doc_id = result.get("document_id")
+            if doc_id:
+                doc_stmt = (
+                    select(Document)
+                    .options(selectinload(Document.processing_tasks))
+                    .where(Document.id == int(doc_id))
                 )
-                task_res = await session.execute(task_stmt)
-                task = task_res.scalar_one_or_none()
-                if task and task.document_id:
-                    doc_stmt = select(Document).where(
-                        Document.id == task.document_id
-                    )
-                    doc_res = await session.execute(doc_stmt)
-                    doc = doc_res.scalar_one_or_none()
-            except (ValueError, TypeError):
-                task = None
-
-        if not doc:
-            return {"error": "Document not found", "status": "failed"}
-
-        target_kb_id = doc.knowledge_base_id if not kb_id else kb_id
-
-        # Find or create processing task
-        if not task and upload_id:
-            try:
-                task_stmt = select(ProcessingTask).where(
-                    ProcessingTask.id == int(upload_id)
-                )
-                task_res = await session.execute(task_stmt)
-                task = task_res.scalar_one_or_none()
-            except (ValueError, TypeError):
-                task = None
-
-        if not task:
-            task_stmt = (
-                select(ProcessingTask)
-                .where(
-                    ProcessingTask.document_id == doc.id,
-                    ProcessingTask.job_type == "INGEST_DOCUMENT",
-                )
-                .order_by(ProcessingTask.id.desc())
-            )
-            task_res = await session.execute(task_stmt)
-            task = task_res.scalars().first()
-
-        if not task:
-            task = ProcessingTask(
-                knowledge_base_id=target_kb_id,
-                document_id=doc.id,
-                task_id=str(uuid.uuid4()),
-                job_type="INGEST_DOCUMENT",
-                status="PROCESSING",
-            )
-            session.add(task)
-        else:
-            task.status = "PROCESSING"
-
-        doc.status = "PROCESSING"
-        await session.flush()
-
-        temp_file_path = None
-        try:
-            # 1. Download raw file from MinIO
-            raw_bytes = storage_service.download_file_bytes(doc.file_path)
-
-            # 2. Write to temporary file for parser
-            suffix = os.path.splitext(doc.file_name)[1]
-            with tempfile.NamedTemporaryFile(
-                delete=False, suffix=suffix
-            ) as tmp:
-                tmp.write(raw_bytes)
-                temp_file_path = tmp.name
-
-            # 3. Parse document
-            parser = get_parser_for_file(doc.file_name)
-            parsed_doc = await parser.parse(temp_file_path, doc.file_name)
-
-            # 4. Chunk document
-            chunker = TextChunker(
-                chunk_size=chunk_size, chunk_overlap=chunk_overlap
-            )
-            chunk_dtos = chunker.chunk_document(parsed_doc, kb_id=target_kb_id)
-
-            if not chunk_dtos:
-                logger.warning(
-                    "No text chunks generated for document %d (%s)",
-                    doc.id,
-                    doc.file_name,
-                )
-
-            # 5. Embed & Upsert to ChromaDB if retriever is present
-            if retriever and chunk_dtos:
-                texts = [c.content for c in chunk_dtos]
-                embeddings = await retriever.embed_texts(texts)
-                collection_name = f"kb_{target_kb_id}"
-                await retriever.upsert_collection_chunks(
-                    collection_name=collection_name,
-                    ids=[c.chunk_id for c in chunk_dtos],
-                    embeddings=embeddings,
-                    documents=texts,
-                    metadatas=[
-                        {
-                            **c.metadata,
-                            "document_id": doc.id,
-                            "chunk_index": c.chunk_index,
-                            "file_name": doc.file_name,
-                        }
-                        for c in chunk_dtos
-                    ],
-                )
-
-            # 6. Save chunk records to PostgreSQL
-            # Remove old chunks if any
-            del_stmt = delete(DocumentChunk).where(
-                DocumentChunk.document_id == doc.id
-            )
-            await session.execute(del_stmt)
-
-            for c in chunk_dtos:
-                db_chunk = DocumentChunk(
-                    id=c.chunk_id,
-                    kb_id=target_kb_id,
-                    document_id=doc.id,
-                    chunk_index=c.chunk_index,
-                    file_name=doc.file_name,
-                    chunk_metadata={
-                        **c.metadata,
-                        "document_id": doc.id,
-                    },
-                    content_hash=c.content_hash,
-                )
-                session.add(db_chunk)
-
-            # 7. Update status to COMPLETED / INDEXED
-            doc.status = "INDEXED"
-            task.status = "COMPLETED"
-            task.error_message = None
-            await session.flush()
-
-            logger.info(
-                "Successfully indexed document %d (%s): %d chunks",
-                doc.id,
-                doc.file_name,
-                len(chunk_dtos),
-            )
-            return {
-                "status": "completed",
-                "document_id": doc.id,
-                "kb_id": target_kb_id,
-                "total_chunks": len(chunk_dtos),
-                "document": serialize_doc(doc),
-            }
-
-        except Exception as e:
-            logger.error(
-                "Failed to ingest document %d (%s): %s",
-                doc.id,
-                doc.file_name,
-                e,
-                exc_info=True,
-            )
-            doc.status = "ERROR"
-            task.status = "FAILED"
-            task.error_message = str(e)
-            await session.flush()
-            return {
-                "status": "failed",
-                "document_id": doc.id,
-                "error": str(e),
-            }
-        finally:
-            if temp_file_path and os.path.exists(temp_file_path):
-                try:
-                    os.remove(temp_file_path)
-                except Exception:
-                    pass
+                doc_res = await session.execute(doc_stmt)
+                doc = doc_res.scalar_one_or_none()
+                if doc:
+                    result["document"] = serialize_doc(doc)
+        return result
 
 
 async def handle_delete_doc(
@@ -376,18 +205,9 @@ async def handle_preview_doc(args: Dict[str, Any]) -> Dict[str, Any]:
             if not doc:
                 continue
 
-            temp_file = None
             try:
                 raw_bytes = storage_service.download_file_bytes(doc.file_path)
-                suffix = os.path.splitext(doc.file_name)[1]
-                with tempfile.NamedTemporaryFile(
-                    delete=False, suffix=suffix
-                ) as tmp:
-                    tmp.write(raw_bytes)
-                    temp_file = tmp.name
-
-                parser = get_parser_for_file(doc.file_name)
-                parsed_doc = await parser.parse(temp_file, doc.file_name)
+                parsed_doc = await parse_file_bytes(raw_bytes, doc.file_name)
                 chunker = TextChunker(chunk_size=1000, chunk_overlap=200)
                 chunks = chunker.chunk_document(
                     parsed_doc, kb_id=doc.knowledge_base_id
@@ -411,12 +231,6 @@ async def handle_preview_doc(args: Dict[str, Any]) -> Dict[str, Any]:
                     ],
                     "total_chunks": 1,
                 }
-            finally:
-                if temp_file and os.path.exists(temp_file):
-                    try:
-                        os.remove(temp_file)
-                    except Exception:
-                        pass
 
     return response
 

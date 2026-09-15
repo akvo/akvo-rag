@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pypdf
 import pytest
 
-from parser import get_parser_for_file
+from parser import get_parser_for_file, parse_file_bytes
 from parser.base import ParsedDocument
 from parser.docx_parser import DocxParser
 from parser.pdf_parser import PDFParser
@@ -144,3 +144,19 @@ async def test_parser_missing_file():
     docx_parser = DocxParser()
     with pytest.raises(FileNotFoundError):
         await docx_parser.parse("/non/existent/path/doc.docx", "doc.docx")
+
+
+@pytest.mark.asyncio
+async def test_parse_file_bytes_txt():
+    raw_data = b"Line 1 from raw bytes\nLine 2 text"
+    doc = await parse_file_bytes(raw_data, "bytes_test.txt")
+    assert isinstance(doc, ParsedDocument)
+    assert doc.file_name == "bytes_test.txt"
+    assert doc.total_pages == 1
+    assert "Line 1 from raw bytes" in doc.pages[0].text
+
+
+@pytest.mark.asyncio
+async def test_parse_file_bytes_unsupported():
+    with pytest.raises(ValueError, match="Unsupported file type"):
+        await parse_file_bytes(b"binary data", "file.unsupported")

@@ -13,6 +13,9 @@ def test_backend_minio_storage_service():
     mock_client.bucket_exists.return_value = False
 
     service = MinioStorageService(client_override=mock_client)
+    mock_client.bucket_exists.reset_mock()
+    mock_client.make_bucket.reset_mock()
+
     res = service.ensure_bucket("documents")
     assert res is True
     mock_client.bucket_exists.assert_called_once_with("documents")

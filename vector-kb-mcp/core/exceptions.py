@@ -4,6 +4,21 @@ class VectorMCPException(Exception):
     pass
 
 
+class DocumentProcessingError(VectorMCPException):
+    """Raised when document parsing, extraction, or processing fails."""
+
+    pass
+
+
+class SecurityValidationError(VectorMCPException):
+    """
+    Raised when a security boundary constraint (e.g. cross-tenant
+    key access) is violated.
+    """
+
+    pass
+
+
 class EmbeddingDimensionMismatchError(VectorMCPException):
     """
     Raised when an embedding vector's dimensionality does not match the
