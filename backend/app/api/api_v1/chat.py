@@ -8,6 +8,7 @@ from app.models.user import User
 from app.models.chat import Chat, ChatKnowledgeBase
 from app.schemas.chat import (
     ChatCreate,
+    ChatUpdate,
     ChatResponse,
     CreateMessagePayload,
 )
@@ -72,6 +73,30 @@ def get_chat(
     )
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
+    return chat
+
+
+@router.put("/{chat_id}", response_model=ChatResponse)
+def update_chat(
+    *,
+    db: Session = Depends(get_db),
+    chat_id: int,
+    chat_in: ChatUpdate,
+    current_user: User = Depends(get_current_user)
+) -> Any:
+    chat = (
+        db.query(Chat)
+        .filter(Chat.id == chat_id, Chat.user_id == current_user.id)
+        .first()
+    )
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    if chat_in.title is not None:
+        chat.title = chat_in.title
+
+    db.commit()
+    db.refresh(chat)
     return chat
 
 
