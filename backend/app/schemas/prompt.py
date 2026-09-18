@@ -49,3 +49,16 @@ class PromptResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class PromptTestRequest(BaseModel):
+    template: str
+    variables: Optional[dict] = {}
+
+
+class PromptTestResponse(BaseModel):
+    formatted_prompt: str
+    estimated_tokens: int
+    character_count: int
+    missing_variables: List[str] = []
+    detected_variables: List[str] = []
