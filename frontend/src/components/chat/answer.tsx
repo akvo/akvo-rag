@@ -279,7 +279,8 @@ const CitationTooltip: FC<{
 export const Answer: FC<{
   markdown: string;
   citations?: Citation[];
-}> = ({ markdown, citations = [] }) => {
+  onOpenCitation?: (citation: Citation, index: number, info?: CitationInfo) => void;
+}> = ({ markdown, citations = [], onOpenCitation }) => {
   const [citationInfoMap, setCitationInfoMap] = useState<
     Record<string, CitationInfo>
   >({});
@@ -511,15 +512,21 @@ export const Answer: FC<{
             role="button"
             tabIndex={0}
             aria-label={`Citation [${citationId}]`}
-            className="inline-flex items-center justify-center font-sans text-[10px] font-semibold text-primary bg-primary/10 hover:bg-primary hover:text-primary-foreground rounded px-1 py-0.5 border border-primary/20 hover:border-primary transition-all duration-150 cursor-pointer select-none leading-none -translate-y-0.5"
+            className="inline-flex items-center justify-center font-sans text-[10px] font-semibold text-primary bg-primary/10 hover:bg-primary hover:text-primary-foreground rounded px-1.5 py-0.5 border border-primary/20 hover:border-primary transition-all duration-150 cursor-pointer select-none leading-none -translate-y-0.5 shadow-xs"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
+              if (onOpenCitation) {
+                onOpenCitation(citation, citationId!, citationInfo);
+              }
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 e.stopPropagation();
+                if (onOpenCitation) {
+                  onOpenCitation(citation, citationId!, citationInfo);
+                }
               }
             }}
           >
