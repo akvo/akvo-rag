@@ -454,7 +454,8 @@ class ObservabilityService:
         if not os.path.exists(reports_dir):
             reports_dir = "/app/RAG_evaluation/performance_reports"
 
-        file_path = os.path.join(reports_dir, f"{report_id}.json")
+        safe_report_id = os.path.basename(report_id).replace(".json", "")
+        file_path = os.path.join(reports_dir, f"{safe_report_id}.json")
         if not os.path.exists(file_path):
             # Fallback to latest or baseline
             latest = self.get_latest_evaluation()

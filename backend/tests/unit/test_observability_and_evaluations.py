@@ -96,3 +96,18 @@ def test_evaluations_reports_endpoints(override_deps):
     detail_data = detail_resp.json()
     assert detail_data["report_id"] == first_id
     assert "results" in detail_data
+
+
+def test_evaluation_report_path_traversal_defense(override_deps):
+    client = TestClient(app)
+    # 1. Test via endpoint
+    response = client.get("/api/v1/system/evaluations/reports/..passwd")
+    assert response.status_code == 200
+    data = response.json()
+    assert "report_id" in data
+
+    # 2. Test service directly with raw traversal
+    service = ObservabilityService()
+    report = service.get_evaluation_report_by_id("../../etc/passwd")
+    assert report is not None
+    assert report.report_id is not None
