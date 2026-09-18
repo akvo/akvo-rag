@@ -1,6 +1,6 @@
 import asyncio
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from core.config import Settings
@@ -307,3 +307,155 @@ def test_main_entrypoint():
         mock_rpc_run.assert_awaited_once()
         mock_ing_init.assert_awaited_once()
         mock_ing_run.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_worker_initialize_full_connections_success():
+    worker = VectorMCPWorker()
+    mock_r = AsyncMock()
+    mock_r.ping = AsyncMock(return_value=True)
+
+    with patch("worker.run_vkb_migrations") as mock_mig, patch(
+        "worker.redis.from_url", return_value=mock_r
+    ) as mock_redis_from_url, patch(
+        "worker.chromadb.HttpClient"
+    ) as mock_chroma_http, patch(
+        "worker.AsyncOpenAI"
+    ) as mock_openai, patch(
+        "storage.minio_storage.storage_service.ensure_bucket"
+    ) as mock_ensure_bucket:
+        await worker.initialize(skip_connection_init=False)
+
+        mock_mig.assert_called_once_with(db_url=worker.settings.DATABASE_URL)
+        mock_redis_from_url.assert_called_once()
+        mock_r.ping.assert_awaited_once()
+        mock_chroma_http.assert_called_once()
+        mock_openai.assert_called_once()
+        mock_ensure_bucket.assert_called_once()
+        assert worker.retriever is not None
+
+
+@pytest.mark.asyncio
+async def test_worker_initialize_migration_failure():
+    worker = VectorMCPWorker()
+    with patch(
+        "worker.run_vkb_migrations", side_effect=RuntimeError("Migration db error")
+    ):
+        with pytest.raises(RuntimeError, match="Migration db error"):
+            await worker.initialize(skip_connection_init=False)
+
+
+@pytest.mark.asyncio
+async def test_worker_initialize_minio_bucket_exception_handled():
+    worker = VectorMCPWorker()
+    mock_r = AsyncMock()
+    mock_r.ping = AsyncMock(return_value=True)
+
+    with patch("worker.run_vkb_migrations"), patch(
+        "worker.redis.from_url", return_value=mock_r
+    ), patch("worker.chromadb.HttpClient"), patch("worker.AsyncOpenAI"), patch(
+        "storage.minio_storage.storage_service.ensure_bucket",
+        side_effect=Exception("Minio network glitch"),
+    ):
+        # Should not raise exception
+        await worker.initialize(skip_connection_init=False)
+        assert worker.redis_client is not None
+
+
+@pytest.mark.asyncio
+async def test_worker_run_event_loop_timeout_and_errors():
+    worker = VectorMCPWorker()
+    mock_r = AsyncMock()
+    worker.redis_client = mock_r
+
+    # Simulate sequence of blpop behaviors:
+    # 1. TimeoutError
+    # 2. Generic Exception with "Timeout reading from socket"
+    # 3. None return
+    # 4. Valid item return
+    # 5. Generic Exception with worker running -> triggers sleep
+    correlation_id = "test-corr-loop"
+    valid_payload = json.dumps(
+        {
+            "correlation_id": correlation_id,
+            "tool_name": "list_knowledge_bases",
+            "arguments": {},
+        }
+    )
+
+    call_count = 0
+
+    async def fake_blpop(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise TimeoutError()
+        elif call_count == 2:
+            raise RuntimeError("Timeout reading from socket")
+        elif call_count == 3:
+            return None
+        elif call_count == 4:
+            return ("queue", valid_payload)
+        elif call_count == 5:
+            # Let error branch execute with self.running = True
+            raise RuntimeError("Unexpected queue error")
+        return None
+
+    mock_r.blpop.side_effect = fake_blpop
+    worker.tool_handlers = {"list_knowledge_bases": AsyncMock(return_value={"knowledge_bases": []})}
+
+    async def fake_sleep(duration):
+        worker.running = False
+
+    with patch("worker.asyncio.sleep", side_effect=fake_sleep):
+        await worker.run()
+    assert call_count >= 5
+
+
+@pytest.mark.asyncio
+async def test_worker_process_message_redis_push_exception():
+    worker = VectorMCPWorker()
+    mock_r = AsyncMock()
+    mock_r.rpush.side_effect = RuntimeError("Redis connection broken")
+    worker.redis_client = mock_r
+    worker.tool_handlers = {"list_knowledge_bases": AsyncMock(return_value={})}
+
+    req_payload = {
+        "correlation_id": "corr-push-fail",
+        "tool_name": "list_knowledge_bases",
+        "arguments": {},
+    }
+
+    # Should not raise exception
+    await worker._process_message(json.dumps(req_payload))
+    mock_r.rpush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_worker_shutdown_sync_close_and_exception():
+    worker = VectorMCPWorker()
+    # Test aclose with exception
+    mock_r = AsyncMock()
+    mock_r.aclose.side_effect = RuntimeError("Error on aclose")
+    worker.redis_client = mock_r
+    worker.running = True
+
+    await worker.shutdown()
+    assert worker.running is False
+    assert worker.redis_client is None
+
+    # Test sync close
+    worker2 = VectorMCPWorker()
+    class SyncClient:
+        def __init__(self):
+            self.closed = False
+        def close(self):
+            self.closed = True
+
+    worker2.redis_client = SyncClient()
+    worker2.running = True
+    await worker2.shutdown()
+    assert worker2.running is False
+    assert worker2.redis_client is None
+
+
