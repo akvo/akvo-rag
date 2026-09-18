@@ -14,6 +14,7 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { api } from "@/lib/api";
 import { FileIcon } from "react-file-icon";
+import { Copy, Check } from "lucide-react";
 
 export interface Citation {
   id: number;
@@ -279,7 +280,8 @@ const CitationTooltip: FC<{
 export const Answer: FC<{
   markdown: string;
   citations?: Citation[];
-}> = ({ markdown, citations = [] }) => {
+  onOpenCitation?: (citation: Citation, index: number, info?: CitationInfo) => void;
+}> = ({ markdown, citations = [], onOpenCitation }) => {
   const [citationInfoMap, setCitationInfoMap] = useState<
     Record<string, CitationInfo>
   >({});
@@ -511,15 +513,21 @@ export const Answer: FC<{
             role="button"
             tabIndex={0}
             aria-label={`Citation [${citationId}]`}
-            className="inline-flex items-center justify-center font-sans text-[10px] font-semibold text-primary bg-primary/10 hover:bg-primary hover:text-primary-foreground rounded px-1 py-0.5 border border-primary/20 hover:border-primary transition-all duration-150 cursor-pointer select-none leading-none -translate-y-0.5"
+            className="inline-flex items-center justify-center font-sans text-[10px] font-semibold text-primary bg-primary/10 hover:bg-primary hover:text-primary-foreground rounded px-1.5 py-0.5 border border-primary/20 hover:border-primary transition-all duration-150 cursor-pointer select-none leading-none -translate-y-0.5 shadow-xs"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
+              if (onOpenCitation) {
+                onOpenCitation(citation, citationId!, citationInfo);
+              }
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 e.stopPropagation();
+                if (onOpenCitation) {
+                  onOpenCitation(citation, citationId!, citationInfo);
+                }
               }
             }}
           >
@@ -527,6 +535,59 @@ export const Answer: FC<{
           </span>
         </span>
       </CitationTooltip>
+    );
+  };
+
+  const CodeBlock = ({ children, className, ...props }: any) => {
+    const [copied, setCopied] = useState(false);
+    const match = /language-(\w+)/.exec(className || "");
+    const codeString = String(children).replace(/\n$/, "");
+
+    const handleCopy = () => {
+      navigator.clipboard.writeText(codeString);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    };
+
+    if (className && className.includes("hljs")) {
+      return (
+        <div className="relative group/code my-3 rounded-xl overflow-hidden border bg-zinc-950 text-zinc-100 dark:bg-zinc-900 shadow-sm not-prose">
+          <div className="flex items-center justify-between px-4 py-1.5 bg-zinc-900/80 border-b border-zinc-800 text-[11px] font-mono text-zinc-400">
+            <span>{match ? match[1] : "code"}</span>
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1 hover:text-zinc-100 transition-colors"
+              title="Copy code"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3 w-3 text-emerald-400" />
+                  <span className="text-emerald-400">Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3 w-3" />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+          </div>
+          <pre className="p-4 overflow-x-auto text-xs font-mono leading-relaxed bg-transparent">
+            <code className={className} {...props}>
+              {children}
+            </code>
+          </pre>
+        </div>
+      );
+    }
+
+    return (
+      <code
+        className="px-1.5 py-0.5 rounded bg-muted font-mono text-[12px] text-foreground"
+        {...props}
+      >
+        {children}
+      </code>
     );
   };
 
@@ -549,6 +610,7 @@ export const Answer: FC<{
         rehypePlugins={[rehypeHighlight]}
         components={{
           a: CitationLink,
+          code: CodeBlock,
         }}
       >
         {processedMarkdown}

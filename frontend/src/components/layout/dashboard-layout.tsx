@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Book, MessageSquare, LogOut, Menu, User, Wrench, Users } from "lucide-react";
+import { Book, MessageSquare, LogOut, Menu, User, Wrench, Users, Activity } from "lucide-react";
 import Breadcrumb from "@/components/ui/breadcrumb";
 import { useUser } from "@/contexts/userContext";
 import { InitialAvatar } from "../ui/avatar";
@@ -47,6 +47,7 @@ export default function DashboardLayout({
       { name: "Chat", href: "/dashboard/chat", icon: MessageSquare },
       { name: "API Keys", href: "/dashboard/api-keys", icon: User },
       { name: "Fine Tuning", href: "/dashboard/fine-tuning", icon: Wrench },
+      { name: "Evaluations & Health", href: "/dashboard/evaluations", icon: Activity },
     ];
     if (authUser?.is_superuser) {
       navItems.push({ name: "Users", href: "/dashboard/users", icon: Users });

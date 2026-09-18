@@ -27,7 +27,7 @@ def test_load_mcp_config_valid():
     assert kb_server.response_queue_prefix == "mcp:vector:responses"
     assert kb_server.timeout_seconds == 30
 
-    # Verify all 14 vector tools are present
+    # Verify all 15 vector tools are present
     expected_kb_tools = [
         "query_knowledge_base",
         "list_knowledge_bases",
@@ -43,6 +43,7 @@ def test_load_mcp_config_valid():
         "delete_document",
         "preview_documents",
         "get_processing_tasks",
+        "list_document_chunks",
     ]
     tool_names = [tool.name for tool in kb_server.tools]
     for expected_tool in expected_kb_tools:
@@ -205,10 +206,10 @@ def test_lookup_helpers():
 
     # list_tools
     all_tools = config.list_tools()
-    assert len(all_tools) >= 17  # 14 KB tools + 3 weather tools
+    assert len(all_tools) >= 18  # 15 KB tools + 3 weather tools
 
     kb_tools = config.list_tools("knowledge_bases_mcp")
-    assert len(kb_tools) == 14
+    assert len(kb_tools) == 15
 
     empty_tools = config.list_tools("unknown_server")
     assert len(empty_tools) == 0

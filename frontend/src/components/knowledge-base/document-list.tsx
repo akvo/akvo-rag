@@ -13,9 +13,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { FileText, Trash2, Eye, AlertCircle } from "lucide-react";
+import { FileText, Trash2, Eye, AlertCircle, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import Link from "next/link";
+import { ChunkInspectorDrawer } from "@/components/knowledge-base/chunk-inspector-drawer";
 
 interface Document {
   id: number;
@@ -122,28 +123,53 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedDocForInspector, setSelectedDocForInspector] = useState<{
+    id: number;
+    fileName: string;
+  } | null>(null);
   const { toast } = useToast();
 
   const allow_delete = true;
 
-  useEffect(() => {
-    const fetchDocuments = async () => {
-      try {
-        const data = await api.get(`/api/knowledge-base/${knowledgeBaseId}`);
-        setDocuments(data?.documents || []);
-      } catch (error) {
-        if (error instanceof ApiError) {
-          setError(error.message);
-        } else {
-          setError("Failed to fetch documents");
-        }
-      } finally {
-        setLoading(false);
+  const fetchDocuments = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+    try {
+      const data = await api.get(`/api/knowledge-base/${knowledgeBaseId}`);
+      setDocuments(data?.documents || []);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setError(error.message);
+      } else {
+        setError("Failed to fetch documents");
       }
-    };
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  };
 
-    fetchDocuments();
+  useEffect(() => {
+    fetchDocuments(true);
   }, [knowledgeBaseId]);
+
+  // Auto-polling for active processing documents
+  useEffect(() => {
+    const hasProcessing = documents.some((doc) => {
+      const task =
+        doc.processing_tasks && doc.processing_tasks.length > 0
+          ? doc.processing_tasks[0]
+          : null;
+      const st = (task?.status || doc.status || "").toLowerCase();
+      return st === "processing" || st === "in_progress" || st === "pending" || st === "uploaded";
+    });
+
+    if (!hasProcessing) return;
+
+    const interval = setInterval(() => {
+      fetchDocuments(false);
+    }, 3500);
+
+    return () => clearInterval(interval);
+  }, [documents, knowledgeBaseId]);
 
   const handleDelete = async (doc_id: number) => {
     if (!confirm("Are you sure you want to delete this document?"))
@@ -207,6 +233,7 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
   }
 
   return (
+    <>
     <Table>
       <TableHeader>
         <TableRow>
@@ -258,36 +285,42 @@ export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
             </TableCell>
             <TableCell>{getDocumentStatusBadge(doc)}</TableCell>
             <TableCell>
-              <div className="space-x-2">
-                {/* TODO:: Enable link once view document validated
-                <Link
-                  href={doc.file_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() =>
+                    setSelectedDocForInspector({
+                      id: doc.id,
+                      fileName: doc.file_name,
+                    })
+                  }
+                  className="inline-flex items-center justify-center rounded-md bg-primary/10 hover:bg-primary/20 text-primary w-8 h-8 transition-colors"
+                  title="Inspect document chunks & tokens"
                 >
+                  <Eye className="h-4 w-4" />
+                </button>
+                {allow_delete && (
                   <button
-                    className="inline-flex items-center justify-center rounded-md bg-[#03AD8C]/10 hover:bg-[#03AD8C]/20 w-8 h-8"
+                    onClick={() => handleDelete(doc.id)}
+                    className="inline-flex items-center justify-center rounded-md bg-destructive/10 hover:bg-destructive/20 text-destructive w-8 h-8 transition-colors"
+                    title="Delete document"
                   >
-                    <Eye className="h-4 w-4 text-[#027a63]" />
+                    <Trash2 className="h-4 w-4" />
                   </button>
-                </Link> */}
-                {
-                    // allow delete only for same user / kb owner
-                    // currently allow delete for all user
-                    allow_delete ? (
-                      <button
-                        onClick={() => handleDelete(doc.id)}
-                        className="inline-flex items-center justify-center rounded-md bg-destructive/10 hover:bg-destructive/20 w-8 h-8"
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </button>
-                    ) : ""
-                }
+                )}
               </div>
             </TableCell>
           </TableRow>
         ))}
       </TableBody>
     </Table>
+
+    <ChunkInspectorDrawer
+      isOpen={Boolean(selectedDocForInspector)}
+      onClose={() => setSelectedDocForInspector(null)}
+      knowledgeBaseId={knowledgeBaseId}
+      documentId={selectedDocForInspector?.id ?? null}
+      fileName={selectedDocForInspector?.fileName || ""}
+    />
+    </>
   );
 }
