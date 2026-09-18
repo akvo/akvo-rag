@@ -11,6 +11,10 @@ import {
   Sparkles,
   Layers,
   Globe,
+  Download,
+  Copy,
+  Check,
+  Loader2,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import { api, ApiError, API_PREFIX } from "@/lib/api";
@@ -68,7 +72,7 @@ export default function ChatDetailPage({ params }: { params: { id: string } }) {
   const [chat, setChat] = useState<Chat | null>(null);
   const [allChats, setAllChats] = useState<ChatSessionSummary[]>([]);
   const [loadingChats, setLoadingChats] = useState(true);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [loadingChat, setLoadingChat] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Citation Drawer state
@@ -100,17 +104,17 @@ export default function ChatDetailPage({ params }: { params: { id: string } }) {
   }, []);
 
   useEffect(() => {
-    if (isInitialLoad) {
-      fetchChat();
-      setIsInitialLoad(false);
-    }
-  }, [isInitialLoad, params.id]);
+    setLoadingChat(true);
+    setChat(null);
+    setMessages([]);
+    fetchChat();
+  }, [params.id]);
 
   useEffect(() => {
-    if (!isInitialLoad) {
+    if (!loadingChat) {
       scrollToBottom();
     }
-  }, [messages, isInitialLoad]);
+  }, [messages, loadingChat]);
 
   const fetchSidebarChats = async () => {
     try {
@@ -124,6 +128,7 @@ export default function ChatDetailPage({ params }: { params: { id: string } }) {
   };
 
   const fetchChat = async () => {
+    setLoadingChat(true);
     try {
       const data: Chat = await api.get(`/api/chat/${params.id}`);
       setChat(data);
@@ -216,6 +221,8 @@ export default function ChatDetailPage({ params }: { params: { id: string } }) {
         });
       }
       router.push("/dashboard/chat");
+    } finally {
+      setLoadingChat(false);
     }
   };
 
@@ -234,6 +241,101 @@ export default function ChatDetailPage({ params }: { params: { id: string } }) {
     } catch (error) {
       console.error("Failed to delete chat:", error);
     }
+  };
+
+  const handleRenameSidebarChat = async (id: number, newTitle: string) => {
+    try {
+      await api.put(`/api/chat/${id}`, { title: newTitle });
+      setAllChats((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c))
+      );
+      if (String(id) === params.id) {
+        setChat((prev) => (prev ? { ...prev, title: newTitle } : prev));
+      }
+      toast({
+        title: "Success",
+        description: "Conversation renamed",
+      });
+    } catch (error) {
+      console.error("Failed to rename chat:", error);
+      toast({
+        title: "Error",
+        description: "Failed to rename conversation",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleExportMarkdown = () => {
+    if (!chat || processedMessages.length === 0) return;
+    const dateStr = new Date().toISOString().split("T")[0];
+    let mdContent = `# ${chat.title}\n*Exported on ${dateStr} from Akvo RAG*\n\n---\n\n`;
+
+    processedMessages.forEach((msg) => {
+      const roleName = msg.role === "assistant" ? "🤖 **Akvo Assistant**" : "👤 **User**";
+      mdContent += `### ${roleName}\n\n${msg.content}\n\n`;
+      if (msg.citations && msg.citations.length > 0) {
+        mdContent += `**Citations:**\n`;
+        msg.citations.forEach((c) => {
+          mdContent += `- [${c.id}] ${c.metadata?.file_name || "Document"}: "${c.text.slice(0, 150).replace(/\n/g, " ")}..."\n`;
+        });
+        mdContent += `\n`;
+      }
+      mdContent += `---\n\n`;
+    });
+
+    const blob = new Blob([mdContent], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${chat.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_${dateStr}.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({ title: "Exported", description: "Conversation saved as Markdown" });
+  };
+
+  const handleExportJSON = () => {
+    if (!chat || processedMessages.length === 0) return;
+    const exportData = {
+      id: chat.id,
+      title: chat.title,
+      exported_at: new Date().toISOString(),
+      knowledge_bases: chat.knowledge_bases,
+      messages: processedMessages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        citations: m.citations || [],
+      })),
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${chat.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_export.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({ title: "Exported", description: "Conversation saved as JSON" });
+  };
+
+  const [copiedExport, setCopiedExport] = useState(false);
+  const handleCopyConversation = async () => {
+    if (!chat || processedMessages.length === 0) return;
+    let fullText = `${chat.title}\n\n`;
+    processedMessages.forEach((m) => {
+      fullText += `${m.role.toUpperCase()}:\n${m.content}\n\n`;
+    });
+    await navigator.clipboard.writeText(fullText);
+    setCopiedExport(true);
+    setTimeout(() => setCopiedExport(false), 2000);
+    toast({ title: "Copied", description: "Conversation copied to clipboard" });
   };
 
   const scrollToBottom = () => {
@@ -344,6 +446,7 @@ export default function ChatDetailPage({ params }: { params: { id: string } }) {
           chats={allChats}
           activeChatId={params.id}
           onDeleteChat={handleDeleteSidebarChat}
+          onRenameChat={handleRenameSidebarChat}
           isLoading={loadingChats}
         />
 
@@ -353,95 +456,188 @@ export default function ChatDetailPage({ params }: { params: { id: string } }) {
           <div className="flex items-center justify-between border-b px-6 py-3.5 bg-card/60 backdrop-blur-sm z-10">
             <div className="flex items-center gap-3 min-w-0">
               <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <Sparkles className="h-4 w-4 text-primary" />
+                {loadingChat ? (
+                  <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4 text-primary" />
+                )}
               </div>
               <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-foreground truncate">
-                  {chat?.title || "Conversation"}
-                </h2>
-                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Globe className="h-3 w-3 text-primary" />
-                    {chat?.knowledge_bases && chat.knowledge_bases.length > 0
-                      ? chat.knowledge_bases
-                          .map((kb) => kb.knowledge_base.name)
-                          .join(", ")
-                      : "All Knowledge Bases"}
-                  </span>
-                  <span>•</span>
-                  <span>{messages.length} messages</span>
-                </div>
+                {loadingChat ? (
+                  <div className="space-y-1.5 py-0.5">
+                    <div className="h-3.5 w-36 bg-muted animate-pulse rounded-md" />
+                    <div className="h-2.5 w-24 bg-muted/60 animate-pulse rounded-md" />
+                  </div>
+                ) : (
+                  <>
+                    <h2 className="text-sm font-semibold text-foreground truncate">
+                      {chat?.title || "Conversation"}
+                    </h2>
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Globe className="h-3 w-3 text-primary" />
+                        {chat?.knowledge_bases && chat.knowledge_bases.length > 0
+                          ? chat.knowledge_bases
+                              .map((kb) => kb.knowledge_base.name)
+                              .join(", ")
+                          : "All Knowledge Bases"}
+                      </span>
+                      <span>•</span>
+                      <span>{messages.length} messages</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Scope Badge */}
-            <div className="hidden sm:flex items-center gap-1.5 bg-muted/60 border rounded-full px-3 py-1 text-xs text-muted-foreground">
-              <Layers className="h-3.5 w-3.5 text-primary" />
-              <span>ChromaDB Vector Store</span>
+            {/* Actions & Scope Badge */}
+            <div className="flex items-center gap-2">
+              {/* Conversation Export Actions */}
+              {!loadingChat && processedMessages.length > 0 && (
+                <div className="flex items-center bg-muted/60 border rounded-xl p-0.5 gap-0.5 shadow-2xs">
+                  <button
+                    onClick={handleExportMarkdown}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-background transition-all"
+                    title="Export as Markdown (.md)"
+                  >
+                    <Download className="h-3.5 w-3.5 text-primary" />
+                    <span className="hidden sm:inline">Export .md</span>
+                  </button>
+                  <button
+                    onClick={handleExportJSON}
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-background transition-all"
+                    title="Export as JSON (.json)"
+                  >
+                    <span>.json</span>
+                  </button>
+                  <button
+                    onClick={handleCopyConversation}
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-background transition-all"
+                    title="Copy full conversation text"
+                  >
+                    {copiedExport ? (
+                      <Check className="h-3.5 w-3.5 text-emerald-500" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
+              )}
+
+              <div className="hidden lg:flex items-center gap-1.5 bg-muted/60 border rounded-full px-3 py-1 text-xs text-muted-foreground">
+                <Layers className="h-3.5 w-3.5 text-primary" />
+                <span>ChromaDB Vector Store</span>
+              </div>
             </div>
           </div>
 
           {/* Messages Stream Canvas */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-6">
-            {processedMessages.map((message) =>
-              message.role === "assistant" ? (
-                <div
-                  key={message.id}
-                  className="flex items-start gap-3.5 max-w-3xl"
-                >
-                  <div className="h-8 w-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 mt-0.5 shadow-xs overflow-hidden">
-                    <Image
-                      src="/logo.png"
-                      width={20}
-                      height={20}
-                      className="rounded-md object-contain"
-                      alt="Akvo RAG"
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0 rounded-2xl bg-card border px-5 py-4 text-foreground shadow-xs">
-                    <Answer
-                      key={message.id}
-                      markdown={message.content}
-                      citations={message.citations}
-                      onOpenCitation={handleOpenCitation}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div
-                  key={message.id}
-                  className="flex items-start justify-end gap-3.5 max-w-3xl ml-auto"
-                >
-                  <div className="rounded-2xl bg-primary px-5 py-3 text-sm font-medium text-primary-foreground shadow-sm max-w-[85%] leading-relaxed break-words">
-                    {message.content}
-                  </div>
-                  <div className="h-8 w-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0 mt-0.5 text-primary">
-                    <User className="h-4 w-4" />
-                  </div>
-                </div>
-              )
-            )}
-
-            {/* Streaming Thinking / Bouncing Indicator */}
-            {isLoading &&
-              processedMessages[processedMessages.length - 1]?.role !==
-                "assistant" && (
-                <div className="flex items-start gap-3.5 max-w-3xl">
-                  <div className="h-8 w-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 shadow-xs">
+            {loadingChat ? (
+              <div className="space-y-6 max-w-3xl animate-in fade-in duration-300">
+                {/* Assistant Skeleton */}
+                <div className="flex items-start gap-3.5">
+                  <div className="h-8 w-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
                     <Bot className="h-4 w-4 text-primary animate-pulse" />
                   </div>
-                  <div className="rounded-2xl bg-card border px-4 py-3 text-xs text-muted-foreground shadow-xs flex items-center gap-2">
-                    <span className="font-medium text-foreground">
-                      Searching vector knowledge bases & synthesizing...
-                    </span>
-                    <div className="flex items-center space-x-1">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" />
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:0.2s]" />
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:0.4s]" />
-                    </div>
+                  <div className="flex-1 rounded-2xl bg-card border px-5 py-4 space-y-2.5 shadow-xs">
+                    <div className="h-4 w-3/4 bg-muted/80 rounded-md animate-pulse" />
+                    <div className="h-4 w-full bg-muted/60 rounded-md animate-pulse" />
+                    <div className="h-4 w-5/6 bg-muted/50 rounded-md animate-pulse" />
                   </div>
                 </div>
-              )}
+
+                {/* User Skeleton */}
+                <div className="flex items-start justify-end gap-3.5 ml-auto max-w-xl">
+                  <div className="rounded-2xl bg-primary/20 px-5 py-3.5 space-y-2 w-64 shadow-xs">
+                    <div className="h-3.5 w-full bg-primary/30 rounded-md animate-pulse" />
+                    <div className="h-3.5 w-2/3 bg-primary/30 rounded-md animate-pulse" />
+                  </div>
+                  <div className="h-8 w-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0">
+                    <User className="h-4 w-4 text-primary" />
+                  </div>
+                </div>
+
+                {/* Assistant Skeleton 2 */}
+                <div className="flex items-start gap-3.5">
+                  <div className="h-8 w-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                    <Bot className="h-4 w-4 text-primary animate-pulse" />
+                  </div>
+                  <div className="flex-1 rounded-2xl bg-card border px-5 py-4 space-y-2.5 shadow-xs">
+                    <div className="h-4 w-2/3 bg-muted/80 rounded-md animate-pulse" />
+                    <div className="h-4 w-4/5 bg-muted/60 rounded-md animate-pulse" />
+                  </div>
+                </div>
+
+                {/* Loading indicator bar */}
+                <div className="flex items-center justify-center gap-2 pt-4 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                  <span>Loading conversation...</span>
+                </div>
+              </div>
+            ) : (
+              <>
+                {processedMessages.map((message) =>
+                  message.role === "assistant" ? (
+                    <div
+                      key={message.id}
+                      className="flex items-start gap-3.5 max-w-3xl"
+                    >
+                      <div className="h-8 w-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 mt-0.5 shadow-xs overflow-hidden">
+                        <Image
+                          src="/logo.png"
+                          width={20}
+                          height={20}
+                          className="rounded-md object-contain"
+                          alt="Akvo RAG"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0 rounded-2xl bg-card border px-5 py-4 text-foreground shadow-xs">
+                        <Answer
+                          key={message.id}
+                          markdown={message.content}
+                          citations={message.citations}
+                          onOpenCitation={handleOpenCitation}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      key={message.id}
+                      className="flex items-start justify-end gap-3.5 max-w-3xl ml-auto"
+                    >
+                      <div className="rounded-2xl bg-primary px-5 py-3 text-sm font-medium text-primary-foreground shadow-sm max-w-[85%] leading-relaxed break-words">
+                        {message.content}
+                      </div>
+                      <div className="h-8 w-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0 mt-0.5 text-primary">
+                        <User className="h-4 w-4" />
+                      </div>
+                    </div>
+                  )
+                )}
+
+                {/* Streaming Thinking / Bouncing Indicator */}
+                {isLoading &&
+                  processedMessages[processedMessages.length - 1]?.role !==
+                    "assistant" && (
+                    <div className="flex items-start gap-3.5 max-w-3xl">
+                      <div className="h-8 w-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 shadow-xs">
+                        <Bot className="h-4 w-4 text-primary animate-pulse" />
+                      </div>
+                      <div className="rounded-2xl bg-card border px-4 py-3 text-xs text-muted-foreground shadow-xs flex items-center gap-2">
+                        <span className="font-medium text-foreground">
+                          Searching vector knowledge bases & synthesizing...
+                        </span>
+                        <div className="flex items-center space-x-1">
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:0.2s]" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:0.4s]" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+              </>
+            )}
 
             <div ref={messagesEndRef} />
           </div>
@@ -452,12 +648,17 @@ export default function ChatDetailPage({ params }: { params: { id: string } }) {
               <input
                 value={input}
                 onChange={handleInputChange}
-                placeholder="Ask a question about this knowledge base..."
-                className="flex-1 h-11 rounded-xl border bg-background px-4 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary transition-all shadow-xs"
+                disabled={loadingChat || isLoading}
+                placeholder={
+                  loadingChat
+                    ? "Loading conversation..."
+                    : "Ask a question about this knowledge base..."
+                }
+                className="flex-1 h-11 rounded-xl border bg-background px-4 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary transition-all shadow-xs disabled:opacity-60"
               />
               <button
                 type="submit"
-                disabled={isLoading || !input.trim()}
+                disabled={loadingChat || isLoading || !input.trim()}
                 className="inline-flex items-center justify-center rounded-xl bg-primary text-primary-foreground font-semibold h-11 px-5 text-sm shadow-sm hover:bg-primary/90 hover:shadow disabled:opacity-50 transition-all gap-1.5 shrink-0"
               >
                 <Send className="h-4 w-4" />

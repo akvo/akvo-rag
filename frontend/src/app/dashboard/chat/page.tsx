@@ -109,6 +109,26 @@ export default function ChatOverviewPage() {
     }
   };
 
+  const handleRenameSidebarChat = async (id: number, newTitle: string) => {
+    try {
+      await api.put(`/api/chat/${id}`, { title: newTitle });
+      setChats((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c))
+      );
+      toast({
+        title: "Success",
+        description: "Conversation renamed",
+      });
+    } catch (error) {
+      console.error("Failed to rename chat:", error);
+      toast({
+        title: "Error",
+        description: "Failed to rename conversation",
+        variant: "destructive",
+      });
+    }
+  };
+
   const toggleKBSelection = (kbId: number) => {
     setSelectedKBFilter((prev) =>
       prev.includes(kbId) ? prev.filter((id) => id !== kbId) : [...prev, kbId]
@@ -173,6 +193,7 @@ export default function ChatOverviewPage() {
         <ChatSidebar
           chats={chats}
           onDeleteChat={handleDeleteSidebarChat}
+          onRenameChat={handleRenameSidebarChat}
           isLoading={loadingChats}
         />
 

@@ -12,6 +12,10 @@ import {
   Bot,
   Sparkles,
   BookOpen,
+  Edit2,
+  Check,
+  X,
+  Loader2,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -28,6 +32,7 @@ interface ChatSidebarProps {
   chats: ChatSessionSummary[];
   activeChatId?: string | number;
   onDeleteChat?: (id: number) => void;
+  onRenameChat?: (id: number, newTitle: string) => Promise<void> | void;
   onNewChat?: () => void;
   isLoading?: boolean;
 }
@@ -36,12 +41,21 @@ export const ChatSidebar: FC<ChatSidebarProps> = ({
   chats,
   activeChatId,
   onDeleteChat,
+  onRenameChat,
   onNewChat,
   isLoading = false,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [editingChatId, setEditingChatId] = useState<number | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [navigatingChatId, setNavigatingChatId] = useState<number | null>(null);
   const activeItemRef = useRef<HTMLDivElement>(null);
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setNavigatingChatId(null);
+  }, [activeChatId]);
 
   const sortedChats = useMemo(() => {
     return [...chats]
@@ -59,10 +73,41 @@ export const ChatSidebar: FC<ChatSidebarProps> = ({
   }, [chats, searchTerm]);
 
   useEffect(() => {
-    if (activeItemRef.current) {
-      activeItemRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (editingChatId && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
     }
-  }, [activeChatId]);
+  }, [editingChatId]);
+
+  const handleStartRename = (e: React.MouseEvent, chat: ChatSessionSummary) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingChatId(chat.id);
+    setEditingTitle(chat.title);
+  };
+
+  const handleSaveRename = async (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (!editingChatId || !editingTitle.trim()) {
+      setEditingChatId(null);
+      return;
+    }
+    if (onRenameChat) {
+      await onRenameChat(editingChatId, editingTitle.trim());
+    }
+    setEditingChatId(null);
+  };
+
+  const handleCancelRename = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setEditingChatId(null);
+  };
 
   return (
     <div
@@ -159,6 +204,10 @@ export const ChatSidebar: FC<ChatSidebarProps> = ({
           sortedChats.map((chat) => {
             const isActive = String(chat.id) === String(activeChatId);
 
+            const isEditing = editingChatId === chat.id;
+
+            const isNavigating = navigatingChatId === chat.id;
+
             return (
               <div
                 key={chat.id}
@@ -166,53 +215,112 @@ export const ChatSidebar: FC<ChatSidebarProps> = ({
                 className={`group relative flex items-center rounded-xl transition-all ${
                   isActive
                     ? "bg-primary/10 text-primary font-medium shadow-xs"
+                    : isNavigating
+                    ? "bg-primary/5 text-primary animate-pulse"
                     : "text-foreground/80 hover:bg-muted/70 hover:text-foreground"
                 }`}
               >
-                <Link
-                  href={`/dashboard/chat/${chat.id}`}
-                  className={`flex items-center gap-3 min-w-0 flex-1 p-2.5 ${
-                    isCollapsed ? "justify-center" : ""
-                  }`}
-                  title={chat.title}
-                >
-                  <div
-                    className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
-                      isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground group-hover:text-foreground"
-                    }`}
+                {isEditing && !isCollapsed ? (
+                  <form
+                    onSubmit={handleSaveRename}
+                    className="flex items-center gap-1.5 p-2 w-full"
                   >
-                    <MessageSquare className="h-3.5 w-3.5" />
-                  </div>
+                    <input
+                      ref={editInputRef}
+                      type="text"
+                      value={editingTitle}
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") handleCancelRename();
+                      }}
+                      className="flex-1 text-xs px-2 py-1 rounded-md border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <button
+                      type="submit"
+                      className="p-1 rounded-md text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                      title="Save (Enter)"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelRename}
+                      className="p-1 rounded-md text-muted-foreground hover:bg-muted"
+                      title="Cancel (Esc)"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <Link
+                      href={`/dashboard/chat/${chat.id}`}
+                      onClick={() => {
+                        if (!isActive) setNavigatingChatId(chat.id);
+                      }}
+                      className={`flex items-center gap-3 min-w-0 flex-1 p-2.5 ${
+                        isCollapsed ? "justify-center" : ""
+                      }`}
+                      title={chat.title}
+                    >
+                      <div
+                        className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
+                          isActive
+                            ? "bg-primary text-primary-foreground"
+                            : isNavigating
+                            ? "bg-primary/20 text-primary"
+                            : "bg-muted text-muted-foreground group-hover:text-foreground"
+                        }`}
+                      >
+                        {isNavigating ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                        ) : (
+                          <MessageSquare className="h-3.5 w-3.5" />
+                        )}
+                      </div>
 
-                  {!isCollapsed && (
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs truncate font-medium">{chat.title}</p>
-                      {chat.created_at && (
-                        <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                          {formatDistanceToNow(new Date(chat.created_at), {
-                            addSuffix: true,
-                          })}
-                        </p>
+                      {!isCollapsed && (
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs truncate font-medium">{chat.title}</p>
+                          {chat.created_at && (
+                            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                              {formatDistanceToNow(new Date(chat.created_at), {
+                                addSuffix: true,
+                              })}
+                            </p>
+                          )}
+                        </div>
                       )}
-                    </div>
-                  )}
-                </Link>
+                    </Link>
 
-                {/* Delete button on hover */}
-                {!isCollapsed && onDeleteChat && (
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onDeleteChat(chat.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1.5 mr-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
-                    title="Delete conversation"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                    {/* Action buttons on hover */}
+                    {!isCollapsed && (
+                      <div className="flex items-center opacity-0 group-hover:opacity-100 pr-1.5 transition-opacity">
+                        {onRenameChat && (
+                          <button
+                            onClick={(e) => handleStartRename(e, chat)}
+                            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            title="Rename conversation"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {onDeleteChat && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onDeleteChat(chat.id);
+                            }}
+                            className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                            title="Delete conversation"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             );
