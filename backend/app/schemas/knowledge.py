@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Union
 from pydantic import BaseModel
 
 
@@ -20,6 +20,7 @@ class KnowledgeBaseResponse(KnowledgeBaseBase):
 
 
 class PreviewRequest(BaseModel):
-    document_ids: List[int]
+    document_ids: Optional[List[Union[int, str]]] = None
+    file_paths: Optional[List[str]] = None
     chunk_size: int = 1000
     chunk_overlap: int = 200

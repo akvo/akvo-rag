@@ -242,7 +242,7 @@ def main():
 
         access_token = rag_login()
         if not access_token:
-            print("❌ Auth failed to RAG Web UI")
+            print("❌ Auth failed to Akvo RAG")
             return
 
         kb_id = rag_create_knowledge_base(

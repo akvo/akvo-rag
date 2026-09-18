@@ -10,7 +10,8 @@ BCrypt==4.3.0
 argon2-cffi>=23.1.0
 SQLAlchemy>=2.0.23
 alembic>=1.12.1
-mysql-connector-python>=8.0.33
+psycopg2-binary>=2.9.9
+asyncpg>=0.29.0
 python-docx>=0.8.11
 pypdf>=3.0.0
 unstructured>=0.10.30
@@ -27,10 +28,12 @@ fastapi-mail==1.4.1
 jinja2==3.1.4
 
 langgraph==0.6.3
-fastmcp==2.11.1
 
 # Fix dependencies
 pydantic==2.11.7
 
-# Celery
-celery==5.5.3
+# Message Queue & Cache
+redis>=5.0.0
+
+# Object Storage
+minio>=7.2.0

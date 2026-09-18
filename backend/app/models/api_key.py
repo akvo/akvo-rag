@@ -1,8 +1,16 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, VARCHAR
+from sqlalchemy import (
+    VARCHAR,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+)
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 
 from app.models.base import Base, TimestampMixin
+
 
 class APIKey(Base, TimestampMixin):
     __tablename__ = "api_keys"
@@ -15,4 +23,4 @@ class APIKey(Base, TimestampMixin):
     last_used_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    user = relationship("User", back_populates="api_keys") 
+    user = relationship("User", back_populates="api_keys")

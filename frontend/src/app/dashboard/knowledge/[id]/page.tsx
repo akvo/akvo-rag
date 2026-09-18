@@ -49,18 +49,20 @@ export default function KnowledgeBasePage() {
                   Add Document
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-4xl">
-                <DialogHeader>
+              <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+                <DialogHeader className="p-6 pb-4 border-b flex-shrink-0">
                   <DialogTitle>Add Document</DialogTitle>
                   <DialogDescription>
                     Upload a document to your knowledge base. Supported formats:
                     PDF, DOCX, Markdown, and Text files.
                   </DialogDescription>
                 </DialogHeader>
-                <DocumentUploadSteps
-                  knowledgeBaseId={knowledgeBaseId}
-                  onComplete={handleUploadComplete}
-                />
+                <div className="flex-1 overflow-y-auto p-6">
+                  <DocumentUploadSteps
+                    knowledgeBaseId={knowledgeBaseId}
+                    onComplete={handleUploadComplete}
+                  />
+                </div>
               </DialogContent>
             </Dialog>
           ) : null

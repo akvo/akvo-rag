@@ -14,7 +14,7 @@ interface KnowledgeBase {
   id: number;
   name: string;
   description: string;
-  documents: Document[];
+  documents?: Document[];
   created_at: string;
   user_id: number;
   is_superuser: boolean;
@@ -29,7 +29,7 @@ interface Document {
   knowledge_base_id: number;
   created_at: string;
   updated_at: string;
-  processing_tasks: any[];
+  processing_tasks?: any[];
 }
 
 
@@ -126,7 +126,7 @@ export default function KnowledgeBasePage() {
                     {kb.description || "No description"}
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {kb.documents.length} documents •{" "}
+                    {kb.documents?.length ?? 0} documents •{" "}
                     {new Date(kb.created_at).toLocaleDateString()}
                   </p>
                 </div>
@@ -160,11 +160,11 @@ export default function KnowledgeBasePage() {
                 </div>
               </div>
 
-              {kb.documents.length > 0 && (
+              {(kb.documents?.length ?? 0) > 0 && (
                 <div className="border-t pt-4">
                   <h4 className="text-sm font-medium mb-2">Documents</h4>
                   <div className="flex flex-wrap gap-2 max-h-[400px] overflow-y-auto">
-                    {kb.documents.slice(0, 9).map((doc) => (
+                    {kb.documents?.slice(0, 9).map((doc) => (
                       <div
                         key={doc.id}
                         className="flex flex-col items-center gap-2 p-2 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors w-[150px] h-[150px] justify-center"
@@ -196,7 +196,7 @@ export default function KnowledgeBasePage() {
                         </span>
                       </div>
                     ))}
-                    {kb.documents.length > 9 && (
+                    {(kb.documents?.length ?? 0) > 9 && (
                       <Link
                         href={`/dashboard/knowledge/${kb.id}`}
                         className="flex flex-col items-center p-2 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors w-[150px] h-[150px] justify-center"
@@ -208,7 +208,7 @@ export default function KnowledgeBasePage() {
                           View All Documents
                         </span>
                         <span className="text-xs text-muted-foreground mt-1">
-                          {kb.documents.length} total
+                          {kb.documents?.length ?? 0} total
                         </span>
                       </Link>
                     )}

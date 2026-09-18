@@ -7,9 +7,9 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.chat import Chat, ChatKnowledgeBase
 from app.schemas.chat import (
+    ChatCreate,
     ChatResponse,
-    ChatCreate, ChatResponse,
-    CreateMessagePayload
+    CreateMessagePayload,
 )
 from app.api.api_v1.auth import get_current_user
 from app.services.chat_mcp_service import stream_mcp_response
@@ -92,6 +92,7 @@ def delete_chat(
     db.delete(chat)
     db.commit()
     return {"status": "success"}
+
 
 @router.post("/{chat_id}/messages")
 async def create_message_mcp_integration(

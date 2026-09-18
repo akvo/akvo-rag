@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Copy, Check, List } from "lucide-react";
+import { Plus, Copy, Check, List, Info } from "lucide-react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
@@ -59,7 +59,7 @@ export default function APIKeysPage() {
   const { toast } = useToast();
   const router = useRouter();
 
-  // 获取 API Keys 列表
+  // Fetch API keys list
   const fetchAPIKeys = async () => {
     try {
       const data = await api.get("/api/api-keys");
@@ -79,7 +79,7 @@ export default function APIKeysPage() {
     fetchAPIKeys();
   }, []);
 
-  // 创建新的 API Key
+  // Create new API key
   const createAPIKey = async () => {
     if (!newKeyName.trim()) {
       toast({
@@ -115,7 +115,7 @@ export default function APIKeysPage() {
     }
   };
 
-  // 删除 API Key
+  // Delete API key
   const deleteAPIKey = async (id: number) => {
     try {
       const response = await api.delete(`/api/api-keys/${id}`);
@@ -136,7 +136,7 @@ export default function APIKeysPage() {
     }
   };
 
-  // 更新 API Key 状态
+  // Update API key status
   const toggleAPIKeyStatus = async (id: number, currentStatus: boolean) => {
     try {
       const response = await api.put(`/api/api-keys/${id}`, {
@@ -162,7 +162,7 @@ export default function APIKeysPage() {
     }
   };
 
-  // 复制 API Key
+  // Copy API key to clipboard
   const copyAPIKey = async (id: number, key: string) => {
     try {
       await navigator.clipboard.writeText(key);
@@ -185,9 +185,14 @@ export default function APIKeysPage() {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto py-10">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-bold">API Keys</h1>
+      <div className="container mx-auto py-10 space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold">API Keys</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Personal API keys for direct programmatic access and querying knowledge bases.
+            </p>
+          </div>
           <div className="flex gap-4">
             <Dialog
               open={isAPIListDialogOpen}
@@ -203,20 +208,25 @@ export default function APIKeysPage() {
                 <DialogHeader>
                   <DialogTitle>Available API Endpoints</DialogTitle>
                   <DialogDescription>
-                    List of available API endpoints and their usage.
+                    List of available API endpoints for personal API keys.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="mt-4 space-y-6">
                   <div className="border rounded-lg p-6 bg-slate-50">
-                    <h3 className="text-lg font-semibold mb-4">
-                      Knowledge Base Query
-                    </h3>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">
+                        Knowledge Base Query
+                      </h3>
+                      <span className="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800 border border-amber-200">
+                        In Progress (Under Migration)
+                      </span>
+                    </div>
                     <div className="space-y-4">
                       <div>
                         <h4 className="text-sm font-medium text-slate-700 mb-2">
                           Method
                         </h4>
-                        <code className="block p-3 bg-white border rounded-md text-sm font-mono text-blue-600">
+                        <code className="block p-3 bg-white border rounded-md text-sm font-mono text-[#03AD8C] font-semibold">
                           GET
                         </code>
                       </div>
@@ -236,13 +246,13 @@ export default function APIKeysPage() {
                         </h4>
                         <div className="bg-white border rounded-md p-3 space-y-2">
                           <div className="grid grid-cols-3 text-sm">
-                            <div className="font-mono text-blue-600">query</div>
+                            <div className="font-mono text-[#03AD8C]">query</div>
                             <div className="col-span-2">
                               Your search query string
                             </div>
                           </div>
                           <div className="grid grid-cols-3 text-sm">
-                            <div className="font-mono text-blue-600">top_k</div>
+                            <div className="font-mono text-[#03AD8C]">top_k</div>
                             <div className="col-span-2">
                               Number of results to return (optional, default: 3)
                             </div>
@@ -255,7 +265,7 @@ export default function APIKeysPage() {
                           Headers
                         </h4>
                         <div className="bg-white border rounded-md p-3 grid grid-cols-3 text-sm">
-                          <div className="font-mono text-blue-600">
+                          <div className="font-mono text-[#03AD8C]">
                             X-API-Key
                           </div>
                           <div className="col-span-2">your_api_key</div>
@@ -278,7 +288,7 @@ export default function APIKeysPage() {
                 <DialogHeader>
                   <DialogTitle>Create New API Key</DialogTitle>
                   <DialogDescription>
-                    Create a new API key to access the API programmatically.
+                    Create a new personal API key to access the API programmatically.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
@@ -302,6 +312,35 @@ export default function APIKeysPage() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+          </div>
+        </div>
+
+        {/* Description & Usage Callout */}
+        <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground space-y-3">
+          <div className="flex items-center gap-2 font-medium text-foreground">
+            <Info className="h-4 w-4 text-[#03AD8C]" />
+            <span>About Personal API Keys</span>
+          </div>
+          <p>
+            Personal API keys are designed to authenticate programmatic requests to query knowledge bases directly using your user account.
+          </p>
+
+          <div className="text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded p-3 space-y-1">
+            <p className="font-semibold">⚠️ Feature Status:</p>
+            <p>
+              The OpenAPI query endpoint using personal API keys is <strong>currently under active development and does not work yet</strong>. API key generation and management work, but querying endpoints will be enabled in a future release.
+            </p>
+          </div>
+
+          <div className="text-xs space-y-1.5 bg-background/80 rounded border p-3">
+            <p className="font-semibold text-foreground">How it will work once enabled:</p>
+            <p>
+              Pass your generated key in the <code className="font-mono text-[#03AD8C] font-semibold">X-API-Key</code> HTTP request header to query a knowledge base:
+            </p>
+            <code className="block p-2.5 bg-muted rounded font-mono text-xs text-foreground mt-1 overflow-x-auto">
+              curl -X GET &quot;http://localhost:8000/openapi/knowledge/1/query?query=What+is+Akvo+RAG&amp;top_k=3&quot; \<br />
+              &nbsp;&nbsp;-H &quot;X-API-Key: sk_your_api_key_here&quot;
+            </code>
           </div>
         </div>
 
