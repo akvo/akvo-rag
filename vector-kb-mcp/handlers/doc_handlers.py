@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from db.session import get_db_session
 from models.document import Document
+from models.document_chunk import DocumentChunk
 from models.processing_task import ProcessingTask
 from handlers.serializers import serialize_doc, serialize_task
 from parser import parse_file_bytes
@@ -405,3 +406,80 @@ async def handle_get_tasks(args: Dict[str, Any]) -> Dict[str, Any]:
         res = await session.execute(stmt)
         tasks = res.scalars().all()
         return {"tasks": [serialize_task(task) for task in tasks]}
+
+
+async def handle_list_document_chunks(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    List all persisted chunks for a specific document with token/char counts.
+    """
+    doc_id = args.get("document_id") or args.get("doc_id") or args.get("id")
+    if not doc_id:
+        return {"error": "Missing document_id", "chunks": [], "total_chunks": 0}
+
+    async with get_db_session() as session:
+        # Get document metadata
+        doc_stmt = select(Document).where(Document.id == int(doc_id))
+        doc_res = await session.execute(doc_stmt)
+        doc = doc_res.scalar_one_or_none()
+
+        stmt = (
+            select(DocumentChunk)
+            .where(DocumentChunk.document_id == int(doc_id))
+            .order_by(DocumentChunk.chunk_index.asc())
+        )
+        res = await session.execute(stmt)
+        chunks = res.scalars().all()
+
+        serialized = []
+        for c in chunks:
+            meta = c.chunk_metadata or {}
+            chunk_text = meta.get("text") or meta.get("content") or ""
+            char_count = len(chunk_text)
+            token_count = meta.get("token_count") or max(1, char_count // 4)
+            page_num = meta.get("page") or meta.get("page_number")
+
+            serialized.append({
+                "id": c.id,
+                "chunk_index": c.chunk_index,
+                "file_name": c.file_name,
+                "text": chunk_text,
+                "char_count": char_count,
+                "token_count": token_count,
+                "page": page_num,
+                "metadata": meta,
+            })
+
+        # Backfill chunk texts if omitted from DB metadata
+        if doc and doc.file_path and any(not sc["text"] for sc in serialized):
+            try:
+                raw_bytes = storage_service.download_file_bytes(doc.file_path)
+                parsed_doc = await parse_file_bytes(raw_bytes, doc.file_name)
+                chunker = TextChunker(chunk_size=1000, chunk_overlap=200)
+                parsed_chunks = chunker.chunk_document(
+                    parsed_doc, kb_id=doc.knowledge_base_id
+                )
+                for idx, sc in enumerate(serialized):
+                    if not sc["text"] and idx < len(parsed_chunks):
+                        pchunk = parsed_chunks[idx]
+                        sc["text"] = pchunk.content
+                        sc["char_count"] = len(pchunk.content)
+                        sc["token_count"] = max(1, len(pchunk.content) // 4)
+                        if not sc["page"]:
+                            sc["page"] = pchunk.metadata.get(
+                                "page"
+                            ) or pchunk.metadata.get("page_number")
+            except Exception as e:
+                logger.warning(
+                    "Could not backfill chunk texts for doc %d: %s",
+                    int(doc_id),
+                    e,
+                )
+
+        return {
+            "document_id": int(doc_id),
+            "file_name": doc.file_name if doc else None,
+            "kb_id": doc.knowledge_base_id if doc else None,
+            "chunks": serialized,
+            "total_chunks": len(serialized),
+        }
+

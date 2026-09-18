@@ -314,6 +314,24 @@
             },
             "required": []
           }
+        },
+        {
+          "name": "list_document_chunks",
+          "description": "List all persisted text chunks, token splits, and metadata for a document.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "kb_id": {
+                "type": "integer",
+                "description": "Knowledge base ID."
+              },
+              "document_id": {
+                "type": "integer",
+                "description": "Document ID."
+              }
+            },
+            "required": ["document_id"]
+          }
         }
       ]
     },
