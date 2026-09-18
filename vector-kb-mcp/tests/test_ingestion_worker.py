@@ -301,3 +301,121 @@ async def test_ingestion_worker_malformed_json_handling():
 
         # Worker should not crash, process_document should not be called
         assert not worker.processor.process_document.called
+
+
+@pytest.mark.asyncio
+async def test_ingestion_worker_initialize_full_connections():
+    from ingestion.worker import IngestionWorker
+
+    mock_r = AsyncMock()
+    mock_r.ping = AsyncMock(return_value=True)
+
+    with patch(
+        "ingestion.worker.redis.from_url", return_value=mock_r
+    ) as mock_redis_from_url, patch(
+        "ingestion.worker.Minio"
+    ) as mock_minio, patch(
+        "ingestion.worker.AsyncOpenAI"
+    ) as mock_openai, patch(
+        "ingestion.worker.chromadb.HttpClient"
+    ) as mock_chroma, patch(
+        "ingestion.worker.IngestionProcessor"
+    ) as mock_processor_cls:
+
+        # Case 1: with individual clients
+        worker = IngestionWorker()
+        await worker.initialize(skip_connection_init=False)
+
+        mock_redis_from_url.assert_called_once()
+        mock_r.ping.assert_awaited_once()
+        mock_minio.assert_called_once()
+        mock_openai.assert_called_once()
+        mock_chroma.assert_called_once()
+        mock_processor_cls.assert_called()
+
+        # Case 2: with existing retriever
+        mock_retriever = MagicMock()
+        worker2 = IngestionWorker(retriever=mock_retriever)
+        await worker2.initialize(skip_connection_init=True)
+        assert worker2.processor is not None
+
+
+@pytest.mark.asyncio
+async def test_ingestion_worker_run_timeouts_and_errors():
+    from ingestion.worker import IngestionWorker
+
+    worker = IngestionWorker()
+    mock_r = AsyncMock()
+    worker.redis_client = mock_r
+    worker.processor = MagicMock()
+    worker.processor.process_document = AsyncMock()
+
+    call_count = 0
+    valid_payload = json.dumps({"document_id": "doc-1", "kb_id": 1})
+
+    async def fake_blpop(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise TimeoutError()
+        elif call_count == 2:
+            raise RuntimeError("Timeout reading from socket")
+        elif call_count == 3:
+            return None
+        elif call_count == 4:
+            return ("queue", valid_payload)
+        elif call_count == 5:
+            raise RuntimeError("Ingestion queue failure")
+        return None
+
+    mock_r.blpop.side_effect = fake_blpop
+
+    async def fake_sleep(duration):
+        worker.running = False
+
+    with patch("ingestion.worker.asyncio.sleep", side_effect=fake_sleep):
+        await worker.run()
+
+    assert call_count >= 5
+
+
+@pytest.mark.asyncio
+async def test_ingestion_worker_edge_cases_and_shutdown():
+    from ingestion.worker import IngestionWorker
+
+    worker = IngestionWorker()
+
+    # 1. Non-dict payload
+    await worker._process_message(json.dumps("string-not-dict"))
+
+    # 2. Missing processor
+    worker.processor = None
+    await worker._process_message(json.dumps({"document_id": "d1", "kb_id": 1}))
+
+    # 3. Processor raises exception
+    worker.processor = MagicMock()
+    worker.processor.process_document = AsyncMock(side_effect=RuntimeError("MinIO unavailable"))
+    await worker._process_message(json.dumps({"document_id": "d1", "kb_id": 1}))
+
+    # 4. Shutdown when already stopped and no redis
+    worker.running = False
+    worker.redis_client = None
+    await worker.shutdown()
+
+    # 5. Shutdown with aclose exception
+    mock_r = AsyncMock()
+    mock_r.aclose.side_effect = RuntimeError("Close socket fail")
+    worker.redis_client = mock_r
+    worker.running = True
+    await worker.shutdown()
+    assert worker.redis_client is None
+
+    # 6. Shutdown with sync close
+    class SyncRedis:
+        def close(self):
+            pass
+    worker.redis_client = SyncRedis()
+    worker.running = True
+    await worker.shutdown()
+    assert worker.redis_client is None
+

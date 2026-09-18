@@ -240,3 +240,79 @@ async def test_handle_delete_doc(in_memory_db):
         mock_retriever.delete_document_chunks.assert_called_once_with(
             collection_name="kb_1", document_id=doc_id
         )
+
+        # Delete non-existent document
+        res_nonexistent = await handle_delete_doc(
+            {"document_id": 99999, "kb_id": 1},
+            retriever=mock_retriever,
+        )
+        assert res_nonexistent["status"] == "deleted"
+
+
+@pytest.mark.asyncio
+async def test_handle_preview_doc_fallbacks_and_direct_paths(in_memory_db):
+    reg = await handle_register_doc(
+        {
+            "kb_id": 1,
+            "file_name": "preview_fallback.txt",
+            "file_path": "kb_1/preview_fallback.txt",
+            "file_size": 30,
+            "content_type": "text/plain",
+            "file_hash": "hash_fb",
+        }
+    )
+    doc_id = reg["document_id"]
+
+    # 1. Download exception triggers fallback preview text
+    with patch("handlers.doc_handlers.storage_service") as mock_storage:
+        mock_storage.download_file_bytes.side_effect = Exception("Storage error")
+        preview = await handle_preview_doc({"document_ids": [doc_id]})
+        assert doc_id in preview
+        assert "Extracted text preview" in preview[doc_id]["chunks"][0]["content"]
+
+    # 2. Preview with direct file_paths
+    with patch("handlers.doc_handlers.storage_service") as mock_storage:
+        mock_storage.download_file_bytes.return_value = b"Direct file path content."
+        preview_direct = await handle_preview_doc(
+            {"kb_id": 1, "file_paths": ["kb_1/direct.txt"]}
+        )
+        assert "kb_1/direct.txt" in preview_direct
+        assert len(preview_direct["kb_1/direct.txt"]["chunks"]) >= 1
+
+    # 3. Preview with direct file_paths failing
+    with patch("handlers.doc_handlers.storage_service") as mock_storage:
+        mock_storage.download_file_bytes.side_effect = Exception("Direct path failed")
+        preview_fail = await handle_preview_doc(
+            {"kb_id": 1, "file_paths": ["kb_1/fail.txt"]}
+        )
+        assert "kb_1/fail.txt" not in preview_fail
+
+
+@pytest.mark.asyncio
+async def test_handle_get_tasks_extended_scenarios(in_memory_db):
+    reg = await handle_register_doc(
+        {
+            "kb_id": 1,
+            "file_name": "ext_task.txt",
+            "file_path": "kb_1/uuid-abc-123_ext_task.txt",
+            "file_size": 10,
+            "content_type": "text/plain",
+            "file_hash": "hash_ext",
+        }
+    )
+    task_id = reg["task_id"]
+
+    # 1. Get tasks by kb_id list
+    kb_tasks = await handle_get_tasks({"kb_id": 1})
+    assert "tasks" in kb_tasks
+    assert isinstance(kb_tasks["tasks"], list)
+
+    # 2. Get tasks with string UUID matching file_path
+    str_tasks = await handle_get_tasks(
+        {"kb_id": 1, "task_ids": ["uuid-abc-123", "nonexistent-uuid-999"]}
+    )
+    assert "uuid-abc-123" in str_tasks
+    assert str_tasks["uuid-abc-123"]["status"] in ("pending", "indexed")
+    assert "nonexistent-uuid-999" in str_tasks
+    assert str_tasks["nonexistent-uuid-999"]["status"] == "completed"
+
