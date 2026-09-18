@@ -1,3 +1,5 @@
+import math
+import re
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from typing import List
@@ -184,6 +186,34 @@ def list_prompts(db: Session = Depends(get_db)):
         }
         for defn in definitions
     ]
+
+
+@router.post("/test", response_model=schema.PromptTestResponse)
+def test_prompt_template(payload: schema.PromptTestRequest):
+    template = payload.template or ""
+    variables = payload.variables or {}
+
+    # Extract all placeholder variables like {variable_name}
+    detected_vars = list(dict.fromkeys(re.findall(r"\{([a-zA-Z0-9_]+)\}", template)))
+
+    missing_vars = [var for var in detected_vars if var not in variables]
+
+    # Safe variable replacement
+    formatted_prompt = template
+    for var, val in variables.items():
+        formatted_prompt = formatted_prompt.replace(f"{{{var}}}", str(val))
+
+    # Token estimate (rule of thumb: ~4 chars per token)
+    char_count = len(formatted_prompt)
+    est_tokens = max(1, math.ceil(char_count / 4)) if char_count > 0 else 0
+
+    return {
+        "formatted_prompt": formatted_prompt,
+        "estimated_tokens": est_tokens,
+        "character_count": char_count,
+        "missing_variables": missing_vars,
+        "detected_variables": detected_vars,
+    }
 
 
 @router.get("/{name}", response_model=schema.PromptResponse)
