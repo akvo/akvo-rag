@@ -373,7 +373,7 @@ async def get_documents(
 
 @router.delete(
     "/documents",
-    response_model=dict,
+    response_model=Union[dict, List[dict], Any],
 )
 async def delete_document(
     *,
