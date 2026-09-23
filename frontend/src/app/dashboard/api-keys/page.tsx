@@ -30,6 +30,14 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { useUser } from '@/contexts/userContext';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
 
@@ -567,265 +575,265 @@ export default function APIKeysAndAppsPage() {
         )}
 
         {/* Modal 1: Register Tenant App Modal */}
-        {isRegisterAppOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-            <div className="w-full max-w-lg bg-card rounded-2xl border p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
+        <Dialog open={isRegisterAppOpen} onOpenChange={setIsRegisterAppOpen}>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader className="space-y-1 text-left">
               <div className="flex items-center gap-2 text-foreground">
                 <AppWindow className="h-5 w-5 text-primary" />
-                <h3 className="text-base font-bold">Register Consumer Tenant App</h3>
+                <DialogTitle className="text-base font-bold">Register Consumer Tenant App</DialogTitle>
               </div>
-              <p className="text-xs text-muted-foreground">
+              <DialogDescription className="text-xs text-muted-foreground">
                 Register an external application to generate dedicated client credentials and callback webhooks.
-              </p>
+              </DialogDescription>
+            </DialogHeader>
 
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Application Name *</label>
-                  <input
-                    type="text"
-                    value={appName}
-                    onChange={(e) => setAppName(e.target.value)}
-                    placeholder="e.g. AgriConnect Portal"
-                    className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Allowed Domain / Host *</label>
-                  <input
-                    type="text"
-                    value={domain}
-                    onChange={(e) => setDomain(e.target.value)}
-                    placeholder="e.g. agriconnect.example.com"
-                    className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Default Chat System Prompt (Optional)</label>
-                  <textarea
-                    rows={2}
-                    value={defaultPrompt}
-                    onChange={(e) => setDefaultPrompt(e.target.value)}
-                    placeholder="Custom prompt instructions for this tenant..."
-                    className="w-full p-2.5 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary font-mono"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-foreground">Chat Callback URL</label>
-                    <input
-                      type="url"
-                      value={chatCallback}
-                      onChange={(e) => setChatCallback(e.target.value)}
-                      placeholder="https://app.com/callback/chat"
-                      className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-foreground">Upload Callback URL</label>
-                    <input
-                      type="url"
-                      value={uploadCallback}
-                      onChange={(e) => setUploadCallback(e.target.value)}
-                      placeholder="https://app.com/callback/upload"
-                      className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                </div>
+            <div className="space-y-3 py-2">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Application Name *</label>
+                <input
+                  type="text"
+                  value={appName}
+                  onChange={(e) => setAppName(e.target.value)}
+                  placeholder="e.g. AgriConnect Portal"
+                  className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
+                />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <Button variant="outline" size="sm" onClick={() => setIsRegisterAppOpen(false)} disabled={isRegisteringApp}>
-                  Cancel
-                </Button>
-                <Button size="sm" onClick={handleRegisterApp} disabled={isRegisteringApp} className="font-semibold">
-                  {isRegisteringApp ? 'Registering...' : 'Register App'}
-                </Button>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Allowed Domain / Host *</label>
+                <input
+                  type="text"
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                  placeholder="e.g. agriconnect.example.com"
+                  className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Default Chat System Prompt (Optional)</label>
+                <textarea
+                  rows={2}
+                  value={defaultPrompt}
+                  onChange={(e) => setDefaultPrompt(e.target.value)}
+                  placeholder="Custom prompt instructions for this tenant..."
+                  className="w-full p-2.5 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Chat Callback URL</label>
+                  <input
+                    type="url"
+                    value={chatCallback}
+                    onChange={(e) => setChatCallback(e.target.value)}
+                    placeholder="https://app.com/callback/chat"
+                    className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Upload Callback URL</label>
+                  <input
+                    type="url"
+                    value={uploadCallback}
+                    onChange={(e) => setUploadCallback(e.target.value)}
+                    placeholder="https://app.com/callback/upload"
+                    className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        )}
+
+            <DialogFooter className="gap-2 pt-2 border-t">
+              <Button variant="outline" size="sm" onClick={() => setIsRegisterAppOpen(false)} disabled={isRegisteringApp}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleRegisterApp} disabled={isRegisteringApp} className="font-semibold">
+                {isRegisteringApp ? 'Registering...' : 'Register App'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Modal 2: One-Time Token Reveal Modal */}
-        {revealedCredentials && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-            <div className="w-full max-w-lg bg-card rounded-2xl border-2 border-primary/40 p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+        <Dialog open={!!revealedCredentials} onOpenChange={(open) => !open && setRevealedCredentials(null)}>
+          <DialogContent className="max-w-lg border-2 border-primary/40">
+            <DialogHeader className="space-y-1 text-left">
               <div className="flex items-center gap-2.5 text-foreground">
                 <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
                   <Lock className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold">App Credentials Generated</h3>
-                  <p className="text-xs text-muted-foreground">{revealedCredentials.appName}</p>
+                  <DialogTitle className="text-base font-bold">App Credentials Generated</DialogTitle>
+                  <p className="text-xs text-muted-foreground">{revealedCredentials?.appName}</p>
+                </div>
+              </div>
+            </DialogHeader>
+
+            {/* Security Banner */}
+            <div className="bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 p-3 rounded-xl flex items-start gap-2.5 text-xs">
+              <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+              <div>
+                <p className="font-bold">Save this Access Token immediately!</p>
+                <p className="text-[11px] mt-0.5 leading-relaxed">
+                  For security reasons, this token will <strong>never be displayed again</strong>. If lost, you will need to rotate the app credentials.
+                </p>
+              </div>
+            </div>
+
+            {/* Copyable Credentials Box */}
+            <div className="space-y-3 bg-muted/40 p-4 rounded-xl border">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground">Client ID:</label>
+                <div className="flex items-center justify-between gap-2 bg-background border px-3 py-1.5 rounded-lg font-mono text-xs">
+                  <span className="truncate">{revealedCredentials?.clientId}</span>
                 </div>
               </div>
 
-              {/* Security Banner */}
-              <div className="bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 p-3 rounded-xl flex items-start gap-2.5 text-xs">
-                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
-                <div>
-                  <p className="font-bold">Save this Access Token immediately!</p>
-                  <p className="text-[11px] mt-0.5 leading-relaxed">
-                    For security reasons, this token will <strong>never be displayed again</strong>. If lost, you will need to rotate the app credentials.
-                  </p>
-                </div>
-              </div>
-
-              {/* Copyable Credentials Box */}
-              <div className="space-y-3 bg-muted/40 p-4 rounded-xl border">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-muted-foreground">Client ID:</label>
-                  <div className="flex items-center justify-between gap-2 bg-background border px-3 py-1.5 rounded-lg font-mono text-xs">
-                    <span className="truncate">{revealedCredentials.clientId}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-muted-foreground">Access Token (Bearer):</label>
-                  <div className="flex items-center justify-between gap-2 bg-background border px-3 py-2 rounded-lg font-mono text-xs">
-                    <span className="truncate text-primary font-bold">{revealedCredentials.accessToken}</span>
-                    <button
-                      type="button"
-                      onClick={async () => {
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground">Access Token (Bearer):</label>
+                <div className="flex items-center justify-between gap-2 bg-background border px-3 py-2 rounded-lg font-mono text-xs">
+                  <span className="truncate text-primary font-bold">{revealedCredentials?.accessToken}</span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (revealedCredentials?.accessToken) {
                         await navigator.clipboard.writeText(revealedCredentials.accessToken);
                         setCopiedToken(true);
                         setTimeout(() => setCopiedToken(false), 2000);
                         toast({ title: 'Copied', description: 'Access token copied to clipboard' });
-                      }}
-                      className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
-                    >
-                      {copiedToken ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
-                    </button>
-                  </div>
+                      }
+                    }}
+                    className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
+                  >
+                    {copiedToken ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
-
-              <div className="flex justify-end pt-2">
-                <Button
-                  size="sm"
-                  onClick={() => setRevealedCredentials(null)}
-                  className="font-semibold px-6"
-                >
-                  I Have Copied the Token
-                </Button>
-              </div>
             </div>
-          </div>
-        )}
+
+            <DialogFooter className="pt-2">
+              <Button
+                size="sm"
+                onClick={() => setRevealedCredentials(null)}
+                className="font-semibold px-6"
+              >
+                I Have Copied the Token
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Modal 3: Create Personal Developer Key Modal */}
-        {isCreateKeyOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-            <div className="w-full max-w-md bg-card rounded-2xl border p-6 space-y-4 shadow-xl">
+        <Dialog open={isCreateKeyOpen} onOpenChange={setIsCreateKeyOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader className="space-y-1 text-left">
               <div className="flex items-center gap-2 text-foreground">
                 <Key className="h-5 w-5 text-primary" />
-                <h3 className="text-base font-bold">Create Developer API Key</h3>
+                <DialogTitle className="text-base font-bold">Create Developer API Key</DialogTitle>
               </div>
-              <p className="text-xs text-muted-foreground">
+              <DialogDescription className="text-xs text-muted-foreground">
                 Generate a new API key to authenticate programmatic requests to Akvo RAG.
-              </p>
+              </DialogDescription>
+            </DialogHeader>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">Key Name / Description *</label>
-                <input
-                  type="text"
-                  value={newKeyName}
-                  onChange={(e) => setNewKeyName(e.target.value)}
-                  placeholder="e.g. Python Evaluation Script or Local CLI"
-                  className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <Button variant="outline" size="sm" onClick={() => setIsCreateKeyOpen(false)} disabled={isCreatingKey}>
-                  Cancel
-                </Button>
-                <Button size="sm" onClick={handleCreatePersonalKey} disabled={isCreatingKey} className="font-semibold">
-                  {isCreatingKey ? 'Creating...' : 'Generate Key'}
-                </Button>
-              </div>
+            <div className="space-y-1.5 py-2">
+              <label className="text-xs font-semibold text-foreground">Key Name / Description *</label>
+              <input
+                type="text"
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                placeholder="e.g. Python Evaluation Script or Local CLI"
+                className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
+              />
             </div>
-          </div>
-        )}
+
+            <DialogFooter className="gap-2 pt-2 border-t">
+              <Button variant="outline" size="sm" onClick={() => setIsCreateKeyOpen(false)} disabled={isCreatingKey}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleCreatePersonalKey} disabled={isCreatingKey} className="font-semibold">
+                {isCreatingKey ? 'Creating...' : 'Generate Key'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Modal 4: App Status Toggle Confirmation Modal */}
-        {pendingAppToggle && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-            <div className="w-full max-w-md bg-card rounded-2xl border p-6 space-y-4 shadow-xl">
+        <Dialog open={!!pendingAppToggle} onOpenChange={(open) => !open && setPendingAppToggle(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader className="space-y-1 text-left">
               <div className="flex items-center gap-2 text-foreground">
-                {pendingAppToggle.status === 'active' ? (
+                {pendingAppToggle?.status === 'active' ? (
                   <Ban className="h-5 w-5 text-amber-500" />
                 ) : (
                   <Shield className="h-5 w-5 text-emerald-500" />
                 )}
-                <h3 className="text-base font-bold">
-                  {pendingAppToggle.status === 'active'
+                <DialogTitle className="text-base font-bold">
+                  {pendingAppToggle?.status === 'active'
                     ? `Suspend "${pendingAppToggle.app_name}"?`
-                    : `Re-activate "${pendingAppToggle.app_name}"?`}
-                </h3>
+                    : `Re-activate "${pendingAppToggle?.app_name}"?`}
+                </DialogTitle>
               </div>
-
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {pendingAppToggle.status === 'active'
+              <DialogDescription className="text-xs text-muted-foreground leading-relaxed pt-1">
+                {pendingAppToggle?.status === 'active'
                   ? 'Suspending this tenant app will immediately reject all incoming API requests (403 Forbidden) and pause webhook callbacks. You can re-activate it at any time.'
                   : 'Re-activating this tenant app will allow it to resume sending API queries and uploading documents using its existing credentials.'}
-              </p>
+              </DialogDescription>
+            </DialogHeader>
 
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <Button variant="outline" size="sm" onClick={() => setPendingAppToggle(null)} disabled={isTogglingApp}>
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={confirmToggleAppStatus}
-                  disabled={isTogglingApp}
-                  className={`font-semibold ${
-                    pendingAppToggle.status === 'active'
-                      ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  }`}
-                >
-                  {isTogglingApp
-                    ? 'Updating...'
-                    : pendingAppToggle.status === 'active'
-                    ? 'Yes, Suspend App'
-                    : 'Yes, Activate App'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+            <DialogFooter className="gap-2 pt-2 border-t">
+              <Button variant="outline" size="sm" onClick={() => setPendingAppToggle(null)} disabled={isTogglingApp}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={confirmToggleAppStatus}
+                disabled={isTogglingApp}
+                className={`font-semibold ${
+                  pendingAppToggle?.status === 'active'
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                }`}
+              >
+                {isTogglingApp
+                  ? 'Updating...'
+                  : pendingAppToggle?.status === 'active'
+                  ? 'Yes, Suspend App'
+                  : 'Yes, Activate App'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Modal 5: Personal Key Status Toggle Confirmation Modal */}
-        {pendingKeyToggle && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-            <div className="w-full max-w-md bg-card rounded-2xl border p-6 space-y-4 shadow-xl">
+        <Dialog open={!!pendingKeyToggle} onOpenChange={(open) => !open && setPendingKeyToggle(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader className="space-y-1 text-left">
               <div className="flex items-center gap-2 text-foreground">
                 <Key className="h-5 w-5 text-primary" />
-                <h3 className="text-base font-bold">
-                  {pendingKeyToggle.is_active ? `Disable API Key "${pendingKeyToggle.name}"?` : `Enable API Key "${pendingKeyToggle.name}"?`}
-                </h3>
+                <DialogTitle className="text-base font-bold">
+                  {pendingKeyToggle?.is_active ? `Disable API Key "${pendingKeyToggle.name}"?` : `Enable API Key "${pendingKeyToggle?.name}"?`}
+                </DialogTitle>
               </div>
-
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {pendingKeyToggle.is_active
+              <DialogDescription className="text-xs text-muted-foreground leading-relaxed pt-1">
+                {pendingKeyToggle?.is_active
                   ? 'Disabling this key will cause any API requests using it to fail immediately with 401 Unauthorized.'
                   : 'Enabling this key will allow it to authenticate API requests again.'}
-              </p>
+              </DialogDescription>
+            </DialogHeader>
 
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <Button variant="outline" size="sm" onClick={() => setPendingKeyToggle(null)}>
-                  Cancel
-                </Button>
-                <Button size="sm" onClick={confirmTogglePersonalKey} className="font-semibold">
-                  Confirm
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+            <DialogFooter className="gap-2 pt-2 border-t">
+              <Button variant="outline" size="sm" onClick={() => setPendingKeyToggle(null)}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={confirmTogglePersonalKey} className="font-semibold">
+                Confirm
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );
