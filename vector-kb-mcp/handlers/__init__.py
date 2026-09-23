@@ -16,6 +16,7 @@ from handlers.doc_handlers import (
     handle_delete_doc,
     handle_preview_doc,
     handle_get_tasks,
+    handle_list_document_chunks,
 )
 from handlers.query_handlers import handle_query_kb
 from handlers.serializers import serialize_kb, serialize_doc, serialize_task
@@ -52,6 +53,7 @@ def build_tool_handlers(
         "delete_document": _delete_doc_wrapper,
         "preview_documents": handle_preview_doc,
         "get_processing_tasks": handle_get_tasks,
+        "list_document_chunks": handle_list_document_chunks,
     }
 
 
@@ -70,6 +72,7 @@ __all__ = [
     "handle_delete_doc",
     "handle_preview_doc",
     "handle_get_tasks",
+    "handle_list_document_chunks",
     "serialize_kb",
     "serialize_doc",
     "serialize_task",

@@ -1,18 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft, Database, Plus, RefreshCw, Sparkles } from "lucide-react";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/ui/use-toast";
-
-interface KnowledgeBase {
-  id: number;
-  name: string;
-  description: string;
-  documents: any[];
-  created_at: string;
-}
+import { Button } from "@/components/ui/button";
 
 export default function NewKnowledgeBasePage() {
   const router = useRouter();
@@ -35,18 +30,23 @@ export default function NewKnowledgeBasePage() {
         description,
       });
 
+      toast({
+        title: "Knowledge Base Created",
+        description: `Successfully created "${name}". Redirecting to upload documents...`,
+      });
+
       router.push(`/dashboard/knowledge/${data.id}`);
-    } catch (error) {
-      console.error("Failed to create knowledge base:", error);
-      if (error instanceof ApiError) {
-        setError(error.message);
+    } catch (err) {
+      console.error("Failed to create knowledge base:", err);
+      if (err instanceof ApiError) {
+        setError(err.message);
         toast({
-          title: "Error",
-          description: error.message,
+          title: "Creation Error",
+          description: err.message,
           variant: "destructive",
         });
       } else {
-        setError("Failed to create knowledge base");
+        setError("Failed to create knowledge base. Please try again.");
       }
     } finally {
       setIsSubmitting(false);
@@ -55,68 +55,109 @@ export default function NewKnowledgeBasePage() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-2xl mx-auto space-y-8">
+      <div className="max-w-2xl mx-auto space-y-6 pb-12">
+        {/* Back Link */}
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">
-            Create Knowledge Base
-          </h2>
-          <p className="text-muted-foreground">
-            Create a new knowledge base to store your documents
-          </p>
+          <Link
+            href="/dashboard/knowledge"
+            className="inline-flex items-center text-xs font-medium text-muted-foreground hover:text-foreground transition-colors gap-1.5"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Knowledge Bases
+          </Link>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2">
-            <label
-              htmlFor="name"
-              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              Name
-            </label>
-            <input
-              id="name"
-              name="name"
-              type="text"
-              required
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="Enter knowledge base name"
-            />
+        {/* Card Container */}
+        <div className="rounded-xl border border-border/70 bg-card/70 backdrop-blur-xl p-8 shadow-sm space-y-6">
+          <div className="space-y-1.5 border-b border-border/60 pb-5">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                <Database className="h-5 w-5" />
+              </div>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                Create Knowledge Base
+              </h1>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Configure a new vector repository to ingest documents for semantic RAG querying.
+            </p>
           </div>
 
-          <div className="space-y-2">
-            <label
-              htmlFor="description"
-              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              Description
-            </label>
-            <textarea
-              id="description"
-              name="description"
-              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="Enter knowledge base description"
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <label
+                htmlFor="name"
+                className="text-sm font-semibold text-foreground"
+              >
+                Repository Name <span className="text-destructive">*</span>
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                required
+                className="flex h-10 w-full rounded-lg border border-input bg-background/80 px-3.5 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all disabled:opacity-50"
+                placeholder="e.g. UNEP Climate Policy Index, Product Technical Specs"
+              />
+              <p className="text-xs text-muted-foreground">
+                A concise and descriptive title for this knowledge base.
+              </p>
+            </div>
 
-          {error && <div className="text-sm text-red-500">{error}</div>}
+            <div className="space-y-2">
+              <label
+                htmlFor="description"
+                className="text-sm font-semibold text-foreground"
+              >
+                Description
+              </label>
+              <textarea
+                id="description"
+                name="description"
+                rows={3}
+                className="flex min-h-[90px] w-full rounded-lg border border-input bg-background/80 px-3.5 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all disabled:opacity-50"
+                placeholder="Explain what topics or document types are indexed in this repository..."
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional overview explaining the domain and contents.
+              </p>
+            </div>
 
-          <div className="flex justify-end space-x-4">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
-            >
-              {isSubmitting ? "Creating..." : "Create"}
-            </button>
-          </div>
-        </form>
+            {error && (
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                {error}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-border/60">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.back()}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                {isSubmitting ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Creating Repository...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4" />
+                    Create Knowledge Base
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </div>
       </div>
     </DashboardLayout>
   );
