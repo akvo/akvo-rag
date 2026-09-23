@@ -55,6 +55,10 @@ Elevates the Root Dashboard Landing Page (`/dashboard`), Knowledge Base Manageme
 - Converted raw custom modal overlays to Radix `Dialog` / `DialogPortal` components.
 - Fixes viewport overlay clipping and eliminates top-of-screen white background bleed.
 
+### 2.8 System Observability & RAG Evaluations Width Alignment (`/dashboard/evaluations`)
+- Standardized page root wrapper from restrictive `p-8 max-w-7xl mx-auto space-y-8` to universal dashboard container `space-y-8 pb-12`.
+- Aligns full-width responsive telemetry grid and benchmark cards with the rest of the application dashboard.
+
 ---
 
 ## 3. Verification & Quality Gates
