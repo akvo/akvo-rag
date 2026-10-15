@@ -13,7 +13,7 @@ graph TB
     FE[frontend<br/>Next.js 14 :3000]
     BE[backend<br/>FastAPI :8000]
     VKBMCP[mcp-vector-kb-query<br/>FastAPI internal]
-    PG[(postgres<br/>PostgreSQL 17 :5432)]
+    PG[(postgres<br/>PostgreSQL 18 :5432)]
     REDIS[(redis<br/>Redis 7 :6379)]
     CHROMA[(mcp-chromadb<br/>:8001→:8000)]
     MINIO[(minio<br/>S3 :9000/:9001)]
@@ -119,9 +119,9 @@ backend                                redis                         vector-kb-m
 
 ---
 
-## 3. Database Schema (PostgreSQL 17)
+## 3. Database Schema (PostgreSQL 18)
 
-Two isolated Alembic migration chains share a single PostgreSQL 17 instance.
+Two isolated Alembic migration chains share a single PostgreSQL 18 instance.
 
 ```mermaid
 erDiagram
