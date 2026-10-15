@@ -108,7 +108,8 @@ async def test_ingestion_processor_success(
 async def test_ingestion_processor_idempotent_reingestion(
     async_test_db, mock_openai_client, mock_chroma_client
 ):
-    """Verify that re-ingesting a document with identical chunks is idempotent and does not violate unique constraints."""
+    """Verify that re-ingesting a document with identical chunks is idempotent
+    and does not violate unique constraints."""
     from ingestion.processor import IngestionProcessor
 
     mock_minio = MagicMock()
@@ -143,16 +144,22 @@ async def test_ingestion_processor_idempotent_reingestion(
         assert res2["status"] == "completed"
 
     async with async_test_db() as session:
-        doc_stmt = select(Document).where(Document.file_name == "idempotent.txt")
+        doc_stmt = select(Document).where(
+            Document.file_name == "idempotent.txt"
+        )
         doc = (await session.execute(doc_stmt)).scalar_one_or_none()
         assert doc is not None
         assert doc.status == "INDEXED"
 
-        chunks_stmt = select(DocumentChunk).where(DocumentChunk.document_id == doc.id)
+        chunks_stmt = select(DocumentChunk).where(
+            DocumentChunk.document_id == doc.id
+        )
         chunks = (await session.execute(chunks_stmt)).scalars().all()
         assert len(chunks) >= 1
 
-        task_stmt = select(ProcessingTask).where(ProcessingTask.document_id == doc.id)
+        task_stmt = select(ProcessingTask).where(
+            ProcessingTask.document_id == doc.id
+        )
         task = (await session.execute(task_stmt)).scalar_one_or_none()
         assert task is not None
         assert task.status == "COMPLETED"

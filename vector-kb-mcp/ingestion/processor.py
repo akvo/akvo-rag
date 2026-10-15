@@ -246,7 +246,8 @@ class IngestionProcessor:
                     task_record.status = "COMPLETED"
                     task_record.error_message = None
 
-                # Upsert chunks deterministically using database on_conflict_do_update
+                # Upsert chunks deterministically using database
+                # on_conflict_do_update
                 chunk_ids = [c.chunk_id for c in chunks]
                 chunk_values = [
                     {
@@ -315,7 +316,8 @@ class IngestionProcessor:
                         for val in chunk_values:
                             await session.merge(DocumentChunk(**val))
 
-                # Prune any stale chunks that belonged to this document but are no longer present
+                # Prune any stale chunks that belonged to this document
+                # but are no longer present
                 if chunk_ids:
                     await session.execute(
                         delete(DocumentChunk).where(
