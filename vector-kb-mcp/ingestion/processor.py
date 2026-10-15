@@ -246,27 +246,83 @@ class IngestionProcessor:
                     task_record.status = "COMPLETED"
                     task_record.error_message = None
 
-                # Delete existing chunks and bulk insert new
-                await session.execute(
-                    delete(DocumentChunk).where(
-                        DocumentChunk.document_id == doc_id
-                    )
-                )
-
-                for c in chunks:
-                    db_chunk = DocumentChunk(
-                        id=c.chunk_id,
-                        kb_id=kb_id,
-                        document_id=doc_id,
-                        chunk_index=c.chunk_index,
-                        file_name=filename,
-                        chunk_metadata={
+                # Upsert chunks deterministically using database on_conflict_do_update
+                chunk_ids = [c.chunk_id for c in chunks]
+                chunk_values = [
+                    {
+                        "id": c.chunk_id,
+                        "kb_id": kb_id,
+                        "document_id": doc_id,
+                        "chunk_index": c.chunk_index,
+                        "file_name": filename,
+                        "chunk_metadata": {
                             **c.metadata,
                             "document_id": doc_id,
                         },
-                        content_hash=c.content_hash,
+                        "content_hash": c.content_hash,
+                    }
+                    for c in chunks
+                ]
+
+                dialect_name = ""
+                try:
+                    bind = session.get_bind()
+                    if bind and hasattr(bind, "dialect"):
+                        dialect_name = bind.dialect.name
+                except Exception:
+                    pass
+
+                if chunk_values:
+                    if dialect_name == "postgresql":
+                        from sqlalchemy.dialects.postgresql import (
+                            insert as pg_insert,
+                        )
+
+                        stmt = pg_insert(DocumentChunk).values(chunk_values)
+                        stmt = stmt.on_conflict_do_update(
+                            index_elements=[DocumentChunk.id],
+                            set_={
+                                "kb_id": stmt.excluded.kb_id,
+                                "document_id": stmt.excluded.document_id,
+                                "chunk_index": stmt.excluded.chunk_index,
+                                "file_name": stmt.excluded.file_name,
+                                "chunk_metadata": stmt.excluded.chunk_metadata,
+                                "content_hash": stmt.excluded.content_hash,
+                            },
+                        )
+                        await session.execute(stmt)
+                    elif dialect_name == "sqlite":
+                        from sqlalchemy.dialects.sqlite import (
+                            insert as sqlite_insert,
+                        )
+
+                        stmt = sqlite_insert(DocumentChunk).values(
+                            chunk_values
+                        )
+                        stmt = stmt.on_conflict_do_update(
+                            index_elements=[DocumentChunk.id],
+                            set_={
+                                "kb_id": stmt.excluded.kb_id,
+                                "document_id": stmt.excluded.document_id,
+                                "chunk_index": stmt.excluded.chunk_index,
+                                "file_name": stmt.excluded.file_name,
+                                "chunk_metadata": stmt.excluded.chunk_metadata,
+                                "content_hash": stmt.excluded.content_hash,
+                            },
+                        )
+                        await session.execute(stmt)
+                    else:
+                        for val in chunk_values:
+                            await session.merge(DocumentChunk(**val))
+
+                # Prune any stale chunks that belonged to this document but are no longer present
+                if chunk_ids:
+                    await session.execute(
+                        delete(DocumentChunk).where(
+                            DocumentChunk.document_id == doc_id,
+                            DocumentChunk.id.not_in(chunk_ids),
+                        )
                     )
-                    session.add(db_chunk)
 
                 await session.commit()
 
@@ -308,7 +364,7 @@ class IngestionProcessor:
                     doc_stmt = select(Document).where(Document.id == doc_id)
                     doc_res = await session.execute(doc_stmt)
                     doc_record = doc_res.scalar_one_or_none()
-                    if doc_record:
+                    if doc_record and doc_record.status != "INDEXED":
                         doc_record.status = "FAILED"
 
                 if task_id:
@@ -322,7 +378,7 @@ class IngestionProcessor:
                         )
                     task_res = await session.execute(task_stmt)
                     task_record = task_res.scalar_one_or_none()
-                    if task_record:
+                    if task_record and task_record.status != "COMPLETED":
                         task_record.status = "FAILED"
                         task_record.error_message = error_text[:1024]
 
