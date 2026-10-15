@@ -105,6 +105,67 @@ async def test_ingestion_processor_success(
 
 
 @pytest.mark.asyncio
+async def test_ingestion_processor_idempotent_reingestion(
+    async_test_db, mock_openai_client, mock_chroma_client
+):
+    """Verify that re-ingesting a document with identical chunks is idempotent
+    and does not violate unique constraints."""
+    from ingestion.processor import IngestionProcessor
+
+    mock_minio = MagicMock()
+    sample_text = b"Deterministic chunk line 1.\n\nDeterministic chunk line 2."
+    mock_response = MagicMock()
+    mock_response.read.return_value = sample_text
+    mock_minio.get_object.return_value = mock_response
+
+    processor = IngestionProcessor(
+        minio_client=mock_minio,
+        openai_client=mock_openai_client,
+        chroma_client=mock_chroma_client,
+    )
+
+    payload = {
+        "document_id": "doc-uuid-idempotent",
+        "kb_id": 1,
+        "filename": "idempotent.txt",
+        "minio_key": "kb_1/doc-uuid-idempotent_idempotent.txt",
+        "file_size": len(sample_text),
+        "content_type": "text/plain",
+    }
+
+    # First ingestion attempt
+    async with async_test_db() as session:
+        res1 = await processor.process_document(payload, session)
+        assert res1["status"] == "completed"
+
+    # Second ingestion attempt with identical chunks / same IDs
+    async with async_test_db() as session:
+        res2 = await processor.process_document(payload, session)
+        assert res2["status"] == "completed"
+
+    async with async_test_db() as session:
+        doc_stmt = select(Document).where(
+            Document.file_name == "idempotent.txt"
+        )
+        doc = (await session.execute(doc_stmt)).scalar_one_or_none()
+        assert doc is not None
+        assert doc.status == "INDEXED"
+
+        chunks_stmt = select(DocumentChunk).where(
+            DocumentChunk.document_id == doc.id
+        )
+        chunks = (await session.execute(chunks_stmt)).scalars().all()
+        assert len(chunks) >= 1
+
+        task_stmt = select(ProcessingTask).where(
+            ProcessingTask.document_id == doc.id
+        )
+        task = (await session.execute(task_stmt)).scalar_one_or_none()
+        assert task is not None
+        assert task.status == "COMPLETED"
+
+
+@pytest.mark.asyncio
 async def test_ingestion_processor_cross_tenant_rejection(
     async_test_db, mock_openai_client, mock_chroma_client
 ):

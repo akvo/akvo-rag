@@ -96,7 +96,7 @@ docker exec akvo-rag-mcp-vector-kb-query-1 alembic revision --autogenerate -m "a
 >
 > Migrations run automatically on both service startups, so a `docker compose restart` is sufficient for new migration files.
 >
-> For production legacy data migrations (from older MySQL/PostgreSQL versions to Akvo RAG PostgreSQL 17), see the [Legacy Data Migration Guide](legacy-data-migration-guide.md).
+> For production legacy data migrations (from older MySQL/PostgreSQL versions to Akvo RAG PostgreSQL 18), see the [Legacy Data Migration Guide](legacy-data-migration-guide.md).
 
 ---
 

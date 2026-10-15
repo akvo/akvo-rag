@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     container_name: akvo-rag-postgres-1
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
@@ -8,6 +8,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-akvo_rag}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGDATA: /var/lib/postgresql/data
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -60,8 +61,9 @@ services:
     restart: unless-stopped
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z
+    image: cgr.dev/chainguard/minio:latest
     container_name: akvo-rag-minio-1
+    user: "0:0"
     command: server /data --console-address ":9001"
     ports:
       - "${MINIO_PORT:-9000}:9000"
@@ -72,7 +74,7 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      test: ["CMD", "mc", "ready", "local"]
       interval: 5s
       timeout: 5s
       retries: 5

@@ -13,7 +13,7 @@ graph TB
     FE[frontend<br/>Next.js 14 :3000]
     BE[backend<br/>FastAPI :8000]
     VKBMCP[mcp-vector-kb-query<br/>FastAPI internal]
-    PG[(postgres<br/>PostgreSQL 17 :5432)]
+    PG[(postgres<br/>PostgreSQL 18 :5432)]
     REDIS[(redis<br/>Redis 7 :6379)]
     CHROMA[(mcp-chromadb<br/>:8001→:8000)]
     MINIO[(minio<br/>S3 :9000/:9001)]
@@ -38,10 +38,10 @@ graph TB
 | `backend` | Build from `backend/` | `8000` | always | Core FastAPI: LangGraph, LLMFactory, PromptService, S3 upload |
 | `mcp-vector-kb-query` | Build from `vector-kb-mcp/` | internal | always | Vector KB Query Worker (`WORKER_MODE=query`): fast sub-5ms chat vector RPC |
 | `mcp-vector-kb-ingestion` | Build from `vector-kb-mcp/` | internal | always | Vector KB Ingestion Worker (`WORKER_MODE=ingest`): background document embedding & chunking |
-| `postgres` | `postgres:17-alpine` | `5432` | always | Unified relational store (two Alembic schema owners) |
+| `postgres` | `postgres:18-alpine` | `5432` | always | Unified relational store (two Alembic schema owners) |
 | `redis` | `redis:7-alpine` | `6379` | always | MCP RPC queues + async ingestion task queues |
 | `mcp-chromadb` | `chromadb/chroma:1.5.9` | `8001→8000` | always | Vector embeddings store (SQLite WAL mode) |
-| `minio` | `quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z` | `9000`,`9001` | always | S3-compatible document storage (MinIO console on 9001) |
+| `minio` | `cgr.dev/chainguard/minio:latest` | `9000`,`9001` | always | S3-compatible document storage (MinIO console on 9001) |
 
 ---
 
@@ -119,9 +119,9 @@ backend                                redis                         vector-kb-m
 
 ---
 
-## 3. Database Schema (PostgreSQL 17)
+## 3. Database Schema (PostgreSQL 18)
 
-Two isolated Alembic migration chains share a single PostgreSQL 17 instance.
+Two isolated Alembic migration chains share a single PostgreSQL 18 instance.
 
 ```mermaid
 erDiagram
