@@ -1,17 +1,19 @@
+import asyncio
+import io
 import json
 import logging
-from typing import List, Optional, Annotated
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form, File
+from typing import Annotated, List, Optional
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
+from starlette.datastructures import Headers, UploadFile as StarletteUploadFile
 
-from app.db.session import get_db
-from app.schemas import JobResponse
-from app.services.job_service import JobService
-from app.services.file_storage_service import FileStorageService
-from app.models.app import App
 from app.core.security import get_current_app
-from app.tasks.chat_task import execute_chat_job_task
-from app.tasks.upload_task import upload_full_process_task
+from app.db.session import SessionLocal, get_db
+from app.models.app import App
+from app.schemas import JobResponse
+from app.services.chat_job_service import execute_chat_job
+from app.services.job_service import JobService
+from app.services.upload_job_service import execute_upload_job
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -67,7 +69,6 @@ async def create_job(
     """
     Universal job creation endpoint (chat, upload, etc.) with multi-KB support.
     """
-
     data = safe_json_parse(payload)
     if not isinstance(data, dict):
         raise HTTPException(
@@ -80,18 +81,15 @@ async def create_job(
             status_code=400, detail="Missing 'job' field in payload"
         )
 
-    # ✅ Save uploaded files locally before sending to Celery
-    saved_file_paths = []
     if files:
-        saved_file_paths = await FileStorageService.save_files(files)
         data["files"] = [f.filename for f in files]
 
-    # ✅ Create DB record
+    # Create DB record
     job_record = JobService.create_job(
         db=db, job_type=job_type, data=data, app_id=current_app.app_id
     )
 
-    # 🚀 Handle CHAT jobs
+    # Handle CHAT jobs
     if job_type == "chat":
         kb_ids = data.get("knowledge_base_ids", [])
         kb_ids = [int(kbid) for kbid in kb_ids]
@@ -101,14 +99,15 @@ async def create_job(
             if not kb_ids or kb.knowledge_base_id in kb_ids
         ]
 
-        # If user provided kb_ids but none are valid → 404
         if kb_ids and not valid_app_kb_ids:
             raise HTTPException(
                 status_code=404,
-                detail="Provided knowledge_base_ids are invalid or not linked to this app",  # noqa
+                detail=(
+                    "Provided knowledge_base_ids are invalid or not "
+                    "linked to this app"
+                ),
             )
 
-        # If no kb_ids provided, fallback to default KB
         if not kb_ids:
             default_kb = next(
                 (kb for kb in current_app.knowledge_bases if kb.is_default),
@@ -121,16 +120,19 @@ async def create_job(
                 )
             valid_app_kb_ids = [default_kb.knowledge_base_id]
 
-        logger.info(f"🚀 Dispatching CHAT job using KBs: {valid_app_kb_ids}")
-        celery_task = execute_chat_job_task.delay(
-            job_id=job_record.id,
-            data=data,
-            callback_url=current_app.chat_callback_url,
-            app_default_prompt=current_app.default_chat_prompt,
-            knowledge_base_ids=valid_app_kb_ids,
+        logger.info("🚀 Dispatching CHAT job using KBs: %s", valid_app_kb_ids)
+        asyncio.create_task(
+            execute_chat_job(
+                db=SessionLocal(),
+                job_id=job_record.id,
+                data=data,
+                callback_url=current_app.chat_callback_url,
+                app_default_prompt=current_app.default_chat_prompt,
+                knowledge_base_ids=valid_app_kb_ids,
+            )
         )
 
-    # 🚀 Handle UPLOAD jobs
+    # Handle UPLOAD jobs
     elif job_type == "upload":
         kb_id = data.get("knowledge_base_id")
         kb_id = int(kb_id) if kb_id else None
@@ -147,10 +149,12 @@ async def create_job(
             if not app_kb:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Knowledge base {kb_id} not found or not associated with this app",  # noqa
+                    detail=(
+                        f"Knowledge base {kb_id} not found or not "
+                        "associated with this app"
+                    ),
                 )
 
-        # Default fallback
         if not kb_id:
             app_kb = next(
                 (kb for kb in current_app.knowledge_bases if kb.is_default),
@@ -163,13 +167,62 @@ async def create_job(
                 )
 
         logger.info(
-            f"🚀 Dispatching UPLOAD job using KB {app_kb.knowledge_base_id}"
+            "🚀 Dispatching UPLOAD job using KB %s", app_kb.knowledge_base_id
         )
-        celery_task = upload_full_process_task.delay(
-            job_id=job_record.id,
-            file_paths=saved_file_paths,
-            callback_url=current_app.upload_callback_url,
-            knowledge_base_id=app_kb.knowledge_base_id,
+
+        in_memory_files = []
+        MAX_UPLOAD_SIZE = 25 * 1024 * 1024  # 25MB
+        for f in files or []:
+            fname = getattr(f, "filename", "unnamed_file")
+            declared_size = getattr(f, "size", None)
+            if declared_size is not None and declared_size > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"File '{fname}' exceeds maximum 25MB ceiling "
+                        f"(size: {declared_size} bytes)"
+                    ),
+                )
+
+            if hasattr(f, "read"):
+                if asyncio.iscoroutinefunction(f.read):
+                    content = await f.read()
+                else:
+                    content = f.read()
+            elif hasattr(f, "file") and hasattr(f.file, "read"):
+                content = f.file.read()
+            else:
+                content = b""
+
+            if len(content) > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"File '{fname}' exceeds maximum 25MB ceiling "
+                        f"(size: {len(content)} bytes)"
+                    ),
+                )
+
+            headers = getattr(f, "headers", None) or Headers()
+            in_memory_files.append(
+                StarletteUploadFile(
+                    file=io.BytesIO(content),
+                    size=len(content),
+                    filename=fname,
+                    headers=headers,
+                )
+            )
+
+        asyncio.create_task(
+            execute_upload_job(
+                db=SessionLocal(),
+                job_id=job_record.id,
+                kb_id=app_kb.knowledge_base_id,
+                files=in_memory_files,
+                callback_url=(
+                    data.get("callback_url") or current_app.upload_callback_url
+                ),
+            )
         )
 
     else:
@@ -177,9 +230,7 @@ async def create_job(
             status_code=400, detail=f"Unsupported job type: {job_type}"
         )
 
-    # ✅ Store Celery task ID
-    JobService.update_celery_task_id(db, job_record.id, celery_task.id)
-    logger.info(f"✅ Queued Celery task: {celery_task.id}")
+    JobService.update_celery_task_id(db, job_record.id, job_record.id)
 
     return JobResponse(
         job_id=job_record.id,

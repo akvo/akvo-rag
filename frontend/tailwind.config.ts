@@ -1,12 +1,12 @@
-import type { Config } from "tailwindcss"
+import type { Config } from "tailwindcss";
 
 const config = {
   darkMode: ["class"],
   content: [
-    './pages/**/*.{ts,tsx}',
-    './components/**/*.{ts,tsx}',
-    './app/**/*.{ts,tsx}',
-    './src/**/*.{ts,tsx}',
+    "./pages/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+    "./app/**/*.{ts,tsx}",
+    "./src/**/*.{ts,tsx}",
   ],
   prefix: "",
   theme: {
@@ -52,6 +52,20 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        akvo: {
+          DEFAULT: "#03AD8C",
+          50: "#f0fdf9",
+          100: "#e6f7f3",
+          200: "#b3ece0",
+          300: "#70dbca",
+          400: "#26c4ac",
+          500: "#03AD8C",
+          600: "#028f74",
+          700: "#02725d",
+          800: "#065c4c",
+          900: "#084c3f",
+          950: "#022c25",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -74,10 +88,7 @@ const config = {
       },
     },
   },
-  plugins: [
-    require("tailwindcss-animate"),
-    require("@tailwindcss/line-clamp"),
-  ],
-} satisfies Config
+  plugins: [require("tailwindcss-animate"), require("@tailwindcss/line-clamp")],
+} satisfies Config;
 
-export default config
+export default config;

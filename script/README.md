@@ -25,7 +25,7 @@ This script helps create or update user quickly in the system, ensuring user rec
 The `add_user.py` script allows you to create or update a user account in the system’s user database (or service).
 
 ```bash
-./dev.sh exec script python -m add_user
+./dc.sh exec script python -m add_user
 ```
 
 ## ⚙️ Script flow:
@@ -33,9 +33,10 @@ The `add_user.py` script allows you to create or update a user account in the sy
       The script will ask for the user's email address.
   2. Prompt for Superuser Status
       You’ll be asked whether the user should be a superuser (y for yes, n for no).
-  3. User Creation/Update
-      - The script will either create a new user or update an existing user with the given email.
-      - The username and password will both be set to the email address as a default (consider changing the password later for security).
+  3. Prompt for Password
+      Enter a secure password for the user.
+  4. User Creation
+      The script will create the user with the specified details.
 
 ### Example
 
@@ -43,6 +44,7 @@ The `add_user.py` script allows you to create or update a user account in the sy
 === Create or Update User ===
 Email: john_doe@example.com
 Is Super User? (y/n): y
+Password:
 ```
 
 This creates or updates the user `john_doe@example.com` and marks them as a superuser.
@@ -64,8 +66,8 @@ This Python script supports three main operation modes:
 Before running the script, set RAG credentials in your shell or environment:
 
 ``` bash
-export RAG_USERNAME="rag_admin"
-export RAG_PASSWORD="RAGadmin1"
+export RAG_USERNAME="your_admin_username"
+export RAG_PASSWORD="your_secure_password"
 ```
 
 ## 🚀 Running the Script
@@ -73,7 +75,7 @@ export RAG_PASSWORD="RAGadmin1"
 To execute the script:
 
 ```bash
-./dev.sh exec script python -m kb_init_unep
+./dc.sh exec script python -m kb_init_unep
 ```
 
 You will be prompted to:
@@ -108,8 +110,8 @@ This Python script supports three main operation modes:
 Before running the script, set RAG credentials in your shell or environment:
 
 ``` bash
-export RAG_USERNAME="rag_admin"
-export RAG_PASSWORD="RAGadmin1"
+export RAG_USERNAME="your_admin_username"
+export RAG_PASSWORD="your_secure_password"
 ```
 
 ## 🚀 Running the Script
@@ -117,7 +119,7 @@ export RAG_PASSWORD="RAGadmin1"
 To execute the script:
 
 ```bash
-./dev.sh exec script python -m kb_init_tdt
+./dc.sh exec script python -m kb_init_tdt
 ```
 
 You will be prompted to:

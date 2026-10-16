@@ -65,7 +65,7 @@ export default function DashboardPage() {
         <div className="mb-12 rounded-2xl bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-8 shadow-sm">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="space-y-4">
-              <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-500 bg-clip-text text-transparent">
+              <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-[#03AD8C] to-[#02725d] bg-clip-text text-transparent">
                 Knowledge Assistant
               </h1>
               <p className="text-slate-600 dark:text-slate-300 max-w-xl">
@@ -76,7 +76,7 @@ export default function DashboardPage() {
             </div>
             <a
               href="/dashboard/knowledge/new"
-              className="inline-flex items-center justify-center rounded-full bg-blue-600 px-6 py-3 text-sm font-medium text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+              className="inline-flex items-center justify-center rounded-full bg-[#03AD8C] px-6 py-3 text-sm font-medium text-white hover:bg-[#028f74] transition-all shadow-lg shadow-[#03AD8C]/20"
             >
               <Plus className="mr-2 h-4 w-4" />
               New Knowledge Base
@@ -88,8 +88,8 @@ export default function DashboardPage() {
         <div className="grid gap-6 md:grid-cols-2 mb-12">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all">
             <div className="flex items-center gap-6">
-              <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-4">
-                <Book className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+              <div className="rounded-full bg-[#03AD8C]/10 dark:bg-[#03AD8C]/20 p-4">
+                <Book className="h-8 w-8 text-[#03AD8C] dark:text-[#26c4ac]" />
               </div>
               <div>
                 <h3 className="text-4xl font-bold text-slate-900 dark:text-white">
@@ -102,7 +102,7 @@ export default function DashboardPage() {
             </div>
             <a
               href="/dashboard/knowledge"
-              className="mt-6 flex items-center text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium"
+              className="mt-6 flex items-center text-[#03AD8C] dark:text-[#26c4ac] hover:text-[#028f74] dark:hover:text-[#70dbca] text-sm font-medium"
             >
               View all knowledge bases
               <ArrowRight className="ml-2 h-4 w-4" />
@@ -111,8 +111,8 @@ export default function DashboardPage() {
 
           <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all">
             <div className="flex items-center gap-6">
-              <div className="rounded-full bg-indigo-100 dark:bg-indigo-900/30 p-4">
-                <MessageSquare className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+              <div className="rounded-full bg-[#03AD8C]/10 dark:bg-[#03AD8C]/20 p-4">
+                <MessageSquare className="h-8 w-8 text-[#03AD8C] dark:text-[#26c4ac]" />
               </div>
               <div>
                 <h3 className="text-4xl font-bold text-slate-900 dark:text-white">
@@ -125,7 +125,7 @@ export default function DashboardPage() {
             </div>
             <a
               href="/dashboard/chat"
-              className="mt-6 flex items-center text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 text-sm font-medium"
+              className="mt-6 flex items-center text-[#03AD8C] dark:text-[#26c4ac] hover:text-[#028f74] dark:hover:text-[#70dbca] text-sm font-medium"
             >
               View all chat sessions
               <ArrowRight className="ml-2 h-4 w-4" />
@@ -140,10 +140,10 @@ export default function DashboardPage() {
         <div className="grid gap-6 md:grid-cols-3 mb-12">
           <a
             href="/dashboard/knowledge/new"
-            className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all hover:border-blue-500 dark:hover:border-blue-500"
+            className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all hover:border-[#03AD8C] dark:hover:border-[#03AD8C]"
           >
-            <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-4 mb-4">
-              <Brain className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+            <div className="rounded-full bg-[#03AD8C]/10 dark:bg-[#03AD8C]/20 p-4 mb-4">
+              <Brain className="h-8 w-8 text-[#03AD8C] dark:text-[#26c4ac]" />
             </div>
             <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">
               Create Knowledge Base
@@ -155,10 +155,10 @@ export default function DashboardPage() {
 
           <a
             href="/dashboard/knowledge"
-            className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all hover:border-indigo-500 dark:hover:border-indigo-500"
+            className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all hover:border-[#03AD8C] dark:hover:border-[#03AD8C]"
           >
-            <div className="rounded-full bg-indigo-100 dark:bg-indigo-900/30 p-4 mb-4">
-              <Upload className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+            <div className="rounded-full bg-[#03AD8C]/10 dark:bg-[#03AD8C]/20 p-4 mb-4">
+              <Upload className="h-8 w-8 text-[#03AD8C] dark:text-[#26c4ac]" />
             </div>
             <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">
               Upload Documents
@@ -170,10 +170,10 @@ export default function DashboardPage() {
 
           <a
             href="/dashboard/chat/new"
-            className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all hover:border-purple-500 dark:hover:border-purple-500"
+            className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all hover:border-[#03AD8C] dark:hover:border-[#03AD8C]"
           >
-            <div className="rounded-full bg-purple-100 dark:bg-purple-900/30 p-4 mb-4">
-              <Sparkles className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+            <div className="rounded-full bg-[#03AD8C]/10 dark:bg-[#03AD8C]/20 p-4 mb-4">
+              <Sparkles className="h-8 w-8 text-[#03AD8C] dark:text-[#26c4ac]" />
             </div>
             <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">
               Start Chatting
@@ -187,12 +187,12 @@ export default function DashboardPage() {
         {/* Getting Started Guide */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm">
           <h2 className="text-2xl font-semibold text-slate-900 dark:text-white mb-6 flex items-center">
-            <Search className="mr-3 h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <Search className="mr-3 h-5 w-5 text-[#03AD8C] dark:text-[#26c4ac]" />
             How It Works
           </h2>
           <div className="space-y-6">
             <div className="flex items-start gap-6 p-6 rounded-xl bg-slate-50 dark:bg-slate-700/30">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white font-semibold">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#03AD8C] text-white font-semibold">
                 1
               </div>
               <div>
@@ -206,7 +206,7 @@ export default function DashboardPage() {
                 </p>
                 <a
                   href="/dashboard/knowledge/new"
-                  className="mt-4 inline-flex items-center text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium"
+                  className="mt-4 inline-flex items-center text-[#03AD8C] dark:text-[#26c4ac] hover:text-[#028f74] dark:hover:text-[#70dbca] text-sm font-medium"
                 >
                   Create now
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -215,7 +215,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-start gap-6 p-6 rounded-xl bg-slate-50 dark:bg-slate-700/30">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white font-semibold">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#03AD8C] text-white font-semibold">
                 2
               </div>
               <div>
@@ -228,7 +228,7 @@ export default function DashboardPage() {
                 </p>
                 <a
                   href="/dashboard/knowledge"
-                  className="mt-4 inline-flex items-center text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 text-sm font-medium"
+                  className="mt-4 inline-flex items-center text-[#03AD8C] dark:text-[#26c4ac] hover:text-[#028f74] dark:hover:text-[#70dbca] text-sm font-medium"
                 >
                   Upload documents
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -237,7 +237,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-start gap-6 p-6 rounded-xl bg-slate-50 dark:bg-slate-700/30">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white font-semibold">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#03AD8C] text-white font-semibold">
                 3
               </div>
               <div>
@@ -251,7 +251,7 @@ export default function DashboardPage() {
                 </p>
                 <a
                   href="/dashboard/chat/new"
-                  className="mt-4 inline-flex items-center text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 text-sm font-medium"
+                  className="mt-4 inline-flex items-center text-[#03AD8C] dark:text-[#26c4ac] hover:text-[#028f74] dark:hover:text-[#70dbca] text-sm font-medium"
                 >
                   Start chatting
                   <ArrowRight className="ml-2 h-4 w-4" />

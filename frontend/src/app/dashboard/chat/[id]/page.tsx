@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { useChat } from "ai/react";
 import { Send, User, Bot } from "lucide-react";
 import DashboardLayout from "@/components/layout/dashboard-layout";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, API_PREFIX } from "@/lib/api";
 import { useToast } from "@/components/ui/use-toast";
-import { Answer } from "@/components/chat/answer";
+import { Answer, Citation } from "@/components/chat/answer";
 
 interface Message {
   id: string;
@@ -27,26 +27,22 @@ interface Chat {
   id: number;
   title: string;
   messages: ChatMessage[];
+  knowledge_bases: Array<{
+    knowledge_base: {
+      id: number;
+      name: string;
+    };
+  }>;
 }
 
-interface Citation {
-  id: number;
-  text: string;
-  metadata: Record<string, any>;
-}
-
-// Extend the default useChat message type
-declare module "ai/react" {
-  interface Message {
-    citations?: Citation[];
-  }
-}
-
-export default function ChatPage({ params }: { params: { id: string } }) {
+export default function ChatDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const [chat, setChat] = useState<Chat | null>(null);
+  const [loading, setLoading] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [citations, setCitations] = useState<Record<number, Citation[]>>({});
 
   const {
     messages,
@@ -57,7 +53,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     isLoading,
     setMessages,
   } = useChat({
-    api: `/api/chat/${params.id}/messages`,
+    api: `${API_PREFIX}/chat/${params.id}/messages`,
     headers: {
       Authorization: `Bearer ${
         typeof window !== "undefined"
@@ -192,20 +188,29 @@ export default function ChatPage({ params }: { params: { id: string } }) {
 
   const markdownParse = (text: string) => {
     return text
-      .replace(/\[\[([cC])itation/g, "[citation")
-      .replace(/[cC]itation:(\d+)]]/g, "citation:$1]")
-      .replace(/\[\[([cC]itation:\d+)]](?!])/g, `[$1]`)
-      .replace(/\[[cC]itation:(\d+)]/g, "[citation]($1)");
+      .replace(/\[\[\s*([cC])itation\s*:\s*(\d+)\s*\]\]/gi, "[citation:$2]");
   };
 
   const processedMessages = useMemo(() => {
-    return messages.map((message) => {
-      if (message.role !== "assistant" || !message.content) return message;
+    return messages.map((message): {
+      id: string;
+      role: string;
+      content: string;
+      citations?: Citation[];
+    } => {
+      if (message.role !== "assistant" || !message.content) {
+        return {
+          id: message.id,
+          role: message.role,
+          content: message.content,
+        };
+      }
 
       try {
         if (!message.content.includes("__LLM_RESPONSE__")) {
           return {
-            ...message,
+            id: message.id,
+            role: message.role,
             content: markdownParse(message.content),
           };
         }
@@ -230,13 +235,18 @@ export default function ChatPage({ params }: { params: { id: string } }) {
           })) || [];
 
         return {
-          ...message,
+          id: message.id,
+          role: message.role,
           content: markdownParse(responseText || ""),
           citations,
         };
       } catch (e) {
         console.error("Failed to process message:", e);
-        return message;
+        return {
+          id: message.id,
+          role: message.role,
+          content: message.content,
+        };
       }
     });
   }, [messages]);
@@ -255,7 +265,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                   <img
                     src="/logo.png"
                     className="h-8 w-8 rounded-full"
-                    alt="logo"
+                    alt="Akvo RAG"
                   />
                 </div>
                 <div className="max-w-[80%] rounded-lg px-4 py-2 text-accent-foreground">

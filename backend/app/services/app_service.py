@@ -61,7 +61,7 @@ class AppService:
             chat_callback_url=register_data.chat_callback,
             upload_callback_url=register_data.upload_callback,
             access_token=access_token,
-            callback_token=register_data.callback_token or None,
+            callback_token=None,
             scopes=scopes,
             status=AppStatus.active,
         )
