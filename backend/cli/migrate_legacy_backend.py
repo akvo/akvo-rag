@@ -1,4 +1,4 @@
-"""CLI script to migrate legacy backend MySQL data into PostgreSQL 17.
+"""CLI script to migrate legacy backend MySQL data into PostgreSQL 18.
 
 Executed directly within the backend container using SQLAlchemy &
 mysql-connector-python.
@@ -56,7 +56,7 @@ class LegacyBackendMigrator:
     def run(self) -> Dict[str, int]:
         """Execute full backend migration sequence."""
         logger.info("=" * 60)
-        logger.info("Starting Backend MySQL -> PostgreSQL 17 Migration")
+        logger.info("Starting Backend MySQL -> PostgreSQL 18 Migration")
         logger.info("Source:  %s", self.source_url)
         logger.info("Target:  %s", self.target_url)
         logger.info("Dry Run: %s", self.dry_run)
@@ -401,7 +401,7 @@ class LegacyBackendMigrator:
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build and configure CLI argument parser."""
     parser = argparse.ArgumentParser(
-        description="Migrate legacy backend MySQL data into PostgreSQL 17."
+        description="Migrate legacy backend MySQL data into PostgreSQL 18."
     )
     parser.add_argument(
         "--source-url",
@@ -411,7 +411,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--target-url",
         default=DEFAULT_TARGET_URL,
-        help="Target PostgreSQL 17 database SQLAlchemy URL.",
+        help="Target PostgreSQL 18 database SQLAlchemy URL.",
     )
     parser.add_argument(
         "--dry-run",
