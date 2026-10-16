@@ -112,6 +112,92 @@ async def register_app(
 
 
 @router.get(
+    "",
+    response_model=List[AppMeResponse],
+    summary="List registered apps (Super-admin only)",
+)
+def list_registered_apps(
+    *,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_superuser),
+    skip: int = 0,
+    limit: int = 100,
+) -> Any:
+    apps = (
+        db.query(App)
+        .order_by(App.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    result = []
+    for app in apps:
+        kbs = [
+            KnowledgeBaseItem(
+                knowledge_base_id=kb.knowledge_base_id,
+                is_default=kb.is_default,
+            )
+            for kb in app.knowledge_bases
+        ]
+        result.append(
+            AppMeResponse(
+                app_id=app.app_id,
+                app_name=app.app_name,
+                domain=app.domain,
+                default_chat_prompt=app.default_chat_prompt,
+                chat_callback_url=app.chat_callback_url,
+                upload_callback_url=app.upload_callback_url,
+                scopes=app.scopes,
+                status=app.status,
+                knowledge_bases=kbs,
+            )
+        )
+    return result
+
+
+@router.put(
+    "/{app_id}/status",
+    response_model=AppMeResponse,
+    summary="Toggle app active/inactive status (Super-admin only)",
+)
+def update_app_status(
+    *,
+    db: Session = Depends(get_db),
+    app_id: str,
+    status_update: dict,
+    current_user: User = Depends(get_current_active_superuser),
+) -> Any:
+    app = db.query(App).filter(App.app_id == app_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    new_status = status_update.get("status")
+    if new_status:
+        app.status = new_status
+        db.commit()
+        db.refresh(app)
+
+    kbs = [
+        KnowledgeBaseItem(
+            knowledge_base_id=kb.knowledge_base_id,
+            is_default=kb.is_default,
+        )
+        for kb in app.knowledge_bases
+    ]
+    return AppMeResponse(
+        app_id=app.app_id,
+        app_name=app.app_name,
+        domain=app.domain,
+        default_chat_prompt=app.default_chat_prompt,
+        chat_callback_url=app.chat_callback_url,
+        upload_callback_url=app.upload_callback_url,
+        scopes=app.scopes,
+        status=app.status,
+        knowledge_bases=kbs,
+    )
+
+
+@router.get(
     "/me",
     response_model=AppMeResponse,
     responses={

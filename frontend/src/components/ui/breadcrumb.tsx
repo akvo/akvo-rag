@@ -5,7 +5,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { toTitleCase } from "@/lib/utils";
 
-const Breadcrumb = () => {
+interface BreadcrumbProps {
+  className?: string;
+}
+
+const Breadcrumb = ({ className = "mb-6" }: BreadcrumbProps = {}) => {
   const pathname = usePathname();
 
   const generateBreadcrumbs = () => {
@@ -34,7 +38,9 @@ const Breadcrumb = () => {
   if (pathname === "/") return null;
 
   return (
-    <nav className="flex items-center space-x-2 text-base text-muted-foreground mb-6">
+    <nav
+      className={`flex items-center space-x-2 text-sm text-muted-foreground ${className}`}
+    >
       <Link
         href="/dashboard"
         className="flex items-center hover:text-foreground transition-colors"

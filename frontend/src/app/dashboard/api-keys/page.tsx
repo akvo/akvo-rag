@@ -1,32 +1,45 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { Plus, Copy, Check, List, Info } from "lucide-react";
-import { useRouter } from "next/navigation";
-import DashboardLayout from "@/components/layout/dashboard-layout";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect } from 'react';
+import {
+  Plus,
+  Copy,
+  Check,
+  Key,
+  AppWindow,
+  Globe,
+  Layers,
+  ShieldAlert,
+  RotateCcw,
+  Trash2,
+  ExternalLink,
+  Code2,
+  Info,
+  CheckCircle2,
+  AlertTriangle,
+  Lock,
+  Eye,
+  EyeOff,
+  BookOpen,
+  HelpCircle,
+  Shield,
+  Ban,
+} from 'lucide-react';
+import DashboardLayout from '@/components/layout/dashboard-layout';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { useToast } from '@/components/ui/use-toast';
+import { useUser } from '@/contexts/userContext';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { useToast } from "@/components/ui/use-toast";
-import { api } from "@/lib/api";
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { api } from '@/lib/api';
+import { formatDateTime } from '@/lib/utils';
 
 export interface APIKey {
   id: number;
@@ -38,374 +51,789 @@ export interface APIKey {
   updated_at: string;
 }
 
-export interface APIKeyCreate {
+export interface TenantApp {
+  app_id: string;
+  app_name: string;
+  domain: string;
+  default_chat_prompt?: string;
+  chat_callback_url?: string;
+  upload_callback_url?: string;
+  scopes: string[];
+  status: string;
+  knowledge_bases: Array<{
+    knowledge_base_id: number;
+    is_default: boolean;
+  }>;
+}
+
+interface KnowledgeBaseItem {
+  id: number;
   name: string;
-  is_active?: boolean;
+  description?: string;
 }
 
-export interface APIKeyUpdate {
-  name?: string;
-  is_active?: boolean;
-}
-
-export default function APIKeysPage() {
-  const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
-  const [newKeyName, setNewKeyName] = useState("");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isAPIListDialogOpen, setIsAPIListDialogOpen] = useState(false);
-  const [copiedId, setCopiedId] = useState<number | null>(null);
+export default function APIKeysAndAppsPage() {
+  const { user: authUser } = useUser();
   const { toast } = useToast();
-  const router = useRouter();
 
-  // Fetch API keys list
-  const fetchAPIKeys = async () => {
-    try {
-      const data = await api.get("/api/api-keys");
-      setApiKeys(data);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch API keys",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Active Tab
+  const [activeTab, setActiveTab] = useState<'apps' | 'personal'>('apps');
+
+  // Personal API Keys state
+  const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
+  const [loadingKeys, setLoadingKeys] = useState(true);
+  const [isCreateKeyOpen, setIsCreateKeyOpen] = useState(false);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [isCreatingKey, setIsCreatingKey] = useState(false);
+  const [pendingKeyToggle, setPendingKeyToggle] = useState<APIKey | null>(null);
+
+  // Tenant Apps state
+  const [apps, setApps] = useState<TenantApp[]>([]);
+  const [loadingApps, setLoadingApps] = useState(true);
+  const [availableKBs, setAvailableKBs] = useState<KnowledgeBaseItem[]>([]);
+  const [isRegisterAppOpen, setIsRegisterAppOpen] = useState(false);
+  const [isRegisteringApp, setIsRegisteringApp] = useState(false);
+  const [pendingAppToggle, setPendingAppToggle] = useState<TenantApp | null>(null);
+  const [isTogglingApp, setIsTogglingApp] = useState(false);
+
+  // App form state
+  const [appName, setAppName] = useState('');
+  const [domain, setDomain] = useState('');
+  const [defaultPrompt, setDefaultPrompt] = useState('');
+  const [chatCallback, setChatCallback] = useState('');
+  const [uploadCallback, setUploadCallback] = useState('');
+  const [selectedKBIds, setSelectedKBIds] = useState<number[]>([]);
+
+  // One-time Token Reveal Modal State
+  const [revealedCredentials, setRevealedCredentials] = useState<{
+    appName: string;
+    clientId: string;
+    accessToken: string;
+  } | null>(null);
+
+  // Copy indicator states
+  const [copiedKeyId, setCopiedKeyId] = useState<number | null>(null);
+  const [copiedToken, setCopiedToken] = useState(false);
+  const [copiedCurl, setCopiedCurl] = useState(false);
 
   useEffect(() => {
-    fetchAPIKeys();
-  }, []);
+    fetchPersonalKeys();
+    if (authUser?.is_superuser) {
+      fetchTenantApps();
+    } else {
+      setActiveTab('personal');
+      setLoadingApps(false);
+    }
+    fetchKnowledgeBases();
+  }, [authUser]);
 
-  // Create new API key
-  const createAPIKey = async () => {
+  const fetchPersonalKeys = async () => {
+    setLoadingKeys(true);
+    try {
+      const data = await api.get('/api/api-keys');
+      setApiKeys(data);
+    } catch {
+      toast({ title: 'Error', description: 'Failed to load personal API keys', variant: 'destructive' });
+    } finally {
+      setLoadingKeys(false);
+    }
+  };
+
+  const fetchTenantApps = async () => {
+    setLoadingApps(true);
+    try {
+      const data = await api.get('/api/apps');
+      setApps(data);
+    } catch {
+      // Non-superusers will fail cleanly
+    } finally {
+      setLoadingApps(false);
+    }
+  };
+
+  const fetchKnowledgeBases = async () => {
+    try {
+      const data = await api.get('/api/knowledge-base');
+      setAvailableKBs(data);
+    } catch {
+      console.error('Failed to load KBs');
+    }
+  };
+
+  const handleCreatePersonalKey = async () => {
     if (!newKeyName.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a name for the API key",
-        variant: "destructive",
-      });
+      toast({ title: 'Validation Error', description: 'Please enter a name for the key', variant: 'destructive' });
       return;
     }
-
-    setIsCreating(true);
+    setIsCreatingKey(true);
     try {
-      const data = await api.post("/api/api-keys", {
-        name: newKeyName,
-        is_active: true,
-      });
-
-      setApiKeys([...apiKeys, data]);
-      setNewKeyName("");
-      setIsDialogOpen(false);
-      toast({
-        title: "Success",
-        description: "API key created successfully",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to create API key",
-        variant: "destructive",
-      });
+      const created = await api.post('/api/api-keys', { name: newKeyName, is_active: true });
+      setApiKeys((prev) => [created, ...prev]);
+      setNewKeyName('');
+      setIsCreateKeyOpen(false);
+      toast({ title: 'API Key Created', description: `Key "${created.name}" is now active` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to create key', variant: 'destructive' });
     } finally {
-      setIsCreating(false);
+      setIsCreatingKey(false);
     }
   };
 
-  // Delete API key
-  const deleteAPIKey = async (id: number) => {
+  const confirmTogglePersonalKey = async () => {
+    if (!pendingKeyToggle) return;
     try {
-      const response = await api.delete(`/api/api-keys/${id}`);
-
-      if (!response.ok) throw new Error("Failed to delete API key");
-
-      setApiKeys(apiKeys.filter((key) => key.id !== id));
-      toast({
-        title: "Success",
-        description: "API key deleted successfully",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to delete API key",
-        variant: "destructive",
-      });
+      const updated = await api.put(`/api/api-keys/${pendingKeyToggle.id}`, { is_active: !pendingKeyToggle.is_active });
+      setApiKeys((prev) => prev.map((k) => (k.id === pendingKeyToggle.id ? { ...k, is_active: updated.is_active } : k)));
+      toast({ title: 'Key Updated', description: `Key "${updated.name}" is now ${updated.is_active ? 'Active' : 'Disabled'}` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to toggle key status', variant: 'destructive' });
+    } finally {
+      setPendingKeyToggle(null);
     }
   };
 
-  // Update API key status
-  const toggleAPIKeyStatus = async (id: number, currentStatus: boolean) => {
+  const handleDeletePersonalKey = async (id: number) => {
+    if (!confirm('Are you sure you want to permanently delete this API key?')) return;
     try {
-      const response = await api.put(`/api/api-keys/${id}`, {
-        is_active: !currentStatus,
-      });
-
-      setApiKeys(
-        apiKeys.map((key) =>
-          key.id === id ? { ...key, is_active: !currentStatus } : key
-        )
-      );
-
-      toast({
-        title: "Success",
-        description: "API key status updated successfully",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update API key",
-        variant: "destructive",
-      });
+      await api.delete(`/api/api-keys/${id}`);
+      setApiKeys((prev) => prev.filter((k) => k.id !== id));
+      toast({ title: 'Key Deleted', description: 'API key permanently revoked' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to delete key', variant: 'destructive' });
     }
   };
 
-  // Copy API key to clipboard
-  const copyAPIKey = async (id: number, key: string) => {
+  const handleRegisterApp = async () => {
+    if (!appName.trim() || !domain.trim()) {
+      toast({ title: 'Validation Error', description: 'App Name and Domain are required', variant: 'destructive' });
+      return;
+    }
+    setIsRegisteringApp(true);
     try {
-      await navigator.clipboard.writeText(key);
-      setCopiedId(id);
-      setTimeout(() => {
-        setCopiedId(null);
-      }, 3000);
-      toast({
-        title: "Success",
-        description: "API key copied to clipboard",
+      const res = await api.post('/api/apps/register', {
+        app_name: appName.trim(),
+        domain: domain.trim(),
+        default_chat_prompt: defaultPrompt.trim() || undefined,
+        chat_callback: chatCallback.trim() || undefined,
+        upload_callback: uploadCallback.trim() || undefined,
       });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to copy API key",
-        variant: "destructive",
+
+      // Show one-time token reveal modal
+      setRevealedCredentials({
+        appName: appName.trim(),
+        clientId: res.client_id,
+        accessToken: res.access_token,
       });
+
+      setIsRegisterAppOpen(false);
+      setAppName('');
+      setDomain('');
+      setDefaultPrompt('');
+      setChatCallback('');
+      setUploadCallback('');
+      setSelectedKBIds([]);
+
+      await fetchTenantApps();
+      toast({ title: 'Tenant App Registered', description: `App "${appName}" created successfully` });
+    } catch (err: any) {
+      toast({ title: 'Registration Failed', description: err.message || 'Failed to register app', variant: 'destructive' });
+    } finally {
+      setIsRegisteringApp(false);
+    }
+  };
+
+  const confirmToggleAppStatus = async () => {
+    if (!pendingAppToggle) return;
+    setIsTogglingApp(true);
+    const nextStatus = pendingAppToggle.status === 'active' ? 'inactive' : 'active';
+    try {
+      const updated = await api.put(`/api/apps/${pendingAppToggle.app_id}/status`, { status: nextStatus });
+      setApps((prev) => prev.map((a) => (a.app_id === pendingAppToggle.app_id ? { ...a, status: updated.status } : a)));
+      toast({ title: 'App Status Updated', description: `${pendingAppToggle.app_name} is now ${nextStatus === 'active' ? 'Active' : 'Suspended'}` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to update app status', variant: 'destructive' });
+    } finally {
+      setIsTogglingApp(false);
+      setPendingAppToggle(null);
     }
   };
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto py-10 space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold">API Keys</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Personal API keys for direct programmatic access and querying knowledge bases.
+      <div className="space-y-6 pb-12">
+        {/* Header Studio Banner */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border bg-card p-6 shadow-xs">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                <Key className="h-4 w-4" />
+              </div>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">
+                Tenant Apps & API Key Portal
+              </h1>
+            </div>
+            <p className="text-xs text-muted-foreground max-w-xl">
+              Manage consumer tenant application credentials (AgriConnect, CoM) and generate personal developer API keys for programmatic access.
             </p>
           </div>
-          <div className="flex gap-4">
-            <Dialog
-              open={isAPIListDialogOpen}
-              onOpenChange={setIsAPIListDialogOpen}
+
+          {/* Action Trigger Buttons */}
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {activeTab === 'apps' && authUser?.is_superuser && (
+              <Button onClick={() => setIsRegisterAppOpen(true)} className="gap-1.5 text-xs font-semibold">
+                <Plus className="h-3.5 w-3.5" />
+                <span>Register Tenant App</span>
+              </Button>
+            )}
+
+            {activeTab === 'personal' && (
+              <Button onClick={() => setIsCreateKeyOpen(true)} className="gap-1.5 text-xs font-semibold">
+                <Plus className="h-3.5 w-3.5" />
+                <span>Create Developer Key</span>
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Tab Selector */}
+        <div className="flex items-center bg-muted/60 border rounded-xl p-1 gap-1 w-full sm:w-fit shadow-2xs">
+          {authUser?.is_superuser && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('apps')}
+              className={`flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-lg transition-all ${
+                activeTab === 'apps'
+                  ? 'bg-background text-foreground font-semibold shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
             >
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <List className="mr-2 h-4 w-4" />
-                  API List
+              <AppWindow className="h-4 w-4 text-primary" />
+              <span>Tenant Applications ({apps.length})</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('personal')}
+            className={`flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-lg transition-all ${
+              activeTab === 'personal'
+                ? 'bg-background text-foreground font-semibold shadow-xs'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Key className="h-4 w-4 text-primary" />
+            <span>Developer API Keys ({apiKeys.length})</span>
+          </button>
+        </div>
+
+        {/* Tab 1: Tenant Applications (Super-Admin) */}
+        {activeTab === 'apps' && authUser?.is_superuser && (
+          <div className="space-y-4">
+            {loadingApps ? (
+              <div className="p-8 text-center text-xs text-muted-foreground">Loading tenant applications...</div>
+            ) : apps.length === 0 ? (
+              <div className="rounded-2xl border bg-card p-12 text-center space-y-3">
+                <AppWindow className="h-10 w-10 text-muted-foreground/40 mx-auto" />
+                <h3 className="text-sm font-bold text-foreground">No Tenant Apps Registered Yet</h3>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  Register third-party host applications (e.g. AgriConnect) to generate scoped access tokens and callback integrations.
+                </p>
+                <Button size="sm" onClick={() => setIsRegisterAppOpen(true)} className="gap-1 text-xs">
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Register First App</span>
                 </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Available API Endpoints</DialogTitle>
-                  <DialogDescription>
-                    List of available API endpoints for personal API keys.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="mt-4 space-y-6">
-                  <div className="border rounded-lg p-6 bg-slate-50">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold">
-                        Knowledge Base Query
-                      </h3>
-                      <span className="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800 border border-amber-200">
-                        In Progress (Under Migration)
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {apps.map((app) => (
+                  <div
+                    key={app.app_id}
+                    className="rounded-2xl border bg-card p-5 space-y-4 shadow-xs hover:border-primary/40 transition-all"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-bold text-foreground truncate">{app.app_name}</h3>
+
+                          {/* Status Badge with Interactive Tooltip */}
+                          <div className="relative group/status cursor-help inline-flex items-center gap-1">
+                            <span
+                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                                app.status === 'active'
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                              }`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full ${
+                                  app.status === 'active' ? 'bg-emerald-500' : 'bg-amber-500'
+                                }`}
+                              />
+                              {app.status === 'active' ? 'ACTIVE' : 'SUSPENDED'}
+                            </span>
+                            <HelpCircle className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+
+                            {/* Tooltip on Status */}
+                            <div className="pointer-events-none absolute bottom-full left-0 mb-2 w-64 rounded-xl bg-popover border text-popover-foreground p-3 shadow-lg opacity-0 translate-y-1 group-hover/status:opacity-100 group-hover/status:translate-y-0 transition-all duration-200 z-30 text-xs">
+                              <p className="font-semibold text-foreground mb-1">
+                                {app.status === 'active' ? '🟢 Active App' : '🟠 Suspended (Inactive)'}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                {app.status === 'active'
+                                  ? 'This app is authorized. All incoming API queries and webhooks are processed normally.'
+                                  : 'Access is suspended. Any API requests using this token are rejected with 403 Forbidden. Data and tokens are preserved.'}
+                              </p>
+                              <div className="absolute top-full left-4 -mt-1 border-4 border-transparent border-t-popover" />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Globe className="h-3.5 w-3.5 text-primary" />
+                          <span>{app.domain}</span>
+                        </div>
+                      </div>
+
+                      {/* Switch triggering confirmation modal */}
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={app.status === 'active'}
+                          onCheckedChange={() => setPendingAppToggle(app)}
+                          title={`Toggle ${app.app_name} status`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Metadata & Permissions Grid */}
+                    <div className="bg-muted/40 rounded-xl p-3 space-y-2 text-xs border">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-muted-foreground">Client ID:</span>
+                        <span className="font-mono text-foreground">{app.app_id.slice(0, 16)}...</span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-muted-foreground">Scoped Knowledge Bases:</span>
+                        <span className="font-semibold text-primary">
+                          {app.knowledge_bases ? app.knowledge_bases.length : 0} KB(s) Assigned
+                        </span>
+                      </div>
+
+                      {app.chat_callback_url && (
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-muted-foreground">Chat Webhook:</span>
+                          <span className="font-mono text-foreground truncate max-w-[180px]">
+                            {app.chat_callback_url}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Layers className="h-3.5 w-3.5 text-primary" />
+                        Scopes: {app.scopes ? app.scopes.join(', ') : 'standard'}
                       </span>
                     </div>
-                    <div className="space-y-4">
-                      <div>
-                        <h4 className="text-sm font-medium text-slate-700 mb-2">
-                          Method
-                        </h4>
-                        <code className="block p-3 bg-white border rounded-md text-sm font-mono text-[#03AD8C] font-semibold">
-                          GET
-                        </code>
-                      </div>
-
-                      <div>
-                        <h4 className="text-sm font-medium text-slate-700 mb-2">
-                          Endpoint
-                        </h4>
-                        <code className="block p-3 bg-white border rounded-md text-sm font-mono">
-                          /openapi/knowledge/{"{id}"}/query
-                        </code>
-                      </div>
-
-                      <div>
-                        <h4 className="text-sm font-medium text-slate-700 mb-2">
-                          Query Parameters
-                        </h4>
-                        <div className="bg-white border rounded-md p-3 space-y-2">
-                          <div className="grid grid-cols-3 text-sm">
-                            <div className="font-mono text-[#03AD8C]">query</div>
-                            <div className="col-span-2">
-                              Your search query string
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-3 text-sm">
-                            <div className="font-mono text-[#03AD8C]">top_k</div>
-                            <div className="col-span-2">
-                              Number of results to return (optional, default: 3)
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <h4 className="text-sm font-medium text-slate-700 mb-2">
-                          Headers
-                        </h4>
-                        <div className="bg-white border rounded-md p-3 grid grid-cols-3 text-sm">
-                          <div className="font-mono text-[#03AD8C]">
-                            X-API-Key
-                          </div>
-                          <div className="col-span-2">your_api_key</div>
-                        </div>
-                      </div>
-                    </div>
                   </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create API Key
+        {/* Tab 2: Developer API Keys */}
+        {activeTab === 'personal' && (
+          <div className="space-y-4">
+            {loadingKeys ? (
+              <div className="p-8 text-center text-xs text-muted-foreground">Loading API keys...</div>
+            ) : apiKeys.length === 0 ? (
+              <div className="rounded-2xl border bg-card p-12 text-center space-y-3">
+                <Key className="h-10 w-10 text-muted-foreground/40 mx-auto" />
+                <h3 className="text-sm font-bold text-foreground">No Developer API Keys Found</h3>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  Create personal API keys to integrate custom scripts, Python tools, or external services with Akvo RAG.
+                </p>
+                <Button size="sm" onClick={() => setIsCreateKeyOpen(true)} className="gap-1 text-xs">
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Create API Key</span>
                 </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create New API Key</DialogTitle>
-                  <DialogDescription>
-                    Create a new personal API key to access the API programmatically.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="name">Name</Label>
-                    <Input
-                      id="name"
-                      value={newKeyName}
-                      onChange={(e) => setNewKeyName(e.target.value)}
-                      placeholder="Enter API key name"
-                    />
-                  </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border bg-card overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-muted/50 border-b text-muted-foreground font-semibold">
+                      <tr>
+                        <th className="py-3 px-4">Key Name</th>
+                        <th className="py-3 px-4">Key Secret</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Created</th>
+                        <th className="py-3 px-4">Last Used</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {apiKeys.map((k) => (
+                        <tr key={k.id} className="hover:bg-muted/20 transition-colors">
+                          <td className="py-3.5 px-4 font-semibold text-foreground">{k.name}</td>
+                          <td className="py-3.5 px-4 font-mono text-muted-foreground">
+                            <span className="bg-muted px-2 py-1 rounded-md text-[11px]">
+                              {k.key ? `${k.key.slice(0, 8)}...${k.key.slice(-4)}` : '••••••••••••••••'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                k.is_active
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                  : 'bg-muted text-muted-foreground'
+                              }`}
+                            >
+                              <span className={`h-1.5 w-1.5 rounded-full ${k.is_active ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                              {k.is_active ? 'Active' : 'Disabled'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-muted-foreground text-[11px]">
+                            {formatDateTime(k.created_at)}
+                          </td>
+                          <td className="py-3.5 px-4 text-muted-foreground text-[11px]">
+                            {k.last_used_at ? formatDateTime(k.last_used_at) : 'Never'}
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await navigator.clipboard.writeText(k.key);
+                                  setCopiedKeyId(k.id);
+                                  setTimeout(() => setCopiedKeyId(null), 2000);
+                                  toast({ title: 'Copied', description: 'API key copied to clipboard' });
+                                }}
+                                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                title="Copy Key"
+                              >
+                                {copiedKeyId === k.id ? (
+                                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                ) : (
+                                  <Copy className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+
+                              <Switch
+                                checked={k.is_active}
+                                onCheckedChange={() => setPendingKeyToggle(k)}
+                                title="Toggle key active status"
+                              />
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePersonalKey(k.id)}
+                                className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                title="Delete Key"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <DialogFooter>
-                  <Button
-                    onClick={createAPIKey}
-                    disabled={isCreating || !newKeyName.trim()}
-                  >
-                    {isCreating ? "Creating..." : "Create"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </div>
+              </div>
+            )}
 
-        {/* Description & Usage Callout */}
-        <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground space-y-3">
-          <div className="flex items-center gap-2 font-medium text-foreground">
-            <Info className="h-4 w-4 text-[#03AD8C]" />
-            <span>About Personal API Keys</span>
-          </div>
-          <p>
-            Personal API keys are designed to authenticate programmatic requests to query knowledge bases directly using your user account.
-          </p>
+            {/* Quick Developer Integration Snippet */}
+            <div className="bg-card rounded-2xl border p-5 space-y-3 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Code2 className="h-4 w-4 text-primary" />
+                  <h4 className="text-xs font-semibold text-foreground">API Integration Example (cURL)</h4>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const sampleCode = `curl -X POST "http://localhost:8000/api/v1/chat/messages" \\\n  -H "Authorization: Bearer YOUR_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"messages": [{"role": "user", "content": "Explain sustainable soil practices"}]}'`;
+                    await navigator.clipboard.writeText(sampleCode);
+                    setCopiedCurl(true);
+                    setTimeout(() => setCopiedCurl(false), 2000);
+                  }}
+                  className="gap-1 text-xs h-7 px-2"
+                >
+                  {copiedCurl ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                  <span>{copiedCurl ? 'Copied' : 'Copy cURL'}</span>
+                </Button>
+              </div>
 
-          <div className="text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded p-3 space-y-1">
-            <p className="font-semibold">⚠️ Feature Status:</p>
-            <p>
-              The OpenAPI query endpoint using personal API keys is <strong>currently under active development and does not work yet</strong>. API key generation and management work, but querying endpoints will be enabled in a future release.
-            </p>
+              <div className="rounded-xl bg-muted/40 p-3 font-mono text-[11px] text-muted-foreground overflow-x-auto">
+                <code>
+                  {`curl -X POST "http://localhost:8000/api/v1/chat/messages" \\\n  -H "Authorization: Bearer YOUR_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"messages": [{"role": "user", "content": "Explain sustainable soil practices"}]}'`}
+                </code>
+              </div>
+            </div>
           </div>
+        )}
 
-          <div className="text-xs space-y-1.5 bg-background/80 rounded border p-3">
-            <p className="font-semibold text-foreground">How it will work once enabled:</p>
-            <p>
-              Pass your generated key in the <code className="font-mono text-[#03AD8C] font-semibold">X-API-Key</code> HTTP request header to query a knowledge base:
-            </p>
-            <code className="block p-2.5 bg-muted rounded font-mono text-xs text-foreground mt-1 overflow-x-auto">
-              curl -X GET &quot;http://localhost:8000/openapi/knowledge/1/query?query=What+is+Akvo+RAG&amp;top_k=3&quot; \<br />
-              &nbsp;&nbsp;-H &quot;X-API-Key: sk_your_api_key_here&quot;
-            </code>
-          </div>
-        </div>
+        {/* Modal 1: Register Tenant App Modal */}
+        <Dialog open={isRegisterAppOpen} onOpenChange={setIsRegisterAppOpen}>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader className="space-y-1 text-left">
+              <div className="flex items-center gap-2 text-foreground">
+                <AppWindow className="h-5 w-5 text-primary" />
+                <DialogTitle className="text-base font-bold">Register Consumer Tenant App</DialogTitle>
+              </div>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Register an external application to generate dedicated client credentials and callback webhooks.
+              </DialogDescription>
+            </DialogHeader>
 
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>API Key</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Last Used</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {apiKeys.map((apiKey) => (
-                <TableRow key={apiKey.id}>
-                  <TableCell>{apiKey.name}</TableCell>
-                  <TableCell className="flex items-center gap-2">
-                    <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm">
-                      {apiKey.key}
-                    </code>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => copyAPIKey(apiKey.id, apiKey.key)}
-                    >
-                      {copiedId === apiKey.id ? (
-                        <Check className="h-4 w-4" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={apiKey.is_active}
-                      onCheckedChange={() =>
-                        toggleAPIKeyStatus(apiKey.id, apiKey.is_active)
+            <div className="space-y-3 py-2">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Application Name *</label>
+                <input
+                  type="text"
+                  value={appName}
+                  onChange={(e) => setAppName(e.target.value)}
+                  placeholder="e.g. AgriConnect Portal"
+                  className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Allowed Domain / Host *</label>
+                <input
+                  type="text"
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                  placeholder="e.g. agriconnect.example.com"
+                  className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Default Chat System Prompt (Optional)</label>
+                <textarea
+                  rows={2}
+                  value={defaultPrompt}
+                  onChange={(e) => setDefaultPrompt(e.target.value)}
+                  placeholder="Custom prompt instructions for this tenant..."
+                  className="w-full p-2.5 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Chat Callback URL</label>
+                  <input
+                    type="url"
+                    value={chatCallback}
+                    onChange={(e) => setChatCallback(e.target.value)}
+                    placeholder="https://app.com/callback/chat"
+                    className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Upload Callback URL</label>
+                  <input
+                    type="url"
+                    value={uploadCallback}
+                    onChange={(e) => setUploadCallback(e.target.value)}
+                    placeholder="https://app.com/callback/upload"
+                    className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 pt-2 border-t">
+              <Button variant="outline" size="sm" onClick={() => setIsRegisterAppOpen(false)} disabled={isRegisteringApp}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleRegisterApp} disabled={isRegisteringApp} className="font-semibold">
+                {isRegisteringApp ? 'Registering...' : 'Register App'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal 2: One-Time Token Reveal Modal */}
+        <Dialog open={!!revealedCredentials} onOpenChange={(open) => !open && setRevealedCredentials(null)}>
+          <DialogContent className="max-w-lg border-2 border-primary/40">
+            <DialogHeader className="space-y-1 text-left">
+              <div className="flex items-center gap-2.5 text-foreground">
+                <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <div>
+                  <DialogTitle className="text-base font-bold">App Credentials Generated</DialogTitle>
+                  <p className="text-xs text-muted-foreground">{revealedCredentials?.appName}</p>
+                </div>
+              </div>
+            </DialogHeader>
+
+            {/* Security Banner */}
+            <div className="bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 p-3 rounded-xl flex items-start gap-2.5 text-xs">
+              <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+              <div>
+                <p className="font-bold">Save this Access Token immediately!</p>
+                <p className="text-[11px] mt-0.5 leading-relaxed">
+                  For security reasons, this token will <strong>never be displayed again</strong>. If lost, you will need to rotate the app credentials.
+                </p>
+              </div>
+            </div>
+
+            {/* Copyable Credentials Box */}
+            <div className="space-y-3 bg-muted/40 p-4 rounded-xl border">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground">Client ID:</label>
+                <div className="flex items-center justify-between gap-2 bg-background border px-3 py-1.5 rounded-lg font-mono text-xs">
+                  <span className="truncate">{revealedCredentials?.clientId}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground">Access Token (Bearer):</label>
+                <div className="flex items-center justify-between gap-2 bg-background border px-3 py-2 rounded-lg font-mono text-xs">
+                  <span className="truncate text-primary font-bold">{revealedCredentials?.accessToken}</span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (revealedCredentials?.accessToken) {
+                        await navigator.clipboard.writeText(revealedCredentials.accessToken);
+                        setCopiedToken(true);
+                        setTimeout(() => setCopiedToken(false), 2000);
+                        toast({ title: 'Copied', description: 'Access token copied to clipboard' });
                       }
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {new Date(apiKey.created_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>
-                    {apiKey.last_used_at
-                      ? new Date(apiKey.last_used_at).toLocaleDateString()
-                      : "Never"}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => deleteAPIKey(apiKey.id)}
-                    >
-                      Delete
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                    }}
+                    className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
+                  >
+                    {copiedToken ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button
+                size="sm"
+                onClick={() => setRevealedCredentials(null)}
+                className="font-semibold px-6"
+              >
+                I Have Copied the Token
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal 3: Create Personal Developer Key Modal */}
+        <Dialog open={isCreateKeyOpen} onOpenChange={setIsCreateKeyOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader className="space-y-1 text-left">
+              <div className="flex items-center gap-2 text-foreground">
+                <Key className="h-5 w-5 text-primary" />
+                <DialogTitle className="text-base font-bold">Create Developer API Key</DialogTitle>
+              </div>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Generate a new API key to authenticate programmatic requests to Akvo RAG.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-1.5 py-2">
+              <label className="text-xs font-semibold text-foreground">Key Name / Description *</label>
+              <input
+                type="text"
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                placeholder="e.g. Python Evaluation Script or Local CLI"
+                className="w-full h-9 px-3 text-xs rounded-xl border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+
+            <DialogFooter className="gap-2 pt-2 border-t">
+              <Button variant="outline" size="sm" onClick={() => setIsCreateKeyOpen(false)} disabled={isCreatingKey}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleCreatePersonalKey} disabled={isCreatingKey} className="font-semibold">
+                {isCreatingKey ? 'Creating...' : 'Generate Key'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal 4: App Status Toggle Confirmation Modal */}
+        <Dialog open={!!pendingAppToggle} onOpenChange={(open) => !open && setPendingAppToggle(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader className="space-y-1 text-left">
+              <div className="flex items-center gap-2 text-foreground">
+                {pendingAppToggle?.status === 'active' ? (
+                  <Ban className="h-5 w-5 text-amber-500" />
+                ) : (
+                  <Shield className="h-5 w-5 text-emerald-500" />
+                )}
+                <DialogTitle className="text-base font-bold">
+                  {pendingAppToggle?.status === 'active'
+                    ? `Suspend "${pendingAppToggle.app_name}"?`
+                    : `Re-activate "${pendingAppToggle?.app_name}"?`}
+                </DialogTitle>
+              </div>
+              <DialogDescription className="text-xs text-muted-foreground leading-relaxed pt-1">
+                {pendingAppToggle?.status === 'active'
+                  ? 'Suspending this tenant app will immediately reject all incoming API requests (403 Forbidden) and pause webhook callbacks. You can re-activate it at any time.'
+                  : 'Re-activating this tenant app will allow it to resume sending API queries and uploading documents using its existing credentials.'}
+              </DialogDescription>
+            </DialogHeader>
+
+            <DialogFooter className="gap-2 pt-2 border-t">
+              <Button variant="outline" size="sm" onClick={() => setPendingAppToggle(null)} disabled={isTogglingApp}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={confirmToggleAppStatus}
+                disabled={isTogglingApp}
+                className={`font-semibold ${
+                  pendingAppToggle?.status === 'active'
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                }`}
+              >
+                {isTogglingApp
+                  ? 'Updating...'
+                  : pendingAppToggle?.status === 'active'
+                  ? 'Yes, Suspend App'
+                  : 'Yes, Activate App'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal 5: Personal Key Status Toggle Confirmation Modal */}
+        <Dialog open={!!pendingKeyToggle} onOpenChange={(open) => !open && setPendingKeyToggle(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader className="space-y-1 text-left">
+              <div className="flex items-center gap-2 text-foreground">
+                <Key className="h-5 w-5 text-primary" />
+                <DialogTitle className="text-base font-bold">
+                  {pendingKeyToggle?.is_active ? `Disable API Key "${pendingKeyToggle.name}"?` : `Enable API Key "${pendingKeyToggle?.name}"?`}
+                </DialogTitle>
+              </div>
+              <DialogDescription className="text-xs text-muted-foreground leading-relaxed pt-1">
+                {pendingKeyToggle?.is_active
+                  ? 'Disabling this key will cause any API requests using it to fail immediately with 401 Unauthorized.'
+                  : 'Enabling this key will allow it to authenticate API requests again.'}
+              </DialogDescription>
+            </DialogHeader>
+
+            <DialogFooter className="gap-2 pt-2 border-t">
+              <Button variant="outline" size="sm" onClick={() => setPendingKeyToggle(null)}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={confirmTogglePersonalKey} className="font-semibold">
+                Confirm
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

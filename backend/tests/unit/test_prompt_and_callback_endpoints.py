@@ -449,3 +449,21 @@ def test_send_callback_sync_wrapper_runtime_error():
                 output="Sync result",
             )
             assert mock_loop.create_task.called
+
+
+def test_prompt_test_template_endpoint(client):
+    payload = {
+        "template": "Hello {name}, your score on {topic} is {score}!",
+        "variables": {"name": "Alice", "topic": "Biology"},
+    }
+    response = client.post("/api/v1/prompt/test", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["formatted_prompt"] == "Hello Alice, your score on Biology is {score}!"
+    assert data["missing_variables"] == ["score"]
+    assert "name" in data["detected_variables"]
+    assert "topic" in data["detected_variables"]
+    assert "score" in data["detected_variables"]
+    assert data["estimated_tokens"] > 0
+    assert data["character_count"] == len("Hello Alice, your score on Biology is {score}!")
+

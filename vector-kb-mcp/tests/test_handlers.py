@@ -102,3 +102,13 @@ async def test_handle_query_kb_success():
     assert "chunks" in res
     assert len(res["chunks"]) == 1
     assert res["chunks"][0]["chunk_id"] == "c1"
+
+
+@pytest.mark.asyncio
+async def test_handle_list_document_chunks_missing_id():
+    from handlers.doc_handlers import handle_list_document_chunks
+
+    res = await handle_list_document_chunks({})
+    assert "error" in res
+    assert res["total_chunks"] == 0
+
