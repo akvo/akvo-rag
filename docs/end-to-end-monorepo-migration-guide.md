@@ -152,9 +152,43 @@ kubectl exec -it -n akvo-rag-namespace deploy/vector-kb-query-deployment -c vect
 
 ---
 
-#### Option B: Seed from Local Dump via Secure Tunnel (Port-Forward)
-If using the dump file already extracted and verified on your local workstation (`agent_docs/dumps/`):
+#### Option B: Seed from Local Dump (Tested Staging & Remote K8s Flow)
+If using the dump file already extracted and verified on your local workstation (`agent_docs/dumps/legacy_akvo-rag_ragwebui_latest.sql`):
 
+##### B.1: Local Development / Staging Verification
+1. **Start a Temporary Legacy MySQL Container (Port `3307` to avoid host collisions):**
+   ```bash
+   docker rm -f temp-legacy-mysql && docker run --name temp-legacy-mysql \
+     -e MYSQL_ROOT_PASSWORD=root \
+     -p 3307:3306 \
+     -d mysql:8.0
+   ```
+2. **Create Target Database & Import Local Dump:**
+   ```bash
+   # Create database
+   docker exec -i temp-legacy-mysql mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS ragwebui;"
+
+   # Import dump
+   docker exec -i temp-legacy-mysql mysql -uroot -proot ragwebui < agent_docs/dumps/legacy_akvo-rag_ragwebui_latest.sql
+   ```
+3. **Ensure Modern Monorepo Environment is Running:**
+   ```bash
+   ./dc.sh up -d
+   ```
+4. **Execute Backend ETL from the Backend Container:**
+   ```bash
+   # (Optional) Dry-run check:
+   docker exec akvo-rag-backend-1 python -m cli.migrate_legacy_backend \
+     --source-url "mysql+mysqlconnector://root:root@host.docker.internal:3307/ragwebui" \
+     --dry-run
+
+   # Execute live migration:
+   docker exec akvo-rag-backend-1 python -m cli.migrate_legacy_backend \
+     --source-url "mysql+mysqlconnector://root:root@host.docker.internal:3307/ragwebui"
+   ```
+
+##### B.2: Seeding Remote Kubernetes Cluster via Secure Tunnel
+To seed the remote Kubernetes cluster using this local MySQL container:
 1. **Establish a secure port-forward tunnel from the cluster to local workstation:**
    ```bash
    kubectl port-forward -n akvo-rag-namespace svc/postgres 5433:5432
@@ -162,7 +196,7 @@ If using the dump file already extracted and verified on your local workstation 
 2. **Execute the Python ETL script locally targeting the tunnel:**
    ```bash
    python backend/cli/migrate_legacy_backend.py \
-     --source-url "mysql+mysqlconnector://root:root@localhost:3306/ragwebui" \
+     --source-url "mysql+mysqlconnector://root:root@localhost:3307/ragwebui" \
      --target-url "postgresql+psycopg2://postgres:${POSTGRES_PASSWORD}@localhost:5433/akvo_rag"
    ```
 

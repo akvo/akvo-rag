@@ -38,3 +38,6 @@ redis>=5.0.0
 
 # Object Storage
 minio>=7.2.0
+
+# Legacy Database Migration CLI Drivers
+mysql-connector-python>=8.0.33
