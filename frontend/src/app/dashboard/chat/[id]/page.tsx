@@ -456,17 +456,17 @@ export default function ChatDetailPage({ params }: { params: { id: string } }) {
           <div className="flex items-center justify-between border-b border-border/70 px-6 py-2.5 bg-card/40 backdrop-blur-sm z-10">
             <div className="flex items-center gap-3 min-w-0">
               <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                {loadingChat ? (
-                  <Loader2 className="h-4 w-4 text-primary animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4 text-primary" />
-                )}
+                <Sparkles
+                  className={`h-4 w-4 text-primary ${
+                    loadingChat ? "animate-pulse" : ""
+                  }`}
+                />
               </div>
               <div className="min-w-0">
                 {loadingChat ? (
                   <div className="space-y-1.5 py-0.5">
-                    <div className="h-3.5 w-36 bg-muted animate-pulse rounded-md" />
-                    <div className="h-2.5 w-24 bg-muted/60 animate-pulse rounded-md" />
+                    <div className="h-3.5 w-32 bg-muted/80 animate-pulse rounded" />
+                    <div className="h-2.5 w-20 bg-muted/50 animate-pulse rounded" />
                   </div>
                 ) : (
                   <>
@@ -534,45 +534,23 @@ export default function ChatDetailPage({ params }: { params: { id: string } }) {
           {/* Messages Stream Canvas */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-6">
             {loadingChat ? (
-              <div className="space-y-6 max-w-3xl animate-in fade-in duration-300">
-                {/* Assistant Skeleton */}
-                <div className="flex items-start gap-3.5">
-                  <div className="h-8 w-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                    <Bot className="h-4 w-4 text-primary animate-pulse" />
+              <div className="h-full flex flex-col items-center justify-center min-h-[380px] text-center space-y-3.5 animate-in fade-in duration-300">
+                <div className="relative flex items-center justify-center">
+                  <div className="h-12 w-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-xs">
+                    <Bot className="h-6 w-6 animate-pulse" />
                   </div>
-                  <div className="flex-1 rounded-2xl bg-card border px-5 py-4 space-y-2.5 shadow-xs">
-                    <div className="h-4 w-3/4 bg-muted/80 rounded-md animate-pulse" />
-                    <div className="h-4 w-full bg-muted/60 rounded-md animate-pulse" />
-                    <div className="h-4 w-5/6 bg-muted/50 rounded-md animate-pulse" />
-                  </div>
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                  </span>
                 </div>
-
-                {/* User Skeleton */}
-                <div className="flex items-start justify-end gap-3.5 ml-auto max-w-xl">
-                  <div className="rounded-2xl bg-primary/20 px-5 py-3.5 space-y-2 w-64 shadow-xs">
-                    <div className="h-3.5 w-full bg-primary/30 rounded-md animate-pulse" />
-                    <div className="h-3.5 w-2/3 bg-primary/30 rounded-md animate-pulse" />
-                  </div>
-                  <div className="h-8 w-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0">
-                    <User className="h-4 w-4 text-primary" />
-                  </div>
-                </div>
-
-                {/* Assistant Skeleton 2 */}
-                <div className="flex items-start gap-3.5">
-                  <div className="h-8 w-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                    <Bot className="h-4 w-4 text-primary animate-pulse" />
-                  </div>
-                  <div className="flex-1 rounded-2xl bg-card border px-5 py-4 space-y-2.5 shadow-xs">
-                    <div className="h-4 w-2/3 bg-muted/80 rounded-md animate-pulse" />
-                    <div className="h-4 w-4/5 bg-muted/60 rounded-md animate-pulse" />
-                  </div>
-                </div>
-
-                {/* Loading indicator bar */}
-                <div className="flex items-center justify-center gap-2 pt-4 text-xs text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                  <span>Loading conversation...</span>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">
+                    Loading conversation
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Retrieving messages and context...
+                  </p>
                 </div>
               </div>
             ) : (

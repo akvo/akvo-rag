@@ -182,12 +182,20 @@ export const ChatSidebar: FC<ChatSidebarProps> = ({
       {/* Chat Session List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {isLoading ? (
-          <div className="p-4 space-y-2">
-            {[1, 2, 3, 4].map((n) => (
+          <div className="p-2 space-y-1">
+            {[1, 2, 3, 4, 5].map((n) => (
               <div
                 key={n}
-                className="h-12 rounded-lg bg-muted/40 animate-pulse"
-              />
+                className="flex items-center gap-3 p-2.5 rounded-xl bg-card/20"
+              >
+                <div className="h-7 w-7 rounded-lg bg-muted/60 animate-pulse shrink-0" />
+                {!isCollapsed && (
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="h-3 w-3/4 bg-muted/70 rounded animate-pulse" />
+                    <div className="h-2 w-1/3 bg-muted/40 rounded animate-pulse" />
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         ) : sortedChats.length === 0 ? (
