@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import {
   User,
+  Mail,
   Lock,
   Eye,
   EyeOff,
@@ -30,6 +31,7 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loginMethod, setLoginMethod] = useState<"username" | "email">("username");
   const [showPassword, setShowPassword] = useState(false);
   const { isNewUser, setIsNewUser } = useUser();
   const [showResetSuccess, setShowResetSuccess] = useState(
@@ -42,13 +44,13 @@ export default function LoginPage() {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const username = formData.get("username");
-    const password = formData.get("password");
+    const identifier = (formData.get("identifier") || formData.get("username") || "") as string;
+    const password = formData.get("password") as string;
 
     try {
       const formUrlEncoded = new URLSearchParams();
-      formUrlEncoded.append("username", username as string);
-      formUrlEncoded.append("password", password as string);
+      formUrlEncoded.append("username", identifier.trim());
+      formUrlEncoded.append("password", password);
 
       const data: LoginResponse = await api.post("/api/auth/token", formUrlEncoded, {
         headers: {
@@ -160,24 +162,71 @@ export default function LoginPage() {
           {/* Login Form */}
           <form className="space-y-5" onSubmit={handleSubmit}>
             <div>
+              {/* Login Method Segmented Selector */}
+              <div className="flex p-1 bg-slate-100/90 rounded-xl mb-3 border border-slate-200/60 shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => setLoginMethod("username")}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-2 transition-all ${
+                    loginMethod === "username"
+                      ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                  aria-pressed={loginMethod === "username"}
+                >
+                  <User
+                    className={`w-3.5 h-3.5 ${
+                      loginMethod === "username" ? "text-[#03AD8C]" : "text-slate-400"
+                    }`}
+                  />
+                  Username
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLoginMethod("email")}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-2 transition-all ${
+                    loginMethod === "email"
+                      ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                  aria-pressed={loginMethod === "email"}
+                >
+                  <Mail
+                    className={`w-3.5 h-3.5 ${
+                      loginMethod === "email" ? "text-[#03AD8C]" : "text-slate-400"
+                    }`}
+                  />
+                  Email
+                </button>
+              </div>
+
               <label
-                htmlFor="username"
+                htmlFor="identifier"
                 className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5"
               >
-                Username
+                {loginMethod === "username" ? "Username" : "Email Address"}
               </label>
               <div className="relative rounded-xl shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <User className="h-4 w-4 text-slate-400" />
+                  {loginMethod === "username" ? (
+                    <User className="h-4 w-4 text-slate-400" />
+                  ) : (
+                    <Mail className="h-4 w-4 text-slate-400" />
+                  )}
                 </div>
                 <input
-                  id="username"
-                  name="username"
-                  type="text"
+                  id="identifier"
+                  name="identifier"
+                  type={loginMethod === "username" ? "text" : "email"}
                   required
                   disabled={loading}
+                  autoComplete={loginMethod === "username" ? "username" : "email"}
                   className="block w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 text-sm focus:outline-none focus:border-[#03AD8C] focus:ring-4 focus:ring-[#03AD8C]/15 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                  placeholder="Enter your username"
+                  placeholder={
+                    loginMethod === "username"
+                      ? "Enter your username"
+                      : "Enter your email (e.g. name@akvo.org)"
+                  }
                 />
               </div>
             </div>

@@ -112,6 +112,76 @@ def test_login_inactive_user(client: TestClient, mock_db):
     assert "inactive" in response.json()["detail"]
 
 
+def test_login_with_username_success(client: TestClient, mock_db):
+    from app.core.security import get_password_hash
+
+    active_user = User(
+        id=10,
+        username="john_doe",
+        email="john@example.com",
+        hashed_password=get_password_hash("Secret123!"),
+        is_active=True,
+    )
+    mock_db.query.return_value.filter.return_value.first.return_value = (
+        active_user
+    )
+
+    response = client.post(
+        "/api/v1/auth/token",
+        data={"username": "john_doe", "password": "Secret123!"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+
+
+def test_login_with_email_success(client: TestClient, mock_db):
+    from app.core.security import get_password_hash
+
+    active_user = User(
+        id=11,
+        username="john_doe",
+        email="john@example.com",
+        hashed_password=get_password_hash("Secret123!"),
+        is_active=True,
+    )
+    mock_db.query.return_value.filter.return_value.first.return_value = (
+        active_user
+    )
+
+    response = client.post(
+        "/api/v1/auth/token",
+        data={"username": "john@example.com", "password": "Secret123!"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+
+
+def test_login_invalid_password(client: TestClient, mock_db):
+    from app.core.security import get_password_hash
+
+    active_user = User(
+        id=12,
+        username="john_doe",
+        email="john@example.com",
+        hashed_password=get_password_hash("Secret123!"),
+        is_active=True,
+    )
+    mock_db.query.return_value.filter.return_value.first.return_value = (
+        active_user
+    )
+
+    response = client.post(
+        "/api/v1/auth/token",
+        data={"username": "john_doe", "password": "WrongPassword!"},
+    )
+    assert response.status_code == 401
+    assert "Incorrect username or password" in response.json()["detail"]
+
+
 def test_test_token_endpoint(client: TestClient):
     from datetime import datetime, timezone
 
