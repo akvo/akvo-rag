@@ -27,7 +27,7 @@ class LegacyDataMigrator:
     """
     Idempotent ETL migration pipeline to extract legacy knowledge bases,
     documents, and chunks from standalone PostgreSQL or MySQL databases,
-    transform schemas, and load them into unified PostgreSQL 17 (vkb_ tables).
+    transform schemas, and load them into unified PostgreSQL 18 (vkb_ tables).
     """
 
     def __init__(
