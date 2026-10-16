@@ -440,7 +440,7 @@ export default function ChatDetailPage({ params }: { params: { id: string } }) {
 
   return (
     <DashboardLayout>
-      <div className="flex h-[calc(100vh-4.5rem)] overflow-hidden rounded-2xl border bg-background shadow-xs">
+      <div className="flex flex-1 min-h-0 overflow-hidden bg-background">
         {/* Left 2-Pane Conversation Sidebar */}
         <ChatSidebar
           chats={allChats}
@@ -453,7 +453,7 @@ export default function ChatDetailPage({ params }: { params: { id: string } }) {
         {/* Central Chat Canvas */}
         <div className="flex flex-1 flex-col h-full relative overflow-hidden bg-background">
           {/* Canvas Top Bar */}
-          <div className="flex items-center justify-between border-b px-6 py-3.5 bg-card/60 backdrop-blur-sm z-10">
+          <div className="flex items-center justify-between border-b border-border/70 px-6 py-2.5 bg-card/40 backdrop-blur-sm z-10">
             <div className="flex items-center gap-3 min-w-0">
               <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                 {loadingChat ? (

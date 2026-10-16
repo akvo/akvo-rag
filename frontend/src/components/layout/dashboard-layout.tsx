@@ -16,6 +16,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const isChatRoute = pathname?.startsWith("/dashboard/chat");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user: authUser, loading: userLoading, setUser } = useUser();
 
@@ -56,7 +57,11 @@ export default function DashboardLayout({
   }, [authUser]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className={`min-h-screen bg-background ${
+        isChatRoute ? "h-screen overflow-hidden" : ""
+      }`}
+    >
       {/* Mobile menu button */}
       <div className="lg:hidden fixed top-0 left-0 m-4 z-50">
         <button
@@ -157,11 +162,26 @@ export default function DashboardLayout({
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-64">
-        <main className="min-h-screen py-6 px-4 sm:px-6 lg:px-8">
-          <Breadcrumb />
-          {children}
-        </main>
+      <div
+        className={`lg:pl-64 ${
+          isChatRoute ? "h-screen flex flex-col overflow-hidden" : ""
+        }`}
+      >
+        {isChatRoute ? (
+          <main className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <div className="shrink-0 h-12 px-6 pl-16 lg:pl-6 flex items-center border-b border-border/70 bg-card/40 backdrop-blur-sm">
+              <Breadcrumb className="mb-0 text-sm" />
+            </div>
+            <div className="flex-1 min-h-0 flex flex-col">
+              {children}
+            </div>
+          </main>
+        ) : (
+          <main className="min-h-screen py-6 px-4 sm:px-6 lg:px-8">
+            <Breadcrumb />
+            {children}
+          </main>
+        )}
       </div>
     </div>
   );

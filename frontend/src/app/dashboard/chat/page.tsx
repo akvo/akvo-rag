@@ -188,7 +188,7 @@ export default function ChatOverviewPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex h-[calc(100vh-4.5rem)] overflow-hidden rounded-2xl border bg-background shadow-xs">
+      <div className="flex flex-1 min-h-0 overflow-hidden bg-background">
         {/* Left 2-Pane Conversation Sidebar */}
         <ChatSidebar
           chats={chats}
@@ -200,24 +200,25 @@ export default function ChatOverviewPage() {
         {/* Central Chat Canvas */}
         <div className="flex flex-1 flex-col h-full relative overflow-hidden bg-background">
           {/* Canvas Top Bar */}
-          <div className="flex items-center justify-between border-b px-6 py-3.5 bg-card/60 backdrop-blur-sm z-10">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <Sparkles className="h-4 w-4 text-primary" />
+          <div className="flex items-center justify-between border-b border-border/70 px-6 py-2.5 bg-card/40 backdrop-blur-sm z-10">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
               </div>
-              <div>
+              <div className="flex items-center gap-2">
                 <h2 className="text-sm font-semibold text-foreground">
-                  Start New Conversation
+                  New Conversation
                 </h2>
-                <p className="text-[11px] text-muted-foreground">
+                <span className="text-muted-foreground/60">•</span>
+                <p className="text-xs text-muted-foreground">
                   {selectedKBFilter.length === 0
-                    ? "Searching across All Knowledge Bases"
-                    : `Scoped to ${selectedKBFilter.length} Selected Knowledge Base(s)`}
+                    ? "Searching All Knowledge Bases"
+                    : `${selectedKBFilter.length} Knowledge Base(s) selected`}
                 </p>
               </div>
             </div>
 
-            <div className="hidden sm:flex items-center gap-1.5 bg-muted/60 border rounded-full px-3 py-1 text-xs text-muted-foreground">
+            <div className="hidden sm:flex items-center gap-1.5 bg-muted/60 border border-border/60 rounded-full px-2.5 py-1 text-xs text-muted-foreground">
               <Layers className="h-3.5 w-3.5 text-primary" />
               <span>ChromaDB Vector Store</span>
             </div>
@@ -226,17 +227,11 @@ export default function ChatOverviewPage() {
           {/* Canvas Center / Interactive Workspace */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 max-w-4xl mx-auto w-full space-y-6">
             {/* Hero Header */}
-            <div className="text-center space-y-2">
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 shadow-sm mx-auto overflow-hidden">
-                <Image
-                  src="/logo.png"
-                  width={32}
-                  height={32}
-                  className="rounded-md object-contain"
-                  alt="Akvo RAG"
-                />
+            <div className="text-center space-y-1.5 pt-2">
+              <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 text-primary mx-auto shadow-2xs">
+                <Sparkles className="h-5 w-5" />
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
                 What would you like to explore?
               </h1>
               <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto">
@@ -245,7 +240,7 @@ export default function ChatOverviewPage() {
             </div>
 
             {/* Step 1: Select Knowledge Base Scope */}
-            <div className="space-y-3 bg-card rounded-2xl border p-5 shadow-xs">
+            <div className="space-y-3 bg-muted/20 rounded-xl border border-border/60 p-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">

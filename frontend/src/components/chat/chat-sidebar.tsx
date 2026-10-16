@@ -111,7 +111,7 @@ export const ChatSidebar: FC<ChatSidebarProps> = ({
 
   return (
     <div
-      className={`relative flex flex-col h-full bg-card border-r transition-all duration-300 ease-in-out ${
+      className={`relative flex flex-col h-full bg-muted/30 border-r border-border/70 transition-all duration-300 ease-in-out ${
         isCollapsed ? "w-16" : "w-72 sm:w-80"
       }`}
     >
