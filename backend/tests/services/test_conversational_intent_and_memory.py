@@ -26,7 +26,7 @@ class TestConversationalIntentAndMemory:
         fake_llm.ainvoke = fake_ainvoke
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: fake_llm,
+            lambda *args, **kwargs: fake_llm,
         )
 
         state = {"query": "What did we just talk about?"}
@@ -55,7 +55,7 @@ class TestConversationalIntentAndMemory:
         )
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: MagicMock(),
+            lambda *args, **kwargs: MagicMock(),
         )
 
         state: GraphState = {
@@ -90,7 +90,7 @@ class TestConversationalIntentAndMemory:
         )
         monkeypatch.setattr(
             "app.services.query_answering_workflow.LLMFactory.create",
-            lambda: MagicMock(),
+            lambda *args, **kwargs: MagicMock(),
         )
 
         state: GraphState = {

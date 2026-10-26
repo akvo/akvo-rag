@@ -1,38 +1,19 @@
-# Backend Documentation
+# Backend Documentation 📖
 
-This directory contains detailed documentation for the Akvo RAG backend.
+This directory contains technical guides and references for the Akvo RAG backend.
 
-## App Registration & Authentication
+## App Registration & Host Integration
 
-Documentation for the server-to-server app registration and validation system:
+Comprehensive guide for server-to-server app registration, tenant token lifecycle, and host application (AgriConnect, WASHConnect, etc.) integration:
 
-- **[Quick Start Guide](QUICKSTART_APP_REGISTRATION.md)** - Get started in 5 minutes
-- **[API Reference](APP_REGISTRATION.md)** - Complete endpoint documentation with examples
-- **[Implementation Summary](IMPLEMENTATION_SUMMARY.md)** - Technical implementation details
+- **[App Registration & Host Integration Guide](APP_REGISTRATION.md)** — Canonical guide covering architecture, registration, authentication, API endpoints, webhooks, and client SDKs.
 
-## Quick Links
+## Monorepo & System Documentation
 
-### Getting Started
-👉 Start here: [Quick Start Guide](QUICKSTART_APP_REGISTRATION.md)
+For system-wide architectural, operational, and development documentation:
+- **[Architecture Map](../../docs/architecture_map.md)** — Container topology, port bindings, RPC queues, and data models.
+- **[Developer Guide](../../docs/dev-guide.md)** — Local development workflows, live reloading, and testing.
+- **[Admin Guide](../../docs/admin-guide.md)** — Tenant management, Knowledge Base lifecycle, and prompt management.
+- **[QA Host Integration Guide](../../docs/qa/qa-guide-agriconnect-integration.md)** — End-to-end integration walkthrough for host applications.
+- **[Main README](../../README.md)** — Project overview and quickstart.
 
-### API Endpoints
-- `POST /api/apps/register` - Register new app
-- `GET /api/apps/me` - Validate token
-- `POST /api/apps/rotate` - Rotate tokens
-- `POST /api/apps/revoke` - Revoke app
-
-### Testing
-```bash
-cd backend
-./test.sh  # Run all tests
-```
-
-### Files Reference
-- Model: `app/models/app.py`
-- Service: `app/services/app_service.py`
-- Endpoints: `app/api/api_v1/apps.py`
-- Tests: `tests/services/test_app_service.py`, `tests/integration/test_app_endpoints.py`
-
-## Other Documentation
-
-See the main [README.md](../../README.md) for general project documentation.

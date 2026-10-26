@@ -2,6 +2,7 @@ from datetime import timedelta
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 from requests.exceptions import RequestException
@@ -83,13 +84,27 @@ def register(*, db: Session = Depends(get_db), user_in: UserCreate) -> Any:
 
 @router.post("/token", response_model=Token)
 def login_access_token(
-    db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
+    db: Session = Depends(get_db),
+    form_data: OAuth2PasswordRequestForm = Depends(),
 ) -> Any:
     """
     OAuth2 compatible token login, get an access token for future requests.
+    Supports authentication via either username or email.
     """
-    user = db.query(User).filter(User.username == form_data.username).first()
-    if not user or not security.verify_password(form_data.password, user.hashed_password):
+    login_id = form_data.username.strip()
+    user = (
+        db.query(User)
+        .filter(
+            or_(
+                User.username == login_id,
+                User.email.ilike(login_id),
+            )
+        )
+        .first()
+    )
+    if not user or not security.verify_password(
+        form_data.password, user.hashed_password
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",

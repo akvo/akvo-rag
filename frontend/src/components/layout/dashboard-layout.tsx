@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Book, MessageSquare, LogOut, Menu, User, Wrench, Users } from "lucide-react";
+import { Book, MessageSquare, LogOut, Menu, User, Wrench, Users, Activity } from "lucide-react";
 import Breadcrumb from "@/components/ui/breadcrumb";
 import { useUser } from "@/contexts/userContext";
 import { InitialAvatar } from "../ui/avatar";
@@ -16,6 +16,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const isChatRoute = pathname?.startsWith("/dashboard/chat");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user: authUser, loading: userLoading, setUser } = useUser();
 
@@ -47,6 +48,7 @@ export default function DashboardLayout({
       { name: "Chat", href: "/dashboard/chat", icon: MessageSquare },
       { name: "API Keys", href: "/dashboard/api-keys", icon: User },
       { name: "Fine Tuning", href: "/dashboard/fine-tuning", icon: Wrench },
+      { name: "Evaluations & Health", href: "/dashboard/evaluations", icon: Activity },
     ];
     if (authUser?.is_superuser) {
       navItems.push({ name: "Users", href: "/dashboard/users", icon: Users });
@@ -55,7 +57,11 @@ export default function DashboardLayout({
   }, [authUser]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className={`min-h-screen bg-background ${
+        isChatRoute ? "h-screen overflow-hidden" : ""
+      }`}
+    >
       {/* Mobile menu button */}
       <div className="lg:hidden fixed top-0 left-0 m-4 z-50">
         <button
@@ -74,17 +80,17 @@ export default function DashboardLayout({
       >
         <div className="flex h-full flex-col">
           {/* Sidebar header */}
-          <div className="flex h-16 items-center border-b pl-8">
+          <div className="flex h-16 items-center border-b px-6">
             <Link
               href="/dashboard"
-              className="flex items-center text-lg font-semibold hover:text-primary transition-colors"
+              className="flex items-center gap-3 text-lg font-bold tracking-tight hover:text-primary transition-colors"
             >
               <img
                 src="/logo.svg"
-                alt="Logo"
-                className="w-16 h-16 rounded-lg"
+                alt="Akvo Logo"
+                className="w-8 h-8 rounded-md shadow-sm"
               />
-              RAG Web UI
+              <span>Akvo RAG</span>
             </Link>
           </div>
 
@@ -156,11 +162,26 @@ export default function DashboardLayout({
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-64">
-        <main className="min-h-screen py-6 px-4 sm:px-6 lg:px-8">
-          <Breadcrumb />
-          {children}
-        </main>
+      <div
+        className={`lg:pl-64 ${
+          isChatRoute ? "h-screen flex flex-col overflow-hidden" : ""
+        }`}
+      >
+        {isChatRoute ? (
+          <main className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <div className="shrink-0 h-12 px-6 pl-16 lg:pl-6 flex items-center border-b border-border/70 bg-card/40 backdrop-blur-sm">
+              <Breadcrumb className="mb-0 text-sm" />
+            </div>
+            <div className="flex-1 min-h-0 flex flex-col">
+              {children}
+            </div>
+          </main>
+        ) : (
+          <main className="min-h-screen py-6 px-4 sm:px-6 lg:px-8">
+            <Breadcrumb />
+            {children}
+          </main>
+        )}
       </div>
     </div>
   );

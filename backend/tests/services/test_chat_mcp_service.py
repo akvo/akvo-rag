@@ -14,9 +14,8 @@ class TestChatMCPServiceStubbed:
         self.fake_db.add.return_value = None
         self.fake_db.commit.return_value = None
         self.fake_db.close.return_value = None
-        self.fake_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = (
-            []
-        )
+        q = self.fake_db.query.return_value.filter.return_value
+        q.order_by.return_value.limit.return_value.all.return_value = []
 
     def _stub_common_services(
         self,
@@ -58,10 +57,6 @@ class TestChatMCPServiceStubbed:
             state["contextual_query"] = f"ctx_{intent}"
             return state
 
-        async def fake_scoping_node(state):
-            state["scope"]["top_k"] = 1
-            return state
-
         async def fake_run_mcp_tool_node(state):
             # Simulate MCP failure if requested
             if mcp_error:
@@ -88,15 +83,14 @@ class TestChatMCPServiceStubbed:
             # Simulate error handler behavior
             if state.get("intent") == "weather_query":
                 state["answer"] = (
-                    "I cannot access real-time weather data right now. Please check weather.com for current conditions."
+                    "I cannot access real-time weather data right now. "
+                    "Please check weather.com for current conditions."
                 )
             else:
                 state["answer"] = (
-                    "I'm having trouble finding that information right now. Could you please try again in a moment?"
+                    "I'm having trouble finding that information right now. "
+                    "Could you please try again in a moment?"
                 )
-            return state
-
-        async def fake_post_processing_node(state):
             return state
 
         monkeypatch.setattr(
@@ -109,16 +103,10 @@ class TestChatMCPServiceStubbed:
             chat_mcp_service, "contextualize_node", fake_contextualize_node
         )
         monkeypatch.setattr(
-            chat_mcp_service, "scoping_node", fake_scoping_node
-        )
-        monkeypatch.setattr(
             chat_mcp_service, "run_mcp_tool_node", fake_run_mcp_tool_node
         )
         monkeypatch.setattr(
             chat_mcp_service, "error_handler_node", fake_error_handler_node
-        )
-        monkeypatch.setattr(
-            chat_mcp_service, "post_processing_node", fake_post_processing_node
         )
 
         # Fake QA chain
@@ -402,19 +390,9 @@ class TestChatMCPServiceStubbed:
 
     @pytest.mark.asyncio
     async def test_stream_mcp_error_returns_early(self, monkeypatch):
-        """Should return early and skip post_processing when MCP fails."""
-        post_processing_called = {"called": False}
-
-        async def fake_post_processing_node(state):
-            post_processing_called["called"] = True
-            return state
-
+        """Should return early and yield fallback answer when MCP fails."""
         self._stub_common_services(
             monkeypatch, intent="weather_query", mcp_error=True
-        )
-
-        monkeypatch.setattr(
-            chat_mcp_service, "post_processing_node", fake_post_processing_node
         )
 
         chunks = []
@@ -427,8 +405,9 @@ class TestChatMCPServiceStubbed:
         ):
             chunks.append(chunk)
 
-        # post_processing should NOT be called when error occurs
-        assert not post_processing_called["called"]
+        # Should yield the error response and save to DB
+        assert any("weather" in chunk.lower() for chunk in chunks)
+        assert self.fake_db.commit.called
 
     # ============= EDGE CASE TESTS =============
 
@@ -449,7 +428,10 @@ class TestChatMCPServiceStubbed:
 
     @pytest.mark.asyncio
     async def test_stream_mcp_success_then_generation_error(self, monkeypatch):
-        """Should handle errors during generation phase even after successful MCP."""
+        """
+        Should handle errors during generation phase even after
+        successful MCP.
+        """
         self._stub_common_services(
             monkeypatch, tokens=None, context=True  # No tokens
         )

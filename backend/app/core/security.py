@@ -14,7 +14,10 @@ from app.services.app_service import AppService
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.API_V1_STR}/auth/token",
+    description="**Note**: Leave `client_id` and `client_secret` blank. Only enter your **username** and **password**.",
+)
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 app_bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -61,6 +64,21 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+def get_current_active_superuser(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """
+    Validate that the current user is active and has superuser privileges.
+    Raises 403 Forbidden if the user is not a superuser.
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Superuser access required",
+        )
+    return current_user
 
 def get_api_key_user(
     db: Session = Depends(get_db),

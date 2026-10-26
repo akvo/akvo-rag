@@ -2,9 +2,12 @@ import io
 import pytest
 import json
 
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 from app.models.app import App, AppStatus, AppKnowledgeBase
 from app.models.job import Job
+from mcp_clients.kb_mcp_endpoint_service import (
+    KnowledgeBaseMCPEndpointService,
+)
 
 
 @pytest.fixture
@@ -141,18 +144,18 @@ class TestMultiKBJobEndpoints:
     """Tests for multi-KB support in /api/apps/jobs endpoint."""
 
     @pytest.mark.asyncio
-    @patch("app.api.api_v1.jobs.execute_chat_job_task")
+    @patch("app.api.api_v1.jobs.execute_chat_job")
     async def test_chat_job_with_multiple_valid_kbs(
         self, mock_task, client, db, sample_app_multi_kb, chat_payload_with_kb
     ):
-        """✅ Should accept specific KBs and pass them to Celery."""
-        mock_task.delay = Mock(return_value=Mock(id="multi-kb-task-1"))
+        """✅ Should accept specific KBs and pass them to execute_chat_job."""
+        mock_task.return_value = None
 
         headers = {
             "Authorization": f"Bearer {sample_app_multi_kb.access_token}"
         }
         response = client.post(
-            "/api/apps/jobs", data=chat_payload_with_kb, headers=headers
+            "/api/v1/apps/jobs", data=chat_payload_with_kb, headers=headers
         )
 
         assert response.status_code == 200
@@ -160,8 +163,8 @@ class TestMultiKBJobEndpoints:
         job = db.query(Job).filter(Job.id == data["job_id"]).first()
         assert job is not None
 
-        mock_task.delay.assert_called_once()
-        called_kb_ids = mock_task.delay.call_args.kwargs["knowledge_base_ids"]
+        mock_task.assert_called_once()
+        called_kb_ids = mock_task.call_args.kwargs["knowledge_base_ids"]
         assert set(called_kb_ids) == {101, 103}
 
         assert data["status"] == "pending"
@@ -176,14 +179,14 @@ class TestMultiKBJobEndpoints:
             "Authorization": f"Bearer {sample_app_multi_kb.access_token}"
         }
         response = client.post(
-            "/api/apps/jobs", data=chat_payload_invalid_kb, headers=headers
+            "/api/v1/apps/jobs", data=chat_payload_invalid_kb, headers=headers
         )
 
         assert response.status_code == 404
         assert "invalid" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    @patch("app.api.api_v1.jobs.execute_chat_job_task")
+    @patch("app.api.api_v1.jobs.execute_chat_job")
     async def test_chat_job_fallback_to_default_kb(
         self,
         mock_task,
@@ -193,32 +196,34 @@ class TestMultiKBJobEndpoints:
         sample_chat_job_payload,
     ):
         """✅ Should use default KB if none provided."""
-        mock_task.delay = Mock(return_value=Mock(id="default-fallback-task"))
+        mock_task.return_value = None
         headers = {
             "Authorization": f"Bearer {sample_app_multi_kb.access_token}"
         }
         response = client.post(
-            "/api/apps/jobs", data=sample_chat_job_payload, headers=headers
+            "/api/v1/apps/jobs", data=sample_chat_job_payload, headers=headers
         )
 
         assert response.status_code == 200
-        mock_task.delay.assert_called_once()
-        kb_ids = mock_task.delay.call_args.kwargs["knowledge_base_ids"]
+        mock_task.assert_called_once()
+        kb_ids = mock_task.call_args.kwargs["knowledge_base_ids"]
         assert kb_ids == [101]  # only default KB used
         db.close()
 
     @pytest.mark.asyncio
-    @patch("app.api.api_v1.jobs.upload_full_process_task")
+    @patch.object(
+        KnowledgeBaseMCPEndpointService, "upload_and_process_documents"
+    )
     async def test_upload_job_with_custom_kb(
         self,
-        mock_task,
+        mock_upload,
         client,
         db,
         sample_app_multi_kb,
         upload_payload_with_kb,
     ):
         """✅ Should upload into specified KB."""
-        mock_task.delay = Mock(return_value=Mock(id="upload-kb-task"))
+        mock_upload.return_value = {"status": "success"}
         headers = {
             "Authorization": f"Bearer {sample_app_multi_kb.access_token}"
         }
@@ -227,15 +232,15 @@ class TestMultiKBJobEndpoints:
         files = {"files": ("doc.pdf", file_content, "application/pdf")}
 
         response = client.post(
-            "/api/apps/jobs",
+            "/api/v1/apps/jobs",
             data=upload_payload_with_kb,
             files=files,
             headers=headers,
         )
 
         assert response.status_code == 200
-        mock_task.delay.assert_called_once()
-        kb_id = mock_task.delay.call_args.kwargs["knowledge_base_id"]
+        mock_upload.assert_called_once()
+        kb_id = mock_upload.call_args.kwargs["kb_id"]
         assert kb_id == 103
         db.close()
 
@@ -248,7 +253,9 @@ class TestMultiKBJobEndpoints:
             "Authorization": f"Bearer {sample_app_multi_kb.access_token}"
         }
         response = client.post(
-            "/api/apps/jobs", data=upload_payload_invalid_kb, headers=headers
+            "/api/v1/apps/jobs",
+            data=upload_payload_invalid_kb,
+            headers=headers,
         )
 
         assert response.status_code == 404
@@ -267,7 +274,7 @@ class TestMultiKBJobEndpoints:
             "Authorization": f"Bearer {sample_app_no_default_kb.access_token}"
         }
         response = client.post(
-            "/api/apps/jobs", data=sample_chat_job_payload, headers=headers
+            "/api/v1/apps/jobs", data=sample_chat_job_payload, headers=headers
         )
 
         assert response.status_code == 404
@@ -286,7 +293,7 @@ class TestMultiKBJobEndpoints:
         files = {"files": ("doc.pdf", file_content, "application/pdf")}
 
         response = client.post(
-            "/api/apps/jobs",
+            "/api/v1/apps/jobs",
             data=sample_upload_job_payload,
             files=files,
             headers=headers,

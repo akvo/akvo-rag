@@ -7,9 +7,10 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.chat import Chat, ChatKnowledgeBase
 from app.schemas.chat import (
+    ChatCreate,
+    ChatUpdate,
     ChatResponse,
-    ChatCreate, ChatResponse,
-    CreateMessagePayload
+    CreateMessagePayload,
 )
 from app.api.api_v1.auth import get_current_user
 from app.services.chat_mcp_service import stream_mcp_response
@@ -50,6 +51,7 @@ def get_chats(
     chats = (
         db.query(Chat)
         .filter(Chat.user_id == current_user.id)
+        .order_by(Chat.created_at.desc(), Chat.id.desc())
         .offset(skip)
         .limit(limit)
         .all()
@@ -74,6 +76,30 @@ def get_chat(
     return chat
 
 
+@router.put("/{chat_id}", response_model=ChatResponse)
+def update_chat(
+    *,
+    db: Session = Depends(get_db),
+    chat_id: int,
+    chat_in: ChatUpdate,
+    current_user: User = Depends(get_current_user)
+) -> Any:
+    chat = (
+        db.query(Chat)
+        .filter(Chat.id == chat_id, Chat.user_id == current_user.id)
+        .first()
+    )
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    if chat_in.title is not None:
+        chat.title = chat_in.title
+
+    db.commit()
+    db.refresh(chat)
+    return chat
+
+
 @router.delete("/{chat_id}")
 def delete_chat(
     *,
@@ -92,6 +118,7 @@ def delete_chat(
     db.delete(chat)
     db.commit()
     return {"status": "success"}
+
 
 @router.post("/{chat_id}/messages")
 async def create_message_mcp_integration(

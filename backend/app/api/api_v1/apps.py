@@ -12,9 +12,9 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.app import App
-from app.core.security import get_current_app
+from app.models.user import User
+from app.core.security import get_current_app, get_current_active_superuser
 from app.services.app_service import AppService
-from app.services.file_storage_service import FileStorageService
 from app.schemas.app import (
     AppRegisterRequest,
     AppRegisterResponse,
@@ -44,6 +44,8 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
     responses={
         400: {"model": ErrorResponse, "description": "Validation error"},
+        401: {"model": ErrorResponse, "description": "Unauthorized"},
+        403: {"model": ErrorResponse, "description": "Forbidden - Superuser access required"},
         409: {"model": ErrorResponse, "description": "Conflict"},
     },
 )
@@ -51,9 +53,10 @@ async def register_app(
     *,
     db: Session = Depends(get_db),
     register_data: AppRegisterRequest,
+    current_user: User = Depends(get_current_active_superuser),
 ) -> Any:
     """
-    Register a new app and issue credentials.
+    Register a new app and issue credentials (Super-admin only).
 
     - **app_name**: Name of the application
     - **domain**: Domain of the application
@@ -61,7 +64,7 @@ async def register_app(
     - **chat_callback**: HTTPS callback URL for chat operations
     - **upload_callback**: HTTPS callback URL for upload operations
 
-    Returns app credentials including access_token and callback_token.
+    Returns app credentials including access_token and default knowledge base.
     """
     try:
         # register KB for the app
@@ -106,6 +109,92 @@ async def register_app(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to register app: {str(e)}",
         )
+
+
+@router.get(
+    "",
+    response_model=List[AppMeResponse],
+    summary="List registered apps (Super-admin only)",
+)
+def list_registered_apps(
+    *,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_superuser),
+    skip: int = 0,
+    limit: int = 100,
+) -> Any:
+    apps = (
+        db.query(App)
+        .order_by(App.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    result = []
+    for app in apps:
+        kbs = [
+            KnowledgeBaseItem(
+                knowledge_base_id=kb.knowledge_base_id,
+                is_default=kb.is_default,
+            )
+            for kb in app.knowledge_bases
+        ]
+        result.append(
+            AppMeResponse(
+                app_id=app.app_id,
+                app_name=app.app_name,
+                domain=app.domain,
+                default_chat_prompt=app.default_chat_prompt,
+                chat_callback_url=app.chat_callback_url,
+                upload_callback_url=app.upload_callback_url,
+                scopes=app.scopes,
+                status=app.status,
+                knowledge_bases=kbs,
+            )
+        )
+    return result
+
+
+@router.put(
+    "/{app_id}/status",
+    response_model=AppMeResponse,
+    summary="Toggle app active/inactive status (Super-admin only)",
+)
+def update_app_status(
+    *,
+    db: Session = Depends(get_db),
+    app_id: str,
+    status_update: dict,
+    current_user: User = Depends(get_current_active_superuser),
+) -> Any:
+    app = db.query(App).filter(App.app_id == app_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    new_status = status_update.get("status")
+    if new_status:
+        app.status = new_status
+        db.commit()
+        db.refresh(app)
+
+    kbs = [
+        KnowledgeBaseItem(
+            knowledge_base_id=kb.knowledge_base_id,
+            is_default=kb.is_default,
+        )
+        for kb in app.knowledge_bases
+    ]
+    return AppMeResponse(
+        app_id=app.app_id,
+        app_name=app.app_name,
+        domain=app.domain,
+        default_chat_prompt=app.default_chat_prompt,
+        chat_callback_url=app.chat_callback_url,
+        upload_callback_url=app.upload_callback_url,
+        scopes=app.scopes,
+        status=app.status,
+        knowledge_bases=kbs,
+    )
 
 
 @router.get(
@@ -272,18 +361,13 @@ async def upload_and_process_documents(
             status_code=404, detail="Default KB not found for app"
         )
 
-    # ✅ Save uploaded files locally before sending to Celery
-    saved_file_paths = []
-    if files:
-        saved_file_paths = await FileStorageService.save_files(files)
-
     kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
     await kb_mcp_endpoint_service.upload_and_process_documents(
-        kb_id=default_kb.knowledge_base_id, files=saved_file_paths
+        kb_id=default_kb.knowledge_base_id, files=files or []
     )
     return {
         "message": "Document received and is being processed.",
-        "file_count": len(files),
+        "file_count": len(files) if files else 0,
     }
 
 
@@ -295,8 +379,10 @@ async def get_documents(
     *,
     current_app: App = Depends(get_current_app),
     kb_id: Optional[int] = None,
-    skip: Optional[int] = 0,
-    limit: Optional[int] = 100,
+    skip: Optional[int] = None,
+    limit: Optional[int] = None,
+    page: Optional[int] = Query(None, description="Page number (1-based)"),
+    size: Optional[int] = Query(None, description="Page size"),
     search: Optional[str] = None,
 ):
     """
@@ -304,6 +390,15 @@ async def get_documents(
     If kb_id is NOT provided, return upload statuses for the default KB.
     """
     kb_mcp_service = KnowledgeBaseMCPEndpointService()
+
+    # Determine pagination: support both (skip, limit) and (page, size)
+    effective_limit = limit or size or 100
+    if skip is not None:
+        effective_skip = skip
+    elif page is not None and page > 0:
+        effective_skip = (page - 1) * effective_limit
+    else:
+        effective_skip = 0
 
     # --- CASE 1: kb_id Explicitly Provided → List documents ---
     if kb_id is not None:
@@ -321,12 +416,29 @@ async def get_documents(
                 detail="Knowledge base not found for this app.",
             )
 
-        return await kb_mcp_service.list_documents_by_kb_id(
+        res = await kb_mcp_service.list_documents_by_kb_id(
             kb_id=kb_id,
-            skip=skip,
-            limit=limit,
+            skip=effective_skip,
+            limit=effective_limit,
             search=search,
         )
+
+        if isinstance(res, dict) and "documents" in res:
+            docs_list = res["documents"]
+            total_count = res.get("total", len(docs_list))
+            page_num = (
+                (effective_skip // effective_limit) + 1
+                if effective_limit > 0
+                else 1
+            )
+            return {
+                "total": total_count,
+                "page": page_num,
+                "size": effective_limit,
+                "data": docs_list,
+            }
+
+        return res
 
     # --- CASE 2: No kb_id → Use Default KB Upload Status ---
     default_kb = next(
@@ -347,7 +459,7 @@ async def get_documents(
 
 @router.delete(
     "/documents",
-    response_model=dict,
+    response_model=Union[dict, List[dict], Any],
 )
 async def delete_document(
     *,
@@ -451,8 +563,10 @@ def update_app(
 )
 async def list_knowledge_bases(
     *,
-    skip: int = 0,
-    limit: int = 100,
+    skip: Optional[int] = None,
+    limit: Optional[int] = None,
+    page: Optional[int] = Query(None, description="Page number (1-based)"),
+    size: Optional[int] = Query(None, description="Page size"),
     search: Optional[str] = None,
     kb_ids: Optional[List[int]] = Query(
         None, description="Filter KB by KB IDs"
@@ -470,15 +584,39 @@ async def list_knowledge_bases(
                 kb.knowledge_base_id for kb in current_app.knowledge_bases
             ]
 
+        # Determine pagination: support both (skip, limit) and (page, size)
+        effective_limit = limit or size or 100
+        if skip is not None:
+            effective_skip = skip
+        elif page is not None and page > 0:
+            effective_skip = (page - 1) * effective_limit
+        else:
+            effective_skip = 0
+
         kb_mcp = KnowledgeBaseMCPEndpointService()
         result = await kb_mcp.list_kbs(
-            skip=skip,
-            limit=limit,
+            skip=effective_skip,
+            limit=effective_limit,
             with_documents=False,
             include_total=True,
             search=search,
             kb_ids=kb_ids,
         )
+
+        if isinstance(result, dict) and "knowledge_bases" in result:
+            kbs_list = result["knowledge_bases"]
+            total_count = result.get("total", len(kbs_list))
+            page_num = (
+                (effective_skip // effective_limit) + 1
+                if effective_limit > 0
+                else 1
+            )
+            return {
+                "total": total_count,
+                "page": page_num,
+                "size": effective_limit,
+                "data": kbs_list,
+            }
 
         return result
 

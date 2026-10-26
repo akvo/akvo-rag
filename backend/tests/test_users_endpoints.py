@@ -31,7 +31,7 @@ def admin_token(db, client):
     db.refresh(user)
 
     res = client.post(
-        "/api/auth/token",
+        "/api/v1/auth/token",
         data={"username": "admin", "password": "adminpass"},
     )
     token = res.json().get("access_token")
@@ -54,7 +54,7 @@ def user_token(db, client):
     db.refresh(user)
 
     res = client.post(
-        "/api/auth/token",
+        "/api/v1/auth/token",
         data={"username": "user", "password": "userpass"},
     )
     token = res.json().get("access_token")
@@ -88,7 +88,7 @@ class TestUsersEndpoints:
         db.commit()
 
         response = client.get(
-            "/api/users/",
+            "/api/v1/users/",
             headers={
                 "Authorization": f"Bearer {admin_token}"
             }
@@ -119,7 +119,7 @@ class TestUsersEndpoints:
         db.refresh(user)
 
         response = client.patch(
-            f"/api/users/{user.id}/toggle-active",
+            f"/api/v1/users/{user.id}/toggle-active",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
@@ -144,7 +144,7 @@ class TestUsersEndpoints:
         db.refresh(user)
 
         response = client.patch(
-            f"/api/users/{user.id}/toggle-active",
+            f"/api/v1/users/{user.id}/toggle-active",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
@@ -157,7 +157,7 @@ class TestUsersEndpoints:
     def test_read_users_non_admin_access(self, db, client, user_token):
         """Test reading users with non-admin access."""
         response = client.get(
-            "/api/users/",
+            "/api/v1/users/",
             headers={
                 "Authorization": f"Bearer {user_token}"
             }
@@ -174,7 +174,7 @@ class TestUsersEndpoints:
     ):
         """Test toggling active status for a non-existent user."""
         response = client.patch(
-            "/api/users/999999/toggle-active",
+            "/api/v1/users/999999/toggle-active",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
@@ -207,7 +207,7 @@ class TestUsersEndpoints:
         db.commit()
 
         response = client.get(
-            "/api/users/",
+            "/api/v1/users/",
             headers={"Authorization": f"Bearer {admin_token}"},
             params={"is_active": True},
         )
@@ -217,7 +217,7 @@ class TestUsersEndpoints:
         # Check all returned users are active
         for user in data["data"]:
             assert user["is_active"] is True
-        
+
         # Verify the active_user with approver info exists
         active_users = [u for u in data["data"] if u["id"] == 6]
         assert len(active_users) == 1
@@ -240,7 +240,7 @@ class TestUsersEndpoints:
         db.commit()
 
         response = client.get(
-            "/api/users/",
+            "/api/v1/users/",
             headers={"Authorization": f"Bearer {admin_token}"},
             params={"search": "search_user"},
         )
@@ -270,7 +270,7 @@ class TestUsersEndpoints:
         # Request page 2 with size 10
         # Page 2 should skip first 10 items and return remaining 3
         response = client.get(
-            "/api/users/",
+            "/api/v1/users/",
             headers={"Authorization": f"Bearer {admin_token}"},
             params={"page": 2, "size": 10},
         )
@@ -298,7 +298,7 @@ class TestUsersEndpoints:
         db.refresh(user)
 
         response = client.patch(
-            f"/api/users/{user.id}/toggle-active",
+            f"/api/v1/users/{user.id}/toggle-active",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
@@ -330,7 +330,7 @@ class TestUsersEndpoints:
         db.refresh(user)
 
         response = client.patch(
-            f"/api/users/{user.id}/toggle-superuser",
+            f"/api/v1/users/{user.id}/toggle-superuser",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
@@ -348,7 +348,7 @@ class TestUsersEndpoints:
     def test_toggle_own_superuser_status(self, db, client, admin_token):
         """Test that an admin cannot toggle their own superuser status."""
         response = client.patch(
-            "/api/users/1/toggle-superuser",
+            "/api/v1/users/1/toggle-superuser",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
@@ -362,7 +362,7 @@ class TestUsersEndpoints:
     ):
         """Test toggling superuser status for a non-existent user."""
         response = client.patch(
-            "/api/users/999999/toggle-superuser",
+            "/api/v1/users/999999/toggle-superuser",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
@@ -387,7 +387,7 @@ class TestUsersEndpoints:
         db.refresh(user)
 
         response = client.patch(
-            f"/api/users/{user.id}/toggle-superuser",
+            f"/api/v1/users/{user.id}/toggle-superuser",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
@@ -414,7 +414,7 @@ class TestUsersEndpoints:
         db.refresh(user)
 
         response = client.patch(
-            f"/api/users/{user.id}/toggle-superuser",
+            f"/api/v1/users/{user.id}/toggle-superuser",
             headers={"Authorization": f"Bearer {user_token}"},
         )
 
@@ -441,7 +441,7 @@ class TestUsersEndpoints:
         db.refresh(user)
 
         response = client.patch(
-            f"/api/users/{user.id}/toggle-active",
+            f"/api/v1/users/{user.id}/toggle-active",
             headers={"Authorization": f"Bearer {user_token}"},
         )
 

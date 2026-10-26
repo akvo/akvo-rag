@@ -12,9 +12,9 @@ from app.models.password_reset_token import PasswordResetToken
 
 # FastMail configuration
 conf = ConnectionConfig(
-    MAIL_USERNAME=settings.SMTP_USER,
+    MAIL_USERNAME=settings.SMTP_USER or "noreply@akvomail.org",
     MAIL_PASSWORD=settings.SMTP_PASS,
-    MAIL_FROM=settings.SMTP_USER,
+    MAIL_FROM=settings.SMTP_USER or "noreply@akvomail.org",
     MAIL_PORT=settings.SMTP_PORT,
     MAIL_SERVER=settings.SMTP_HOST,
     MAIL_FROM_NAME=settings.PROJECT_NAME,
@@ -22,7 +22,7 @@ conf = ConnectionConfig(
     MAIL_SSL_TLS=settings.SMTP_USE_TLS,
     USE_CREDENTIALS=True,
     VALIDATE_CERTS=True,
-    TEMPLATE_FOLDER=Path(__file__).parent.parent / 'templates' / 'email'
+    TEMPLATE_FOLDER=Path(__file__).parent.parent / "templates" / "email",
 )
 
 fm = FastMail(conf)
@@ -32,27 +32,29 @@ class EmailService:
     @staticmethod
     def _get_template_env():
         """Get Jinja2 template environment"""
-        template_path = Path(__file__).parent.parent / 'templates' / 'email'
+        template_path = Path(__file__).parent.parent / "templates" / "email"
         template_path.mkdir(parents=True, exist_ok=True)
         return Environment(loader=FileSystemLoader(str(template_path)))
 
     @staticmethod
     async def send_password_reset_email(
-        email: str,
-        reset_token: str,
-        user_name: str
+        email: str, reset_token: str, user_name: str
     ) -> bool:
         """Send password reset email"""
         try:
             # Determine protocol based on domain
-            protocol = "https" if settings.WEBDOMAIN != "127.0.0.1.nip.io" else "http"
-            reset_url = f"{protocol}://{settings.WEBDOMAIN}/reset-password?token={reset_token}"
+            protocol = (
+                "https" if settings.WEBDOMAIN != "127.0.0.1.nip.io" else "http"
+            )
+            reset_url = f"{protocol}://{settings.WEBDOMAIN}/reset-password?token={reset_token}"  # noqa
 
-            print(f"[EmailService] Preparing to send password reset email to: {email}")
+            print(
+                f"[EmailService] Preparing to send password reset email to: {email}"  # noqa
+            )
             print(f"[EmailService] Reset URL: {reset_url}")
 
             env = EmailService._get_template_env()
-            template = env.get_template('reset_password.html')
+            template = env.get_template("reset_password.html")
 
             html_content = template.render(
                 webdomain=f"{protocol}://{settings.WEBDOMAIN}",
@@ -66,23 +68,28 @@ class EmailService:
                 Please disregard this email if it wasn't you and make sure
                 you can still login to your account.
                 If it was you, please click the following button to
-                reset your password."""
+                reset your password.""",
             )
 
             message = MessageSchema(
                 subject=f"{settings.PROJECT_NAME} - Reset Password",
                 recipients=[email],
                 body=html_content,
-                subtype="html"
+                subtype="html",
             )
 
-            print(f"[EmailService] Sending email via SMTP: {settings.SMTP_HOST}:{settings.SMTP_PORT}")
+            print(
+                f"[EmailService] Sending email via SMTP: {settings.SMTP_HOST}:{settings.SMTP_PORT}"  # noqa
+            )
             await fm.send_message(message)
             print(f"[EmailService] ✓ Email sent successfully to {email}")
             return True
         except Exception as e:
-            print(f"[EmailService] ✗ Email sending failed: {type(e).__name__}: {e}")
+            print(
+                f"[EmailService] ✗ Email sending failed: {type(e).__name__}: {e}"  # noqa
+            )
             import traceback
+
             traceback.print_exc()
             return False
 
@@ -99,9 +106,7 @@ class EmailService:
 
         # Create token record
         reset_token = PasswordResetToken(
-            token=token,
-            user_id=user.id,
-            expires_at=expires_at
+            token=token, user_id=user.id, expires_at=expires_at
         )
 
         db.add(reset_token)
@@ -112,9 +117,11 @@ class EmailService:
     @staticmethod
     def verify_reset_token(db: Session, token: str):
         """Verify reset token and return user if valid"""
-        reset_token = db.query(PasswordResetToken).filter(
-            PasswordResetToken.token == token
-        ).first()
+        reset_token = (
+            db.query(PasswordResetToken)
+            .filter(PasswordResetToken.token == token)
+            .first()
+        )
 
         if not reset_token:
             return None
@@ -132,9 +139,11 @@ class EmailService:
     @staticmethod
     def mark_token_as_used(db: Session, token: str) -> bool:
         """Mark token as used"""
-        reset_token = db.query(PasswordResetToken).filter(
-            PasswordResetToken.token == token
-        ).first()
+        reset_token = (
+            db.query(PasswordResetToken)
+            .filter(PasswordResetToken.token == token)
+            .first()
+        )
 
         if reset_token:
             reset_token.used_at = datetime.utcnow()
