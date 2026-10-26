@@ -242,3 +242,44 @@ async def test_test_retrieval_endpoint(client: TestClient):
         assert response.status_code == 200
         assert response.json()["total"] == 1
         assert len(response.json()["results"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_document_chunks_endpoint(client: TestClient):
+    fake_chunks_resp = {
+        "document_id": 5,
+        "file_name": "crop_guide.pdf",
+        "total_chunks": 2,
+        "chunks": [
+            {
+                "id": "chunk_1",
+                "chunk_index": 0,
+                "text": "Crop irrigation techniques",
+                "char_count": 26,
+                "token_count": 6,
+                "page": 1,
+            },
+            {
+                "id": "chunk_2",
+                "chunk_index": 1,
+                "text": "Soil moisture analysis",
+                "char_count": 22,
+                "token_count": 5,
+                "page": 2,
+            },
+        ],
+    }
+    with patch(
+        "app.api.api_v1.knowledge_base.KnowledgeBaseMCPEndpointService.list_document_chunks",
+        new_callable=AsyncMock,
+        return_value=fake_chunks_resp,
+    ):
+        response = client.get("/api/v1/knowledge-bases/1/documents/5/chunks")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["document_id"] == 5
+        assert data["total_chunks"] == 2
+        assert len(data["chunks"]) == 2
+        assert data["chunks"][0]["id"] == "chunk_1"
+        assert data["chunks"][0]["page"] == 1
+

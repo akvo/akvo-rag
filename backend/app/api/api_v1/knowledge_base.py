@@ -245,6 +245,22 @@ async def delete_document(
     return result
 
 
+@router.get("/{kb_id}/documents/{doc_id}/chunks")
+async def get_document_chunks(
+    *,
+    db: Session = Depends(get_db),
+    kb_id: int,
+    doc_id: int,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Get all chunks and metadata for a specific document."""
+    kb_mcp_endpoint_service = KnowledgeBaseMCPEndpointService()
+    result = await kb_mcp_endpoint_service.list_document_chunks(
+        kb_id=kb_id, doc_id=doc_id
+    )
+    return result
+
+
 @router.post("/{kb_id}/documents/process")
 async def process_kb_documents(
     kb_id: int,

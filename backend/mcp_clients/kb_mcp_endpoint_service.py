@@ -158,6 +158,19 @@ class KnowledgeBaseMCPEndpointService:
         )
         return [{"status": "deleted", "doc_id": doc_id}]
 
+    async def list_document_chunks(
+        self, kb_id: int, doc_id: int
+    ) -> Dict[str, Any]:
+        """List persisted chunks for a document via Redis RPC."""
+        result = await self.dispatcher.call_tool(
+            "knowledge_bases_mcp",
+            "list_document_chunks",
+            {"kb_id": kb_id, "document_id": doc_id},
+        )
+        if isinstance(result, dict):
+            return result
+        return {"chunks": [], "total_chunks": 0, "document_id": doc_id}
+
     async def upload_documents(
         self, kb_id: int, files: List[UploadFile]
     ) -> List[Dict[str, Any]]:
